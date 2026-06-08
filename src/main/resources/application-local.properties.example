@@ -1,0 +1,23 @@
+# =============================================================================
+# Template for application-local.properties (the local-dev profile).
+# Copy this file to `application-local.properties` (gitignored) and fill in real
+# dev values, then run:
+#   ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
+# These keys override the ${ENV_VAR} placeholders in application.properties.
+# =============================================================================
+
+# Postgres (local)
+spring.datasource.username=postgres
+spring.datasource.password=CHANGE_ME
+
+# Mail (Gmail SMTP) — use an app password, not the account password
+spring.mail.username=you@example.com
+spring.mail.password=CHANGE_ME
+spring.boot.admin.notify.mail.to=you@example.com
+
+# SBF (Sambat Finance) API credentials
+urlencoded_token=grant_type=password&username=SBF_USERNAME&password=SBF_PASSWORD&scope=read%20write%20app%20accountinfo%20repayment%20register
+authorization=Basic SBF_BASIC_AUTH_BASE64
+
+# JWT signing key — generate your own with: openssl rand -base64 32
+security.jwt.secret-key=GENERATE_WITH_openssl_rand_base64_32

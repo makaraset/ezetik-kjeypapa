@@ -33,12 +33,12 @@ build/
 .vscode/
 
 ### Secrets — NEVER commit. Use the *.example templates instead. ###
-src/main/resources/application.properties
+# application.properties is tracked: it holds only ${ENV_VAR} placeholders.
+# Real local-dev secrets live in application-local.properties (gitignored).
+src/main/resources/application-local.properties
 src/main/resources/firebase-service-account.json
-src/main/resources/rsa.private.key
-src/main/resources/rsa.public.key
 src/main/resources/uploads/
-!src/main/resources/application.properties.example
+!src/main/resources/application-local.properties.example
 !src/main/resources/firebase-service-account.json.example
 
 ### macOS ###
