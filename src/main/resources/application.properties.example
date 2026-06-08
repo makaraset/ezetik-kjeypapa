@@ -1,0 +1,63 @@
+spring.sql.init.platform=postgres
+spring.datasource.password=${DB_PASSWORD}
+spring.datasource.username=${DB_USERNAME}
+#spring.datasource.hikari.jdbc-url=jdbc:postgresql://127.0.0.1:5432/kjey_papa_db
+spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/kjey_papa_db
+#spring.datasource.driver-class-name=org.postgresql.Driver
+spring.jpa.properties.hibernate.format_sql=false
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+spring.jpa.database=postgresql
+spring.jpa.generate-ddl=true
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql = true
+spring.jackson.serialization.fail-on-empty-beans=false
+spring.jackson.serialization.write-dates-as-timestamps:false
+spring.jackson.date-format=dd-MM-yyyy
+spring.jpa.properties.hibernate.enable_lazy_load_no_trans=true
+spring.jpa.properties.hibernate.jdbc.time_zone=UTC
+
+springdoc.swagger-ui.tags-sorter=alpha
+
+gcp.firebase.service-account=classpath:firebase-service-account.json
+
+#Mail
+spring.mail.host=smtp.gmail.com
+spring.mail.port=587
+spring.mail.username=${MAIL_USERNAME}
+spring.mail.password=${MAIL_APP_PASSWORD}
+spring.mail.properties.mail.smtp.auth=true
+spring.mail.properties.mail.smtp.starttls.enable=true
+spring.boot.admin.notify.mail.to=${ADMIN_NOTIFY_EMAIL}
+
+#SBF Security Endpoint
+token_endpoint=https://tricube-uat.sambatfinance.com:4443/oauth/token
+urlencoded_token=grant_type=password&username=${SBF_USERNAME}&password=${SBF_PASSWORD}&scope=read%20write%20app%20accountinfo%20repayment%20register
+urlencoded_refesh_token=grant_type=refresh_token&refresh_token=
+authorization=Basic ${SBF_BASIC_AUTH_BASE64}
+
+#SBF API
+url_api=https://tricube-uat.sambatfinance.com:6443/api
+urlencoded_facility=/group-facilities/by-cid?custKeyNum=
+url_create_loan_fac=/saveLoanFacilities
+url_disburse=/auto-disburse
+url_merchant=/merchant
+url_merchant_cif=/merchant/by-cid?custKeyNum=
+url_merchant_code=/merchant/bycode?mercCode=
+url_non_working_day=/non-business-day
+
+url_sms=/sendmessgae
+
+#jwt
+jwt.private.key=classpath:rsa.private.key
+jwt.public.key=classpath:rsa.public.key
+
+
+#api doc
+#springdoc.api-docs.enabled=true
+#springdoc.api-docs.path=/rest-api-docs
+#springdoc.swagger-ui.path=/swagger-ui
+
+spring.servlet.multipart.enabled=true
+spring.servlet.multipart.file-size-threshold=2KB
+spring.servlet.multipart.max-file-size=10MB
+spring.servlet.multipart.max-request-size=15MB
