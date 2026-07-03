@@ -28,7 +28,10 @@ class SpringSecurityAuditAwareImpl implements AuditorAware<String> {
 
 		if (authentication == null || !authentication.isAuthenticated()
 				|| authentication instanceof AnonymousAuthenticationToken) {
-			return Optional.empty();
+			// Server-to-server / no-auth writes (e.g. Sambat LOS webhooks) have no
+			// user principal. createdBy is NOT NULL, so fall back to a system marker
+			// instead of leaving it null (which would violate the constraint).
+			return Optional.of("SYSTEM");
 		}
 
 		String userPrincipal = authentication.getName();

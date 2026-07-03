@@ -40,25 +40,23 @@ public class SecurityConfiguration {
 		  "/swagger-resources/**",
 		  "/swagger-ui/**",
 		  "/api/public/**",
-		  "/api/v1/auth/**"
+		  "/api/v1/auth/**",
+		  // Sambat LOS server-to-server webhooks (no customer JWT).
+		  // TODO: replace whitelist with LOS signature verification once the
+		  // contract is delivered (BRS Appendix). See LosWebhookController.
+		  "/api/v1/pdl/los/**"
 		 };
 
 	@Bean
 	@Primary
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .csrf()
-                .disable()
-                .authorizeHttpRequests()
-                .requestMatchers(WHITE_LIST_URLS)
-                .permitAll()
-                //.requestMatchers("/api/v1/file/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_CUSTOMER")
-                .anyRequest()
-                .authenticated()
-                .and()
-                .sessionManagement()
-                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-                .and()
+                .csrf(csrf -> csrf.disable())
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(WHITE_LIST_URLS).permitAll()
+                        //.requestMatchers("/api/v1/file/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_CUSTOMER")
+                        .anyRequest().authenticated())
+                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 

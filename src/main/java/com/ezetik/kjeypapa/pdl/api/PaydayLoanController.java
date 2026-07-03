@@ -1,0 +1,172 @@
+package com.ezetik.kjeypapa.pdl.api;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.ezetik.kjeypapa.image.helper.FileNameHelper;
+import com.ezetik.kjeypapa.image.model.Image;
+import com.ezetik.kjeypapa.pdl.model.PaydayLoan;
+import com.ezetik.kjeypapa.pdl.model.PdlAttachment;
+import com.ezetik.kjeypapa.pdl.model.PdlBankInfo;
+import com.ezetik.kjeypapa.pdl.model.PdlDocTypeEnum;
+import com.ezetik.kjeypapa.pdl.model.PdlEmploymentInfo;
+import com.ezetik.kjeypapa.pdl.model.PdlPaymentSchedule;
+import com.ezetik.kjeypapa.pdl.model.PdlPersonalInfo;
+import com.ezetik.kjeypapa.pdl.payload.BankInfoRequest;
+import com.ezetik.kjeypapa.pdl.payload.EmploymentInfoRequest;
+import com.ezetik.kjeypapa.pdl.payload.PersonalInfoRequest;
+import com.ezetik.kjeypapa.pdl.payload.PdlAcceptDecision;
+import com.ezetik.kjeypapa.pdl.payload.PdlApplicationPayload;
+import com.ezetik.kjeypapa.pdl.payload.PdlProfileResponse;
+import com.ezetik.kjeypapa.pdl.payload.PdlTransaction;
+import com.ezetik.kjeypapa.pdl.service.PaydayLoanService;
+import com.ezetik.kjeypapa.security.util.Message;
+
+import io.swagger.v3.oas.annotations.tags.Tag;
+
+/**
+ * Customer-facing Payday Loan API. Mirrors {@code NoteController}; direct-to-customer
+ * (no merchant/facility). Decisioning + contract + schedule come from Sambat LOS
+ * (see {@code LosWebhookController}).
+ */
+@RestController
+@RequestMapping("/api/v1/pdl")
+@Tag(name = "08- Payday Loan API", description = "Payday Loan (PDL) customer controller")
+public class PaydayLoanController {
+
+	@Autowired
+	private PaydayLoanService service;
+
+	private FileNameHelper fileHelper = new FileNameHelper();
+
+	/** Create a Draft application (loan details). Upload the 5 docs, then submit. */
+	@PostMapping
+	@PreAuthorize("hasRole('CUSTOMER')")
+	public ResponseEntity<Message<PaydayLoan>> create(@RequestBody PdlApplicationPayload payload) {
+		return service.createApplication(payload);
+	}
+
+	/** Validate the 5 mandatory docs are present, then send to LOS (Draft → Submitted). */
+	@PostMapping("/{id}/submit")
+	@PreAuthorize("hasRole('CUSTOMER')")
+	public ResponseEntity<Message<PaydayLoan>> submit(@PathVariable("id") int id) {
+		return service.submit(id);
+	}
+
+	/** Upload one of the mandatory documents (multipart; mirrors the Note pattern). */
+	@PostMapping(path = "/document", consumes = { MediaType.MULTIPART_FORM_DATA_VALUE })
+	@PreAuthorize("hasRole('CUSTOMER')")
+	public ResponseEntity<Message<PdlAttachment>> uploadDocument(@RequestPart(name = "pdlId") String pdlId,
+			@RequestPart(name = "docType") String docType,
+			@RequestPart(name = "files", required = true) MultipartFile[] files) {
+
+		List<Image> images = new ArrayList<>();
+		for (MultipartFile file : files) {
+			Image image = Image.buildImage(file, fileHelper);
+			image.setEntityClass(docType);
+			image.setEntityId(pdlId);
+			images.add(image);
+		}
+
+		return service.uploadDocument(Integer.valueOf(pdlId), PdlDocTypeEnum.valueOf(docType), images);
+	}
+
+	/** Customer accept ("Y" + signed contract) / reject ("N") of an approved offer. */
+	@PostMapping("/{id}/accept")
+	@PreAuthorize("hasRole('CUSTOMER')")
+	public ResponseEntity<Message<PaydayLoan>> accept(@PathVariable("id") int id,
+			@RequestBody PdlAcceptDecision decision) {
+		return service.accept(id, decision);
+	}
+
+	/** Customer revokes a not-yet-accepted application. */
+	@PostMapping("/{id}/revoke")
+	@PreAuthorize("hasRole('CUSTOMER')")
+	public ResponseEntity<Message<PaydayLoan>> revoke(@PathVariable("id") int id,
+			@RequestParam(required = false) String reason) {
+		return service.revoke(id, reason);
+	}
+
+	@GetMapping("/my-applications")
+	@PreAuthorize("hasRole('CUSTOMER')")
+	public ResponseEntity<Message<List<PaydayLoan>>> myApplications() {
+		return service.getMyApplications();
+	}
+
+	@GetMapping("/my-transactions")
+	@PreAuthorize("hasRole('CUSTOMER')")
+	public ResponseEntity<Message<List<PdlTransaction>>> myTransactions() {
+		return service.getMyTransactions();
+	}
+
+	@GetMapping("/{id}/payment-schedule")
+	@PreAuthorize("hasRole('CUSTOMER')")
+	public ResponseEntity<Message<List<PdlPaymentSchedule>>> paymentSchedule(@PathVariable("id") int id) {
+		return service.getPaymentSchedule(id);
+	}
+
+	@GetMapping("/{id}")
+	@PreAuthorize("hasRole('CUSTOMER')")
+	public ResponseEntity<Message<PaydayLoan>> findById(@PathVariable("id") int id) {
+		return service.getLoanById(id);
+	}
+
+	// ----- Profile capture (signup / My Profile) -----
+
+	@PostMapping("/personal-info")
+	@PreAuthorize("hasRole('CUSTOMER')")
+	public ResponseEntity<Message<PdlPersonalInfo>> savePersonalInfo(@RequestBody PersonalInfoRequest req) {
+		return service.savePersonalInfo(req);
+	}
+
+	@GetMapping("/personal-info")
+	@PreAuthorize("hasRole('CUSTOMER')")
+	public ResponseEntity<Message<PdlPersonalInfo>> getPersonalInfo() {
+		return service.getPersonalInfo();
+	}
+
+	@PostMapping("/employment-info")
+	@PreAuthorize("hasRole('CUSTOMER')")
+	public ResponseEntity<Message<PdlEmploymentInfo>> saveEmploymentInfo(@RequestBody EmploymentInfoRequest req) {
+		return service.saveEmploymentInfo(req);
+	}
+
+	@GetMapping("/employment-info")
+	@PreAuthorize("hasRole('CUSTOMER')")
+	public ResponseEntity<Message<PdlEmploymentInfo>> getEmploymentInfo() {
+		return service.getEmploymentInfo();
+	}
+
+	@PostMapping("/bank-info")
+	@PreAuthorize("hasRole('CUSTOMER')")
+	public ResponseEntity<Message<PdlBankInfo>> saveBankInfo(@RequestBody BankInfoRequest req) {
+		return service.saveBankInfo(req);
+	}
+
+	@GetMapping("/bank-info")
+	@PreAuthorize("hasRole('CUSTOMER')")
+	public ResponseEntity<Message<PdlBankInfo>> getBankInfo() {
+		return service.getBankInfo();
+	}
+
+	@GetMapping("/profile")
+	@PreAuthorize("hasRole('CUSTOMER')")
+	public ResponseEntity<Message<PdlProfileResponse>> getProfile() {
+		return service.getProfile();
+	}
+}
