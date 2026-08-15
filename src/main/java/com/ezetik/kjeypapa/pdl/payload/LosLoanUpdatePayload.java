@@ -42,6 +42,7 @@ public class LosLoanUpdatePayload {
 		private Double interestPaid;
 		private Double feePaid;
 		private Double penaltyPaid;
+		private Double otherPaid;
 		private Double totalPaid;
 		private Double amountPaid;
 		private Instant paidDate;

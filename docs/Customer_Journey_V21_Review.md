@@ -1,5 +1,9 @@
 # Review — "Customer's Journey: Payday Loan" (V21)
 
+> **SUPERSEDED (2026-08-12):** Sambat delivered **V26** of the customer journey + the **PDL V8** mockups.
+> See `Customer_Journey_V26_PDL_V8_Review.md` for the delta review and the new gap list (G7–G21).
+> This document remains the record of the V21 baseline and the G1–G6 build (§6).
+
 Reviewed against the current Kjey PAPA build (backend `pdl/*`, mobile `views/customer/pdl/*`) and the LOS **Appendix 2** contract. Source: `docs/Customer's Journey _ Payday Loan - V21.pdf` (3 pages).
 
 ## 1. What V21 specifies

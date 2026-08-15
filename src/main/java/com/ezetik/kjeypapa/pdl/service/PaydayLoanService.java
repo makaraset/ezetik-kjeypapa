@@ -17,6 +17,7 @@ import com.ezetik.kjeypapa.pdl.payload.EmploymentInfoRequest;
 import com.ezetik.kjeypapa.pdl.payload.PersonalInfoRequest;
 import com.ezetik.kjeypapa.pdl.payload.PdlAcceptDecision;
 import com.ezetik.kjeypapa.pdl.payload.PdlApplicationPayload;
+import com.ezetik.kjeypapa.pdl.payload.PdlCbcConsentResponse;
 import com.ezetik.kjeypapa.pdl.payload.PdlProfileResponse;
 import com.ezetik.kjeypapa.pdl.payload.PdlTransaction;
 import com.ezetik.kjeypapa.security.util.Message;
@@ -40,6 +41,8 @@ public interface PaydayLoanService {
 	ResponseEntity<Message<List<PdlPaymentSchedule>>> getPaymentSchedule(int id);
 
 	ResponseEntity<Message<PaydayLoan>> getLoanById(int id);
+
+	ResponseEntity<Message<PdlCbcConsentResponse>> getCbcConsent(int id);
 
 	// --- profile capture (signup / My Profile) ---
 	ResponseEntity<Message<PdlPersonalInfo>> savePersonalInfo(PersonalInfoRequest req);

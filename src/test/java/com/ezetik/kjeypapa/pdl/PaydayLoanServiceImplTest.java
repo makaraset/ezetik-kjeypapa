@@ -43,6 +43,7 @@ import com.ezetik.kjeypapa.pdl.repository.PdlPaymentScheduleRepository;
 import com.ezetik.kjeypapa.pdl.repository.PdlPersonalInfoRepository;
 import com.ezetik.kjeypapa.pdl.service.LosProvider;
 import com.ezetik.kjeypapa.pdl.service.PaydayLoanServiceImpl;
+import com.ezetik.kjeypapa.pdl.service.PdlPricingService;
 import com.ezetik.kjeypapa.security.model.User;
 import com.ezetik.kjeypapa.security.service.UserService;
 import com.ezetik.kjeypapa.security.util.Message;
@@ -60,6 +61,7 @@ class PaydayLoanServiceImplTest {
 	@Mock ImageRepository imageRepo;
 	@Mock UserService userService;
 	@Mock LosProvider losProvider;
+	@Mock PdlPricingService pricingService;
 
 	@InjectMocks PaydayLoanServiceImpl service;
 
@@ -74,6 +76,9 @@ class PaydayLoanServiceImplTest {
 		User current = user(CURRENT_ID); // build the mock BEFORE the outer when()
 		when(userService.findUserByUsername("012551101")).thenReturn(current);
 		when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+		// Legacy free-amount creates pass the product cap unless a test overrides.
+		lenient().when(pricingService.withinProductCap(any(), any(), org.mockito.ArgumentMatchers.anyDouble()))
+				.thenReturn(true);
 	}
 
 	private User user(int id) {
@@ -143,8 +148,12 @@ class PaydayLoanServiceImplTest {
 		// V21: submit validates the 3 signup doc refs on the profile, not per-loan uploads.
 		PdlPersonalInfo pi = new PdlPersonalInfo();
 		pi.setNidFrontFileRef("nid.png");
+		pi.setNidBackFileRef("nid-back.png");
 		pi.setProfilePhotoFileRef("selfie.png");
 		when(personalRepo.findByUser(CURRENT_ID)).thenReturn(List.of(pi));
+		PdlEmploymentInfo ei = new PdlEmploymentInfo();
+		ei.setEmploymentCardFileRef("empcard.png");
+		when(employmentRepo.findByUser(CURRENT_ID)).thenReturn(List.of(ei));
 		PdlBankInfo bi = new PdlBankInfo();
 		bi.setBankStatementFileRef("stmt.png");
 		when(bankRepo.findByUser(CURRENT_ID)).thenReturn(List.of(bi));
@@ -162,8 +171,12 @@ class PaydayLoanServiceImplTest {
 		loanOwnedBy(CURRENT_ID, PdlStatusEnum.Draft);
 		PdlPersonalInfo pi = new PdlPersonalInfo();
 		pi.setNidFrontFileRef("nid.png");
+		pi.setNidBackFileRef("nid-back.png");
 		pi.setProfilePhotoFileRef("selfie.png");
 		when(personalRepo.findByUser(CURRENT_ID)).thenReturn(List.of(pi));
+		PdlEmploymentInfo ei2 = new PdlEmploymentInfo();
+		ei2.setEmploymentCardFileRef("empcard.png");
+		when(employmentRepo.findByUser(CURRENT_ID)).thenReturn(List.of(ei2));
 		// bankRepo.findByUser → empty (no bank statement) → blocked.
 		assertThat(service.submit(1).getBody().getType()).isEqualTo("MISSING_DOCUMENT");
 		verify(losProvider, never()).submitApplication(any());

@@ -57,6 +57,14 @@ public class PaydayLoan extends UserDateAudit {
 	private Double interestAmount;
 	private Double processingFee;
 	private Integer loanPeriodDays;
+
+	// --- V26/V8 quote fields (Sambat 2026-08-13 QC1.3; computed server-side at
+	// create, overridable by LOS-pushed values on approval) ---
+	@Enumerated(EnumType.STRING)
+	private PdlLoanTypeEnum loanType; // PAYDAY-only this release (QC1.1)
+	private Double interestRatePercent; // monthly, pro-rated by period
+	private Double cbcEnquiryFee;
+	private Double netDisbursedAmount; // credited = principal − processing − CBC
 	private Instant disbursementDate;
 	private Instant repaymentDate;
 	private Instant applicationDate;
@@ -73,6 +81,10 @@ public class PaydayLoan extends UserDateAudit {
 	private PdlBankInfo bankInfo;
 
 	private String cbcConsentRef;
+	// Generated consent record (QC4.2): stamped at submit; served by
+	// GET /pdl/{id}/cbc-consent for the app's "CBC Consent [View]".
+	private Instant cbcConsentDate;
+	private String cbcConsentTextVersion;
 
 	@Column(columnDefinition = "bool default false")
 	private boolean bankConsent;

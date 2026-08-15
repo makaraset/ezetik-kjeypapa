@@ -30,11 +30,15 @@ import com.ezetik.kjeypapa.pdl.model.PdlPersonalInfo;
 import com.ezetik.kjeypapa.pdl.payload.BankInfoRequest;
 import com.ezetik.kjeypapa.pdl.payload.EmploymentInfoRequest;
 import com.ezetik.kjeypapa.pdl.payload.PersonalInfoRequest;
+import com.ezetik.kjeypapa.pdl.model.PdlLoanTypeEnum;
 import com.ezetik.kjeypapa.pdl.payload.PdlAcceptDecision;
 import com.ezetik.kjeypapa.pdl.payload.PdlApplicationPayload;
+import com.ezetik.kjeypapa.pdl.payload.PdlCbcConsentResponse;
 import com.ezetik.kjeypapa.pdl.payload.PdlProfileResponse;
+import com.ezetik.kjeypapa.pdl.payload.PdlQuoteResponse;
 import com.ezetik.kjeypapa.pdl.payload.PdlTransaction;
 import com.ezetik.kjeypapa.pdl.service.PaydayLoanService;
+import com.ezetik.kjeypapa.pdl.service.PdlPricingService;
 import com.ezetik.kjeypapa.security.util.Message;
 
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -52,7 +56,46 @@ public class PaydayLoanController {
 	@Autowired
 	private PaydayLoanService service;
 
+	@Autowired
+	private PdlPricingService pricingService;
+
 	private FileNameHelper fileHelper = new FileNameHelper();
+
+	/**
+	 * Quote for a repayment-amount tier (V8 wizard screen 15). Server-owned
+	 * pricing (Sambat 2026-08-13 QC1.3/QC1.6); returns the tier list too.
+	 */
+	@GetMapping("/quote")
+	@PreAuthorize("hasRole('CUSTOMER')")
+	public ResponseEntity<Message<PdlQuoteResponse>> quote(
+			@RequestParam(name = "repaymentAmount") double repaymentAmount,
+			@RequestParam(name = "currency", required = false, defaultValue = "USD") String currency,
+			@RequestParam(name = "loanType", required = false, defaultValue = "PAYDAY") String loanType) {
+		try {
+			PdlQuoteResponse q = pricingService.quote(PdlLoanTypeEnum.valueOf(loanType.trim().toUpperCase()),
+					currency, repaymentAmount);
+			return new ResponseEntity<>(new Message<>("SUCCESS", "Quote computed", q), HttpStatus.OK);
+		} catch (IllegalArgumentException bad) {
+			return new ResponseEntity<>(new Message<>("INVALID", bad.getMessage(), null),
+					HttpStatus.EXPECTATION_FAILED);
+		}
+	}
+
+	/** The selectable repayment-amount tiers (per currency). */
+	@GetMapping("/quote/tiers")
+	@PreAuthorize("hasRole('CUSTOMER')")
+	public ResponseEntity<Message<List<Double>>> quoteTiers(
+			@RequestParam(name = "currency", required = false, defaultValue = "USD") String currency) {
+		return new ResponseEntity<>(new Message<>("SUCCESS", "Tier list", pricingService.tiers(currency)),
+				HttpStatus.OK);
+	}
+
+	/** The generated CBC-consent record for a submitted application (QC4.2). */
+	@GetMapping("/{id}/cbc-consent")
+	@PreAuthorize("hasRole('CUSTOMER')")
+	public ResponseEntity<Message<PdlCbcConsentResponse>> cbcConsent(@PathVariable("id") int id) {
+		return service.getCbcConsent(id);
+	}
 
 	/** Create a Draft application (loan details). Upload the 5 docs, then submit. */
 	@PostMapping

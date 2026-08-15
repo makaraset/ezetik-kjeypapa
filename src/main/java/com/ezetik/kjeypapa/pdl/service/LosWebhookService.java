@@ -78,7 +78,7 @@ public class LosWebhookService {
 			loan.setLosMessage(messageForCode(p.getStatusCode(), p.getMessage()));
 			repo.save(loan);
 
-			notify(loan, "Loan application rejected");
+			notify(loan, "Loan application rejected", "loan_rejected");
 			return ok("Reject processed");
 		} catch (Exception e) {
 			return error(e);
@@ -102,7 +102,7 @@ public class LosWebhookService {
 			loan.setLosMessage(messageForCode(p.getStatusCode(), p.getMessage()));
 			repo.save(loan);
 
-			notify(loan, "Loan application needs attention");
+			notify(loan, "Loan application needs attention", "loan_rejected");
 			return ok("Rework processed");
 		} catch (Exception e) {
 			return error(e);
@@ -135,6 +135,21 @@ public class LosWebhookService {
 			loan.setTenor(p.getTenor());
 			loan.setOutstandingAmount(p.getOutstandingAmount());
 			loan.setLoanDocRef(p.getLoanDocRef());
+			// Quote/fee detail: LOS-pushed values override the create-time quote (QC1.3).
+			if (p.getRepaymentAmount() != null)
+				loan.setRepaymentAmount(p.getRepaymentAmount());
+			if (p.getInterestAmount() != null)
+				loan.setInterestAmount(p.getInterestAmount());
+			if (p.getInterestRatePercent() != null)
+				loan.setInterestRatePercent(p.getInterestRatePercent());
+			if (p.getProcessingFee() != null)
+				loan.setProcessingFee(p.getProcessingFee());
+			if (p.getCbcEnquiryFee() != null)
+				loan.setCbcEnquiryFee(p.getCbcEnquiryFee());
+			if (p.getNetDisbursedAmount() != null)
+				loan.setNetDisbursedAmount(p.getNetDisbursedAmount());
+			if (p.getLoanPeriodDays() != null)
+				loan.setLoanPeriodDays(p.getLoanPeriodDays());
 			loan.setDaysPastDue(0);
 			loan.setOverduePayment(0.0);
 			repo.save(loan);
@@ -160,7 +175,7 @@ public class LosWebhookService {
 				}
 			}
 
-			notify(loan, "Loan approved");
+			notify(loan, "Loan approved", "loan_approved");
 			return ok("Approved processed");
 		} catch (Exception e) {
 			return error(e);
@@ -191,11 +206,11 @@ public class LosWebhookService {
 					loan.setDisbursementDate(p.getDisbursedDate());
 				loan.setStatus(PdlStatusEnum.Disbursed);
 				repo.save(loan);
-				notify(loan, "Loan disbursed");
+				notify(loan, "Loan disbursed", "loan_disbursed");
 			} else if ("FAILED".equalsIgnoreCase(p.getDisbursementStatus())) {
 				loan.setLosMessage(p.getFailureReason());
 				repo.save(loan);
-				notify(loan, "Disbursement failed");
+				notify(loan, "Disbursement failed", "disbursement_failed");
 			} else {
 				repo.save(loan); // PENDING / other — no state change
 			}
@@ -235,7 +250,7 @@ public class LosWebhookService {
 					if (p.getDisbursementTxnId() != null)
 						loan.setDisbursementTxnId(p.getDisbursementTxnId());
 					repo.save(loan);
-					notify(loan, "Bank verification successful");
+					notify(loan, "Bank verification successful", "bank_verification_ok");
 				}
 				return ok("Bank verification success processed");
 			} else if ("FAILED".equalsIgnoreCase(status)) {
@@ -245,7 +260,7 @@ public class LosWebhookService {
 					loan.setLosStatusCode(p.getFailureReason());
 					loan.setLosMessage(messageForCode(p.getFailureReason(), "Bank account could not be verified"));
 					repo.save(loan);
-					notify(loan, "Bank verification failed");
+					notify(loan, "Bank verification failed", "bank_verification_failed");
 				}
 				return ok("Bank verification failure processed");
 			}
@@ -294,6 +309,7 @@ public class LosWebhookService {
 					row.setInterestPaid(pr.getInterestPaid());
 					row.setFeePaid(pr.getFeePaid());
 					row.setPenaltyPaid(pr.getPenaltyPaid());
+					row.setOtherPaid(pr.getOtherPaid());
 					row.setTotalPaid(pr.getTotalPaid());
 					row.setAmountPaid(pr.getAmountPaid());
 					if (pr.getPaidDate() != null)
@@ -306,7 +322,7 @@ public class LosWebhookService {
 				}
 			}
 
-			notify(loan, "Loan updated");
+			notify(loan, "Loan updated", "loan_updated");
 			return ok("Loan update processed");
 		} catch (Exception e) {
 			return error(e);
@@ -352,12 +368,14 @@ public class LosWebhookService {
 		return fallback;
 	}
 
-	private void notify(PaydayLoan loan, String title) {
+	private void notify(PaydayLoan loan, String title, String type) {
 		try {
 			User u = loan.getUser();
 			if (u != null && u.getFcmToken() != null) {
+				// type + refId drive app-side severity mapping and deep links (G19).
 				notificationService.postToClient(new NotificationMessage(u.getFcmToken(), title,
-						loan.getId().toString(), loan.getId().toString(), u.getUsername()));
+						loan.getId().toString(), loan.getId().toString(), u.getUsername(),
+						type, loan.getId().toString()));
 			}
 		} catch (Exception e) {
 			// Notification must never fail the webhook; log and move on.

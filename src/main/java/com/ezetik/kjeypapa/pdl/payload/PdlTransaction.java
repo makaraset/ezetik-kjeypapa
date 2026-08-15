@@ -27,6 +27,17 @@ public class PdlTransaction {
 	private String message; // user-facing message from LOS
 	private Instant createdAt;
 
+	// V8 enriched card fields (screens 29/30/34 — G16).
+	private String loanType;
+	private String loanRefNo;
+	private String currency;
+	private Instant disbursementDate;
+	private Instant repaymentDate;
+	private Integer loanPeriodDays;
+	private Double repaymentAmount;
+	private Double interestAmount;
+	private Double netDisbursedAmount;
+
 	public PdlTransaction(PaydayLoan p) {
 		this.id = p.getId();
 		this.losApplicationNo = p.getLosApplicationNo();
@@ -36,5 +47,14 @@ public class PdlTransaction {
 		this.losStatusCode = p.getLosStatusCode();
 		this.message = p.getLosMessage();
 		this.createdAt = p.getCreatedAt();
+		this.loanType = p.getLoanType() != null ? p.getLoanType().name() : null;
+		this.loanRefNo = p.getLoanRefNo();
+		this.currency = p.getCurrency();
+		this.disbursementDate = p.getDisbursementDate();
+		this.repaymentDate = p.getRepaymentDate();
+		this.loanPeriodDays = p.getLoanPeriodDays();
+		this.repaymentAmount = p.getRepaymentAmount();
+		this.interestAmount = p.getInterestAmount();
+		this.netDisbursedAmount = p.getNetDisbursedAmount();
 	}
 }

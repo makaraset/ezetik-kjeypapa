@@ -50,7 +50,7 @@ public class PdlAcceptanceScheduler {
 	public void sendReminders() {
 		for (PaydayLoan loan : repo.findByStatus(PdlStatusEnum.Approved)) {
 			notify(loan, "Confirm your loan offer",
-					"Please review and confirm your loan offer before 5 PM today.");
+					"Please review and confirm your loan offer before 5 PM today.", "acceptance_reminder");
 		}
 	}
 
@@ -66,6 +66,8 @@ public class PdlAcceptanceScheduler {
 				continue;
 
 			loan.setStatus(PdlStatusEnum.Rejected);
+			// R-CUTOFF = our proposed reason code (PDL_Proposals_to_Sambat.md, QB4.5).
+			loan.setLosStatusCode("R-CUTOFF");
 			loan.setLosMessage("Not confirmed before the daily cut-off");
 			repo.save(loan);
 
@@ -75,16 +77,17 @@ public class PdlAcceptanceScheduler {
 				e.printStackTrace();
 			}
 			notify(loan, "Loan offer expired",
-					"Your loan offer was not confirmed before the cut-off and has been rejected.");
+					"Your loan offer was not confirmed before the cut-off and has been rejected.", "loan_expired");
 		}
 	}
 
-	private void notify(PaydayLoan loan, String title, String body) {
+	private void notify(PaydayLoan loan, String title, String body, String type) {
 		try {
 			User u = loan.getUser();
 			if (u != null && u.getFcmToken() != null) {
 				notificationService.postToClient(new NotificationMessage(
-						u.getFcmToken(), title, body, loan.getId().toString(), u.getUsername()));
+						u.getFcmToken(), title, body, loan.getId().toString(), u.getUsername(),
+						type, loan.getId().toString()));
 			}
 		} catch (Exception e) {
 			// A notification failure must never break the sweep.

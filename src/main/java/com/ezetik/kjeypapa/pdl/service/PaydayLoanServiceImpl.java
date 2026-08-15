@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Objects;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -18,6 +19,7 @@ import com.ezetik.kjeypapa.pdl.model.PdlAttachment;
 import com.ezetik.kjeypapa.pdl.model.PdlBankInfo;
 import com.ezetik.kjeypapa.pdl.model.PdlDocTypeEnum;
 import com.ezetik.kjeypapa.pdl.model.PdlEmploymentInfo;
+import com.ezetik.kjeypapa.pdl.model.PdlLoanTypeEnum;
 import com.ezetik.kjeypapa.pdl.model.PdlPaymentSchedule;
 import com.ezetik.kjeypapa.pdl.model.PdlPersonalInfo;
 import com.ezetik.kjeypapa.pdl.model.PdlStatusEnum;
@@ -26,6 +28,7 @@ import com.ezetik.kjeypapa.pdl.payload.EmploymentInfoRequest;
 import com.ezetik.kjeypapa.pdl.payload.PersonalInfoRequest;
 import com.ezetik.kjeypapa.pdl.payload.PdlAcceptDecision;
 import com.ezetik.kjeypapa.pdl.payload.PdlApplicationPayload;
+import com.ezetik.kjeypapa.pdl.payload.PdlCbcConsentResponse;
 import com.ezetik.kjeypapa.pdl.payload.PdlProfileResponse;
 import com.ezetik.kjeypapa.pdl.payload.PdlTransaction;
 import com.ezetik.kjeypapa.pdl.repository.PdlAttachmentRepository;
@@ -70,6 +73,12 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 	@Autowired
 	private LosProvider losProvider;
 
+	@Autowired
+	private PdlPricingService pricingService;
+
+	@Value("${pdl.cbc.text-version:v1-2026-08}")
+	private String cbcTextVersion;
+
 	private static boolean blank(String s) {
 		return s == null || s.isBlank();
 	}
@@ -78,16 +87,57 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 	@Transactional
 	public ResponseEntity<Message<PaydayLoan>> createApplication(PdlApplicationPayload p) {
 		try {
+			PdlLoanTypeEnum loanType;
+			try {
+				loanType = blank(p.getLoanType()) ? PdlLoanTypeEnum.PAYDAY
+						: PdlLoanTypeEnum.valueOf(p.getLoanType().trim().toUpperCase());
+			} catch (IllegalArgumentException bad) {
+				return resp("INVALID", "Unknown loan type: " + p.getLoanType(), null, HttpStatus.EXPECTATION_FAILED);
+			}
+			if (loanType != PdlLoanTypeEnum.PAYDAY)
+				return resp("INVALID", "Loan product not yet available: " + loanType, null,
+						HttpStatus.EXPECTATION_FAILED);
+
 			PaydayLoan loan = new PaydayLoan();
 			loan.setUser(getCurrentUser());
-			loan.setRequestAmount(p.getRequestAmount());
+			loan.setLoanType(loanType);
 			loan.setCurrency(p.getCurrency());
-			loan.setRepaymentAmount(p.getRepaymentAmount());
-			loan.setInterestAmount(p.getInterestAmount());
-			loan.setProcessingFee(p.getProcessingFee());
-			loan.setLoanPeriodDays(p.getLoanPeriodDays());
-			loan.setDisbursementDate(p.getDisbursementDate());
-			loan.setRepaymentDate(p.getRepaymentDate());
+
+			if (p.getRepaymentAmount() != null) {
+				// V8 wizard path: the client picks a repayment TIER; everything else is
+				// derived server-side (QC1.6) — client-sent derived values are ignored.
+				com.ezetik.kjeypapa.pdl.payload.PdlQuoteResponse q;
+				try {
+					q = pricingService.quote(loanType, p.getCurrency(), p.getRepaymentAmount());
+				} catch (IllegalArgumentException bad) {
+					return resp("INVALID", bad.getMessage(), null, HttpStatus.EXPECTATION_FAILED);
+				}
+				loan.setRepaymentAmount(q.getRepaymentAmount());
+				loan.setRequestAmount(q.getLoanAmount()); // principal = disbursed
+				loan.setInterestAmount(q.getInterestAmount());
+				loan.setInterestRatePercent(q.getInterestRatePercent());
+				loan.setProcessingFee(q.getProcessingFee());
+				loan.setCbcEnquiryFee(q.getCbcEnquiryFee());
+				loan.setNetDisbursedAmount(q.getNetDisbursedAmount());
+				loan.setLoanPeriodDays(q.getLoanPeriodDays());
+				loan.setDisbursementDate(q.getDisbursementDate());
+				loan.setRepaymentDate(q.getRepaymentDate());
+			} else {
+				// Legacy free-amount path (pre-wizard app builds) — still capped by product.
+				if (p.getRequestAmount() == null || p.getRequestAmount() <= 0)
+					return resp("INVALID", "Request amount is required", null, HttpStatus.EXPECTATION_FAILED);
+				if (!pricingService.withinProductCap(loanType, p.getCurrency(), p.getRequestAmount()))
+					return resp("INVALID", "Request amount is over the product limit", null,
+							HttpStatus.EXPECTATION_FAILED);
+				loan.setRequestAmount(p.getRequestAmount());
+				loan.setRepaymentAmount(p.getRepaymentAmount());
+				loan.setInterestAmount(p.getInterestAmount());
+				loan.setProcessingFee(p.getProcessingFee());
+				loan.setLoanPeriodDays(p.getLoanPeriodDays());
+				loan.setDisbursementDate(p.getDisbursementDate());
+				loan.setRepaymentDate(p.getRepaymentDate());
+			}
+
 			loan.setCbcConsentRef(p.getCbcConsentRef());
 			loan.setBankConsent(Boolean.TRUE.equals(p.getBankConsent()));
 			loan.setApplicationDate(Instant.now());
@@ -128,19 +178,36 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 				return resp("INVALID", "Only a Draft application can be submitted", null,
 						HttpStatus.EXPECTATION_FAILED);
 
-			// V21: the mandatory documents (NID, selfie, bank statement) are captured
-			// once at signup as profile file-refs — validate those, not per-loan re-uploads.
+			// V8 document set (Sambat 2026-08-13 QB2.1): NID front+back, selfie,
+			// employment card, bank statement — captured at signup as profile
+			// file-refs; validate those, not per-loan re-uploads.
 			int uid = loan.getUser().getId();
 			List<PdlPersonalInfo> pl = personalRepo.findByUser(uid);
 			PdlPersonalInfo pi = pl.isEmpty() ? null : pl.get(0);
 			List<PdlBankInfo> bl = bankRepo.findByUser(uid);
 			PdlBankInfo bi = bl.isEmpty() ? null : bl.get(0);
+			List<PdlEmploymentInfo> el = employmentRepo.findByUser(uid);
+			PdlEmploymentInfo ei = el.isEmpty() ? null : el.get(0);
 			if (pi == null || blank(pi.getNidFrontFileRef()))
-				return resp("MISSING_DOCUMENT", "Missing document: NID photo", null, HttpStatus.EXPECTATION_FAILED);
+				return resp("MISSING_DOCUMENT", "Missing document: NID photo (front)", null,
+						HttpStatus.EXPECTATION_FAILED);
+			if (blank(pi.getNidBackFileRef()))
+				return resp("MISSING_DOCUMENT", "Missing document: NID photo (back)", null,
+						HttpStatus.EXPECTATION_FAILED);
 			if (blank(pi.getProfilePhotoFileRef()))
 				return resp("MISSING_DOCUMENT", "Missing document: profile photo", null, HttpStatus.EXPECTATION_FAILED);
+			if (ei == null || blank(ei.getEmploymentCardFileRef()))
+				return resp("MISSING_DOCUMENT", "Missing document: employment card", null,
+						HttpStatus.EXPECTATION_FAILED);
 			if (bi == null || blank(bi.getBankStatementFileRef()))
 				return resp("MISSING_DOCUMENT", "Missing document: bank statement", null, HttpStatus.EXPECTATION_FAILED);
+
+			// Stamp the CBC consent record (QC4.2): generated by us at submit, viewable
+			// via GET /pdl/{id}/cbc-consent.
+			loan.setCbcConsentDate(Instant.now());
+			loan.setCbcConsentTextVersion(cbcTextVersion);
+			if (blank(loan.getCbcConsentRef()))
+				loan.setCbcConsentRef("CBC-" + loan.getId() + "-" + cbcTextVersion);
 
 			String losNo = losProvider.submitApplication(loan);
 			loan.setLosApplicationNo(losNo);
@@ -297,6 +364,32 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 		} catch (Exception e) {
 			e.printStackTrace();
 			return resp("INTERNAL_SERVER_ERROR", e.getMessage(), null, HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Value("${pdl.cbc.consent-text:I consent to Sambat Finance conducting a credit enquiry with the Credit Bureau of Cambodia (CBC) for the purpose of assessing this loan application, in accordance with the Prakas on Credit Reporting.}")
+	private String cbcConsentText;
+
+	/** The generated CBC-consent record (QC4.2) — ownership-checked like the loan itself. */
+	@Override
+	public ResponseEntity<Message<PdlCbcConsentResponse>> getCbcConsent(int id) {
+		try {
+			PaydayLoan loan = ownedLoanOrNull(id);
+			if (loan == null)
+				return new ResponseEntity<>(new Message<>("NOT_FOUND", "Application not found", null),
+						HttpStatus.EXPECTATION_FAILED);
+			if (loan.getCbcConsentDate() == null)
+				return new ResponseEntity<>(
+						new Message<>("NOT_FOUND", "No consent recorded — application not yet submitted", null),
+						HttpStatus.EXPECTATION_FAILED);
+			PdlCbcConsentResponse r = new PdlCbcConsentResponse(loan.getId(), loan.getLoanRefNo(),
+					loan.getLosApplicationNo(), loan.getCustomerName(), loan.getCbcConsentRef(),
+					loan.getCbcConsentDate(), loan.getCbcConsentTextVersion(), cbcConsentText);
+			return new ResponseEntity<>(new Message<>("SUCCESS", "Get data success", r), HttpStatus.OK);
+		} catch (Exception e) {
+			e.printStackTrace();
+			return new ResponseEntity<>(new Message<>("INTERNAL_SERVER_ERROR", e.getMessage(), null),
+					HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 

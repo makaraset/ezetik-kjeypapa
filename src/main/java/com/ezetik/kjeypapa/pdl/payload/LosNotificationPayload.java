@@ -37,6 +37,16 @@ public class LosNotificationPayload {
 	private Double outstandingAmount;
 	private String loanDocRef;
 
+	// Quote/fee detail (V8 acceptance screen 32; QC1.3). Optional — when absent
+	// the values computed at create-time by PdlPricingService stand.
+	private Double repaymentAmount;
+	private Double interestAmount;
+	private Double interestRatePercent;
+	private Double processingFee;
+	private Double cbcEnquiryFee;
+	private Double netDisbursedAmount;
+	private Integer loanPeriodDays;
+
 	private String signature; // webhook signature (scheme TBD)
 
 	@Data

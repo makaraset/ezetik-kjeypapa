@@ -53,6 +53,7 @@ public class PdlPaymentSchedule extends UserDateAudit {
 	private Double interestPaid;
 	private Double feePaid;
 	private Double penaltyPaid;
+	private Double otherPaid; // V8 closed-loan settlement card (G17)
 	private Double totalPaid;
 	private Double amountPaid;
 	private Instant paidDate;

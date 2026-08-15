@@ -20,7 +20,10 @@ public class PdlApplicationPayload {
 	private Integer id;
 
 	private Double requestAmount;
-	private String currency; // V21: "Select loan currency" (USD / KHR)
+	private String currency; // USD / KHR — KHR stays (Sambat 2026-08-13, QC1.5)
+	private String loanType; // PAYDAY (default) / MICRO / PERSONAL — V8 screen 11
+	// V8 wizard: the customer selects a repayment-amount TIER; the server derives
+	// principal/interest/fees/net/dates via PdlPricingService (QC1.3/QC1.6).
 	private Double repaymentAmount;
 	private Double interestAmount;
 	private Double processingFee;
