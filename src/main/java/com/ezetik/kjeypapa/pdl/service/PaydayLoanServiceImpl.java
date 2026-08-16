@@ -100,6 +100,9 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 
 			PaydayLoan loan = new PaydayLoan();
 			loan.setUser(getCurrentUser());
+			User u = loan.getUser();
+			loan.setCustomerName(((u.getFirstname() == null ? "" : u.getFirstname()) + " "
+					+ (u.getLastname() == null ? "" : u.getLastname())).trim());
 			loan.setLoanType(loanType);
 			loan.setCurrency(p.getCurrency());
 
@@ -206,8 +209,8 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 			// via GET /pdl/{id}/cbc-consent.
 			loan.setCbcConsentDate(Instant.now());
 			loan.setCbcConsentTextVersion(cbcTextVersion);
-			if (blank(loan.getCbcConsentRef()))
-				loan.setCbcConsentRef("CBC-" + loan.getId() + "-" + cbcTextVersion);
+			// Server-authoritative: overwrite any client-sent placeholder ref.
+			loan.setCbcConsentRef("CBC-" + loan.getId() + "-" + cbcTextVersion);
 
 			String losNo = losProvider.submitApplication(loan);
 			loan.setLosApplicationNo(losNo);
