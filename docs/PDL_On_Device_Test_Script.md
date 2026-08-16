@@ -188,6 +188,46 @@ Use the **Accepted** loan from step 12 (`LOSNO` = its number).
 
 ---
 
+## I. Phase-2 additions (V8 foundations — test after the A–H flow)
+
+> New since the July run: V8 icon nav, buckets, acceptance page, viewers, typed pushes.
+
+22. [ ] **APP** Dashboard shell: circular icon nav **My Profile / My Application / My Loan / Request**
+    (no Payment Record item); tapping **Request** opens the request flow. (G18)
+23. [ ] **APP** **My Application** tab: **Processing | Approved | Rejected** pills filter the list;
+    cards show dates/period/amount rows when populated; a Rejected card shows a labeled
+    **Reason** row + the hotline footer; **no Re-attempt button on Rejected**. (G16/QB4)
+24. [ ] **APP** An **Approved** application shows one **View / Confirm** button → the full
+    **acceptance page**: fee table (rate, processing fee, CBC fee, **Net Loan Received**),
+    "credited to the account below" bank block, **Loan Documents [View]** buttons, and a T&C
+    checkbox that **enables** Confirm/Reject only when ticked. (G13)
+    - **DRIVE** to stage one: approve a fresh Submitted app (step 10 curl) — include
+      `"loanFormRef":"<any-stored-file>","loanContractFileRef":"<any-stored-file>"` plus the fee
+      fields (`"interestRatePercent":1.5,"processingFee":3.0,"cbcEnquiryFee":1.0,
+      "netDisbursedAmount":45.63,"repaymentAmount":50.0,"loanPeriodDays":15`).
+25. [ ] **APP** Tap a **[View]** on a loan document → the in-app viewer renders the image
+    (pinch-zoom); a bogus ref shows the "preview unavailable" placeholder. (G15)
+26. [ ] **APP** Confirm acceptance (checkbox → **Confirm**) → full-screen **"Loan Accepted"**
+    result; Reject shows **"Loan Rejected by You"**. (V8 21/22)
+27. [ ] **APP** **My Loan**: **Active | Closed** pills; an Active card shows **CBC Consent [View]**
+    (→ the consent record page) and **Loan Contract [View]**; **View Schedule** opens the
+    standalone **Payment Record** page. A Closed loan renders the settlement card. (G17/QC3.2)
+28. [ ] **APP** **My Profile**: 3 segments (Personal / Address / Employment); the **bank card sits
+    inside Personal**; bottom shows **Update** + **Request for New Loan**. (G18)
+29. [ ] **Typed push deep-link (G19):** with the app in the **background**, DRIVE any webhook that
+    pushes (approve/reject/disburse) → tap the system banner → the app opens the matching
+    **full-screen result screen** (not the home). In the notification center list, positive events
+    show the **green tick**, rejects/failures the **red cross** (the old red-X-everywhere bug).
+    *(Simulator note: APNS pushes don't arrive on the iOS simulator — test push-taps on a real
+    device; on the sim verify the icon mapping + result screens by navigation.)*
+30. [ ] **G21 spot-checks:** About App + drawer footer show the real version (1.2.5+16);
+    registration password accepts >6 chars; logout returns to Sign In with the back-stack cleared.
+
+> **Profile prep for the V8 submit gate:** the gate now also requires **NID back + employment
+> card** refs. For the legacy test account, copy an existing stored ref into the missing fields
+> (POST /pdl/personal-info with nidBackFileRef, POST /pdl/employment-info with
+> employmentCardFileRef) before testing submit.
+
 ## Results summary
 
 | # | Area | Gap | Pass? | Notes |
@@ -202,6 +242,7 @@ Use the **Accepted** loan from step 12 (`LOSNO` = its number).
 | F | Bank-verify reject → Re-attempt | G5 | ☐ | |
 | G | Disburse + repayment display | — | ☐ | |
 | H | Bank-verification endpoint inert | G4 | ☐ | |
+| I | V8 IA / buckets / accept page / viewers / pushes | G13-G19 | ☐ | Phase 2 |
 
 **Environment:** device ____________ · API_BASE_URL ____________ · date ____________ · tester ____________
 
