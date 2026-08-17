@@ -143,15 +143,16 @@ class LosWebhookServiceTest {
 	}
 
 	@Test
-	void handleBankVerification_failedRejectsWithBankMessage() {
+	void handleBankVerification_failedStaysAcceptedForReattempt() {
+		// Sambat QB4.1-4.3: hand-off failure does NOT reject — the customer
+		// re-attempts until the daily cut-off sweep expires the offer.
 		ReflectionTestUtils.setField(service, "bankVerificationEnabled", true);
 		PaydayLoan loan = loanFor("LOS-BV3");
-		loan.setStatus(PdlStatusEnum.Accepted);
+		loan.setStatus(PdlStatusEnum.Pending_Bank_Verification);
 
-		service.handleBankVerification(bankPayload("LOS-BV3", "FAILED", "R-BANK"));
+		service.handleBankVerification(bankPayload("LOS-BV3", "FAILED", null));
 
-		assertThat(loan.getStatus()).isEqualTo(PdlStatusEnum.Rejected);
-		assertThat(loan.getLosStatusCode()).isEqualTo("R-BANK");
-		assertThat(loan.getLosMessage()).isEqualTo("Bank account could not be verified");
+		assertThat(loan.getStatus()).isEqualTo(PdlStatusEnum.Accepted);
+		assertThat(loan.getLosMessage()).contains("re-attempt");
 	}
 }

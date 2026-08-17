@@ -34,6 +34,7 @@ import com.ezetik.kjeypapa.pdl.model.PdlLoanTypeEnum;
 import com.ezetik.kjeypapa.pdl.payload.PdlAcceptDecision;
 import com.ezetik.kjeypapa.pdl.payload.PdlApplicationPayload;
 import com.ezetik.kjeypapa.pdl.payload.PdlCbcConsentResponse;
+import com.ezetik.kjeypapa.pdl.payload.PdlSettlementAccountResponse;
 import com.ezetik.kjeypapa.pdl.payload.PdlProfileResponse;
 import com.ezetik.kjeypapa.pdl.payload.PdlQuoteResponse;
 import com.ezetik.kjeypapa.pdl.payload.PdlTransaction;
@@ -88,6 +89,13 @@ public class PaydayLoanController {
 			@RequestParam(name = "currency", required = false, defaultValue = "USD") String currency) {
 		return new ResponseEntity<>(new Message<>("SUCCESS", "Tier list", pricingService.tiers(currency)),
 				HttpStatus.OK);
+	}
+
+	/** Settlement account + balance (V8 screen 26, G20 — mock until QC3.1 API). */
+	@GetMapping("/settlement-account")
+	@PreAuthorize("hasRole('CUSTOMER')")
+	public ResponseEntity<Message<PdlSettlementAccountResponse>> settlementAccount() {
+		return service.getSettlementAccount();
 	}
 
 	/** The generated CBC-consent record for a submitted application (QC4.2). */

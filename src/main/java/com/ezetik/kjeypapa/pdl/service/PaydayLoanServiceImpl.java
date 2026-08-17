@@ -30,6 +30,7 @@ import com.ezetik.kjeypapa.pdl.payload.PdlAcceptDecision;
 import com.ezetik.kjeypapa.pdl.payload.PdlApplicationPayload;
 import com.ezetik.kjeypapa.pdl.payload.PdlCbcConsentResponse;
 import com.ezetik.kjeypapa.pdl.payload.PdlProfileResponse;
+import com.ezetik.kjeypapa.pdl.payload.PdlSettlementAccountResponse;
 import com.ezetik.kjeypapa.pdl.payload.PdlTransaction;
 import com.ezetik.kjeypapa.pdl.repository.PdlAttachmentRepository;
 import com.ezetik.kjeypapa.pdl.repository.PdlBankInfoRepository;
@@ -372,6 +373,47 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 
 	@Value("${pdl.cbc.consent-text:I consent to Sambat Finance conducting a credit enquiry with the Credit Bureau of Cambodia (CBC) for the purpose of assessing this loan application, in accordance with the Prakas on Credit Reporting.}")
 	private String cbcConsentText;
+
+	@Value("${pdl.settlement.mock:true}")
+	private boolean settlementMock;
+
+	@Value("${pdl.settlement.mock-balance:10.0}")
+	private double settlementMockBalance;
+
+	/**
+	 * The settlement account + balance (V8 screen 26, G20). Balance comes from
+	 * SBF core banking (QC3.1) — MOCKED until Sambat provides the balance API;
+	 * the account no falls back from the latest LOS-pushed loan to none.
+	 */
+	@Override
+	public ResponseEntity<Message<PdlSettlementAccountResponse>> getSettlementAccount() {
+		try {
+			User user = getCurrentUser();
+			// Repo order is unspecified — sort by id so "latest" really is latest
+			// (device test caught an older rejected loan's account winning).
+			String accountNo = repo.findByUserId(user.getId()).stream()
+					.sorted(java.util.Comparator.comparing(PaydayLoan::getId))
+					.map(PaydayLoan::getSettlementAccountNo)
+					.filter(a -> a != null && !a.isBlank())
+					.reduce((first, second) -> second) // latest wins
+					.orElse(null);
+			if (accountNo == null)
+				return new ResponseEntity<>(new Message<>("NOT_FOUND", "No settlement account yet", null),
+						HttpStatus.OK);
+			String name = ((user.getFirstname() == null ? "" : user.getFirstname()) + " "
+					+ (user.getLastname() == null ? "" : user.getLastname())).trim();
+			if (!settlementMock)
+				return new ResponseEntity<>(new Message<>("NOT_IMPLEMENTED",
+						"Real core-banking balance API pending Sambat (QC3.1)", null), HttpStatus.OK);
+			PdlSettlementAccountResponse r = new PdlSettlementAccountResponse(accountNo, name, "USD",
+					settlementMockBalance, Instant.now(), true);
+			return new ResponseEntity<>(new Message<>("SUCCESS", "Settlement account", r), HttpStatus.OK);
+		} catch (Exception e) {
+			e.printStackTrace();
+			return new ResponseEntity<>(new Message<>("INTERNAL_SERVER_ERROR", e.getMessage(), null),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
 
 	/** The generated CBC-consent record (QC4.2) — ownership-checked like the loan itself. */
 	@Override

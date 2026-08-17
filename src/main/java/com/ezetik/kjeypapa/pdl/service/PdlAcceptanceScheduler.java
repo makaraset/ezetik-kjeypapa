@@ -60,7 +60,13 @@ public class PdlAcceptanceScheduler {
 	@Transactional
 	public void enforceCutoff() {
 		Instant threshold = Instant.now().minus(graceMinutes, ChronoUnit.MINUTES);
-		for (PaydayLoan loan : repo.findByStatus(PdlStatusEnum.Approved)) {
+		// Approved = never confirmed; Accepted = confirmed but the bank hand-off
+		// never succeeded — both expire at the daily cut-off (QB4.1: Re-Attempt
+		// is disabled once the cut-off passes). Pending_Bank_Verification is
+		// in-flight at the bank and is left alone.
+		java.util.List<PaydayLoan> sweep = new java.util.ArrayList<>(repo.findByStatus(PdlStatusEnum.Approved));
+		sweep.addAll(repo.findByStatus(PdlStatusEnum.Accepted));
+		for (PaydayLoan loan : sweep) {
 			// Skip offers approved within the grace window (e.g. just before the cut-off).
 			if (loan.getApprovedDate() != null && loan.getApprovedDate().isAfter(threshold))
 				continue;

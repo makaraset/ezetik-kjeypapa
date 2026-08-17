@@ -256,6 +256,7 @@ public class LosWebhookService {
 				if (loan.getStatus() == PdlStatusEnum.Accepted
 						|| loan.getStatus() == PdlStatusEnum.Pending_Bank_Verification) {
 					loan.setStatus(PdlStatusEnum.Pending_Bank_Verification);
+					loan.setLosMessage(null); // clear any earlier failure message
 					if (p.getDisbursementTxnId() != null)
 						loan.setDisbursementTxnId(p.getDisbursementTxnId());
 					repo.save(loan);
@@ -263,11 +264,14 @@ public class LosWebhookService {
 				}
 				return ok("Bank verification success processed");
 			} else if ("FAILED".equalsIgnoreCase(status)) {
+				// Sambat 2026-08-13 (QB4.1-4.3): a hand-off failure does NOT reject —
+				// the application stays under Approved/Accepted and the customer
+				// Re-Attempts until the daily cut-off sweep expires it. No failure
+				// codes exist (QB4.3) — message only.
 				if (loan.getStatus() == PdlStatusEnum.Accepted
 						|| loan.getStatus() == PdlStatusEnum.Pending_Bank_Verification) {
-					loan.setStatus(PdlStatusEnum.Rejected);
-					loan.setLosStatusCode(p.getFailureReason());
-					loan.setLosMessage(messageForCode(p.getFailureReason(), "Bank account could not be verified"));
+					loan.setStatus(PdlStatusEnum.Accepted); // re-attemptable
+					loan.setLosMessage("Bank verification did not complete — please re-attempt");
 					repo.save(loan);
 					notify(loan, "Bank verification failed", "bank_verification_failed");
 				}

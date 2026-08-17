@@ -82,4 +82,28 @@ class PdlAcceptanceSchedulerTest {
 		scheduler.sendReminders();
 		verify(repo).findByStatus(PdlStatusEnum.Approved);
 	}
+
+	@org.junit.jupiter.api.Test
+	void cutoff_alsoExpiresAcceptedLoansPastGrace() {
+		// QB4.1: Re-Attempt is disabled once the cut-off passes — an Accepted
+		// loan whose bank hand-off never succeeded expires like an Approved one.
+		org.springframework.test.util.ReflectionTestUtils.setField(scheduler, "graceMinutes", 0L);
+		com.ezetik.kjeypapa.pdl.model.PaydayLoan loan = new com.ezetik.kjeypapa.pdl.model.PaydayLoan();
+		loan.setId(9);
+		loan.setStatus(com.ezetik.kjeypapa.pdl.model.PdlStatusEnum.Accepted);
+		loan.setLosApplicationNo("LOS-9");
+		loan.setApprovedDate(java.time.Instant.now().minus(2, java.time.temporal.ChronoUnit.HOURS));
+		org.mockito.Mockito.when(repo.findByStatus(com.ezetik.kjeypapa.pdl.model.PdlStatusEnum.Approved))
+				.thenReturn(java.util.List.of());
+		org.mockito.Mockito.when(repo.findByStatus(com.ezetik.kjeypapa.pdl.model.PdlStatusEnum.Accepted))
+				.thenReturn(java.util.List.of(loan));
+		org.mockito.Mockito.when(repo.save(org.mockito.ArgumentMatchers.any()))
+				.thenAnswer(inv -> inv.getArgument(0));
+
+		scheduler.enforceCutoff();
+
+		org.assertj.core.api.Assertions.assertThat(loan.getStatus())
+				.isEqualTo(com.ezetik.kjeypapa.pdl.model.PdlStatusEnum.Rejected);
+		org.mockito.Mockito.verify(losProvider).sendDecision("LOS-9", "N", null);
+	}
 }
