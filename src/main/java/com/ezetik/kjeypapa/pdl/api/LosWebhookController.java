@@ -66,6 +66,12 @@ public class LosWebhookController {
 		return service.handleLoanUpdate(payload);
 	}
 
+	/** V26 page 1 — SAMBAT account decision (LPO review; mock until QC2.1 channel confirmed). */
+	@PostMapping("/account-decision")
+	public ResponseEntity<Message<String>> accountDecision(@RequestBody java.util.Map<String, String> body) {
+		return service.handleAccountDecision(body.get("username"), body.get("decision"), body.get("reason"));
+	}
+
 	/**
 	 * V21 — result of the Bank-Mobile-App verification / disbursement-consent step
 	 * (after Accept). SCAFFOLDING: no-ops unless {@code pdl.bank-verification.enabled=true}.

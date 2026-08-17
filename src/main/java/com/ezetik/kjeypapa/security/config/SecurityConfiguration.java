@@ -44,7 +44,9 @@ public class SecurityConfiguration {
 		  // Sambat LOS server-to-server webhooks (no customer JWT).
 		  // TODO: replace whitelist with LOS signature verification once the
 		  // contract is delivered (BRS Appendix). See LosWebhookController.
-		  "/api/v1/pdl/los/**"
+		  "/api/v1/pdl/los/**",
+		  // Pre-login PDL account request (G7): the caller has no account yet.
+		  "/api/v1/pdl/account-request/**"
 		 };
 
 	@Bean

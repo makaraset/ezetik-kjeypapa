@@ -14,6 +14,8 @@ import org.springframework.stereotype.Service;
 import com.ezetik.kjeypapa.notification.config.NotificationService;
 import com.ezetik.kjeypapa.notification.controller.NotificationMessage;
 import com.ezetik.kjeypapa.pdl.model.PaydayLoan;
+import com.ezetik.kjeypapa.pdl.model.PdlAccountRequest;
+import com.ezetik.kjeypapa.pdl.model.PdlAccountStatusEnum;
 import com.ezetik.kjeypapa.pdl.model.PdlPaymentSchedule;
 import com.ezetik.kjeypapa.pdl.model.PdlStatusEnum;
 import com.ezetik.kjeypapa.pdl.payload.LosBankVerificationPayload;
@@ -24,6 +26,7 @@ import com.ezetik.kjeypapa.pdl.payload.LosNotificationPayload;
 import com.ezetik.kjeypapa.pdl.payload.LosNotificationPayload.ScheduleRow;
 import com.ezetik.kjeypapa.pdl.payload.LosProductSyncPayload;
 import com.ezetik.kjeypapa.pdl.repository.PaydayLoanRepository;
+import com.ezetik.kjeypapa.pdl.repository.PdlAccountRequestRepository;
 import com.ezetik.kjeypapa.pdl.repository.PdlPaymentScheduleRepository;
 import com.ezetik.kjeypapa.security.model.User;
 import com.ezetik.kjeypapa.security.util.Message;
@@ -52,6 +55,12 @@ public class LosWebhookService {
 
 	@Autowired
 	private NotificationService notificationService;
+
+	@Autowired
+	private PdlAccountRequestRepository accountRequestRepo;
+
+	@Autowired
+	private com.ezetik.kjeypapa.sbf.service.SMSService sms;
 
 	/**
 	 * V21 bank-app disbursement-consent hand-off. Off by default: the deep-link +
@@ -324,6 +333,39 @@ public class LosWebhookService {
 
 			notify(loan, "Loan updated", "loan_updated");
 			return ok("Loan update processed");
+		} catch (Exception e) {
+			return error(e);
+		}
+	}
+
+	/**
+	 * V26 page 1 — the SAMBAT-side account decision (LPO review, QC2.1). Mocked
+	 * until the real channel is confirmed. A = approve (login unblocked),
+	 * R = reject. Notification: SMS best-effort (no FCM token exists pre-login).
+	 */
+	@Transactional
+	public ResponseEntity<Message<String>> handleAccountDecision(String username, String decision, String reason) {
+		try {
+			PdlAccountRequest req = accountRequestRepo.findByUser_Username(username).orElse(null);
+			if (req == null)
+				return new ResponseEntity<>(new Message<>("NOT_FOUND", "Account request not found: " + username, null),
+						HttpStatus.OK);
+			boolean approve = "A".equalsIgnoreCase(decision);
+			req.setStatus(approve ? PdlAccountStatusEnum.APPROVED : PdlAccountStatusEnum.REJECTED);
+			req.setDecisionReason(reason);
+			User u = req.getUser();
+			if (u != null)
+				u.setEnabled(approve);
+			accountRequestRepo.save(req);
+			try {
+				if (u != null && u.getPhoneNumber() != null)
+					sms.sendSms(u.getPhoneNumber(), approve
+							? "Kjey PAPA: your account has been created successfully. You can now sign in."
+							: "Kjey PAPA: your account request was not approved. Please contact 023 99 77 22.");
+			} catch (Exception smsEx) {
+				smsEx.printStackTrace();
+			}
+			return ok("Account decision processed: " + req.getStatus());
 		} catch (Exception e) {
 			return error(e);
 		}
