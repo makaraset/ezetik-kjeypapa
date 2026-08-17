@@ -107,6 +107,15 @@ public class PdlAccountRequestService {
 			user.setLastname(per != null && !isBlank(per.getLatinFamilyName()) ? per.getLatinFamilyName() : "");
 			if (per != null && !isBlank(per.getDateOfBirth()))
 				user.setDateOfBirth(per.getDateOfBirth());
+			// Gender when parseable (M/F) — /auth/me consumers expect it.
+			if (per != null && !isBlank(per.getGender())) {
+				try {
+					user.setGender(com.ezetik.kjeypapa.security.model.GenderEnum
+							.valueOf(per.getGender().trim().substring(0, 1).toUpperCase()));
+				} catch (Exception ignore) {
+					// unknown format — leave null (client is null-tolerant)
+				}
+			}
 			user.setPassword(passwordEncoder.encode(p.getPassword()));
 			user.setPasswordNeverExpires(true);
 			user.setEnabled(false);
