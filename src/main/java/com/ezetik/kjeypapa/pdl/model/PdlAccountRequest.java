@@ -47,4 +47,8 @@ public class PdlAccountRequest extends UserDateAudit {
 	private PdlAccountStatusEnum status;
 
 	private String decisionReason;
+
+	/** Who decided (LPO username via the admin API, or SYSTEM/test webhook). */
+	private String decidedBy;
+	private java.time.Instant decidedDate;
 }

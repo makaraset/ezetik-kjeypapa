@@ -60,6 +60,9 @@ public class LosWebhookService {
 	private PdlAccountRequestRepository accountRequestRepo;
 
 	@Autowired
+	private PdlAccountRequestService accountRequestService;
+
+	@Autowired
 	private com.ezetik.kjeypapa.sbf.service.SMSService sms;
 
 	/**
@@ -343,36 +346,18 @@ public class LosWebhookService {
 	}
 
 	/**
-	 * V26 page 1 — the SAMBAT-side account decision (LPO review, QC2.1). Mocked
-	 * until the real channel is confirmed. A = approve (login unblocked),
-	 * R = reject. Notification: SMS best-effort (no FCM token exists pre-login).
+	 * TEST TOOLING ONLY (2026-08-21 product decision: SBF/LOS does NOT handle
+	 * account approval). The real channel is the admin API
+	 * ({@code /api/v1/pdl/admin/account-requests/{id}/decision}, LPO role);
+	 * this webhook remains for automated tests and delegates to the same logic.
 	 */
 	@Transactional
 	public ResponseEntity<Message<String>> handleAccountDecision(String username, String decision, String reason) {
-		try {
-			PdlAccountRequest req = accountRequestRepo.findByUser_Username(username).orElse(null);
-			if (req == null)
-				return new ResponseEntity<>(new Message<>("NOT_FOUND", "Account request not found: " + username, null),
-						HttpStatus.OK);
-			boolean approve = "A".equalsIgnoreCase(decision);
-			req.setStatus(approve ? PdlAccountStatusEnum.APPROVED : PdlAccountStatusEnum.REJECTED);
-			req.setDecisionReason(reason);
-			User u = req.getUser();
-			if (u != null)
-				u.setEnabled(approve);
-			accountRequestRepo.save(req);
-			try {
-				if (u != null && u.getPhoneNumber() != null)
-					sms.sendSms(u.getPhoneNumber(), approve
-							? "Kjey PAPA: your account has been created successfully. You can now sign in."
-							: "Kjey PAPA: your account request was not approved. Please contact 023 99 77 22.");
-			} catch (Exception smsEx) {
-				smsEx.printStackTrace();
-			}
-			return ok("Account decision processed: " + req.getStatus());
-		} catch (Exception e) {
-			return error(e);
-		}
+		PdlAccountRequest req = accountRequestRepo.findByUser_Username(username).orElse(null);
+		if (req == null)
+			return new ResponseEntity<>(new Message<>("NOT_FOUND", "Account request not found: " + username, null),
+					HttpStatus.OK);
+		return accountRequestService.decide(req.getId(), "A".equalsIgnoreCase(decision), reason, "TEST-WEBHOOK");
 	}
 
 	// --- helpers ---

@@ -205,6 +205,71 @@ public class PdlAccountRequestService {
 		}
 	}
 
+	/**
+	 * The LPO decision (G7). Our own approval process — SBF/LOS does NOT handle
+	 * account approval (product decision 2026-08-21). Called by the admin API;
+	 * the /pdl/los/account-decision webhook delegates here for test tooling.
+	 */
+	@Transactional
+	public ResponseEntity<Message<String>> decide(int requestId, boolean approve, String reason, String decidedBy) {
+		PdlAccountRequest req = requestRepo.findById(requestId).orElse(null);
+		if (req == null)
+			return resp2("NOT_FOUND", "Account request not found: " + requestId, null, HttpStatus.OK);
+		if (req.getStatus() != PdlAccountStatusEnum.PENDING)
+			return resp2("INVALID", "Already decided: " + req.getStatus(), req.getStatus().name(), HttpStatus.OK);
+		req.setStatus(approve ? PdlAccountStatusEnum.APPROVED : PdlAccountStatusEnum.REJECTED);
+		req.setDecisionReason(reason);
+		req.setDecidedBy(decidedBy);
+		req.setDecidedDate(java.time.Instant.now());
+		User u = req.getUser();
+		if (u != null)
+			u.setEnabled(approve);
+		requestRepo.save(req);
+		try {
+			if (u != null && u.getPhoneNumber() != null)
+				sms.sendSms(u.getPhoneNumber(), approve
+						? "Kjey PAPA: your account has been created successfully. You can now sign in."
+						: "Kjey PAPA: your account request was not approved. Please contact 023 99 77 22.");
+		} catch (Exception smsEx) {
+			smsEx.printStackTrace();
+		}
+		return resp2("SUCCESS", "Account decision processed: " + req.getStatus(), req.getStatus().name(),
+				HttpStatus.OK);
+	}
+
+	/** LPO list view: PENDING by default, or any status / all. */
+	public ResponseEntity<Message<java.util.List<PdlAccountRequest>>> list(String status) {
+		java.util.List<PdlAccountRequest> out;
+		if (status == null || status.isBlank() || "PENDING".equalsIgnoreCase(status))
+			out = requestRepo.findByStatusOrderByIdDesc(PdlAccountStatusEnum.PENDING);
+		else if ("ALL".equalsIgnoreCase(status))
+			out = requestRepo.findAllByOrderByIdDesc();
+		else {
+			try {
+				out = requestRepo.findByStatusOrderByIdDesc(PdlAccountStatusEnum.valueOf(status.toUpperCase()));
+			} catch (IllegalArgumentException bad) {
+				return new ResponseEntity<>(new Message<>("INVALID", "Unknown status: " + status, null),
+						HttpStatus.EXPECTATION_FAILED);
+			}
+		}
+		return new ResponseEntity<>(new Message<>("SUCCESS", "Account requests", out), HttpStatus.OK);
+	}
+
+	/** LPO review detail: the request + profile sections (doc refs included). */
+	public ResponseEntity<Message<com.ezetik.kjeypapa.pdl.payload.PdlAccountReviewResponse>> review(int requestId) {
+		PdlAccountRequest req = requestRepo.findById(requestId).orElse(null);
+		if (req == null || req.getUser() == null)
+			return new ResponseEntity<>(new Message<>("NOT_FOUND", "Account request not found: " + requestId, null),
+					HttpStatus.OK);
+		int uid = req.getUser().getId();
+		var pi = personalRepo.findByUser(uid);
+		var ei = employmentRepo.findByUser(uid);
+		var bi = bankRepo.findByUser(uid);
+		var out = new com.ezetik.kjeypapa.pdl.payload.PdlAccountReviewResponse(req,
+				pi.isEmpty() ? null : pi.get(0), ei.isEmpty() ? null : ei.get(0), bi.isEmpty() ? null : bi.get(0));
+		return new ResponseEntity<>(new Message<>("SUCCESS", "Account request detail", out), HttpStatus.OK);
+	}
+
 	/** Public status probe for the pending screen (returns the status only). */
 	public ResponseEntity<Message<String>> status(String username) {
 		PdlAccountRequest r = requestRepo.findByUser_Username(username).orElse(null);
