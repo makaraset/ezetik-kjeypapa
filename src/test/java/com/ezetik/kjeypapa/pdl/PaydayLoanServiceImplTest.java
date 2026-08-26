@@ -62,6 +62,8 @@ class PaydayLoanServiceImplTest {
 	@Mock UserService userService;
 	@Mock LosProvider losProvider;
 	@Mock PdlPricingService pricingService;
+	@Mock com.ezetik.kjeypapa.pdl.service.SbfGatewayClient sbfGateway;
+	@Mock com.ezetik.kjeypapa.security.repository.UserRepository userRepository;
 
 	@InjectMocks PaydayLoanServiceImpl service;
 
@@ -307,5 +309,95 @@ class PaydayLoanServiceImplTest {
 	void getPaymentSchedule_returnsNotFoundForAnotherUsersLoan() {
 		loanOwnedBy(999, PdlStatusEnum.Active);
 		assertThat(service.getPaymentSchedule(1).getBody().getType()).isEqualTo("NOT_FOUND");
+	}
+
+	// ----- settlement account (QC3.1 live from SBF core, TFF-benchmarked) -----
+
+	/** Real UAT shape, captured 2026-08-26 from CIF 62581. */
+	private static com.fasterxml.jackson.databind.JsonNode sbfAccount(String acctNo, String status,
+			String ccy, String balance) throws Exception {
+		String json = ("{'accountNo':'" + acctNo + "','cifNo':62581,'cifName':'TAN BUNTEK',"
+				+ "'names':'TAN BUNTEK','ccy':'" + ccy + "','balance':" + balance
+				+ ",'valBalance':" + balance + ",'freezedamt':0,'accStatus':'" + status + "'}")
+						.replace('\'', '"');
+		return new com.fasterxml.jackson.databind.ObjectMapper().readTree(json);
+	}
+
+	private void liveSettlement() {
+		org.springframework.test.util.ReflectionTestUtils.setField(service, "settlementMock", false);
+	}
+
+	private PaydayLoan loanWithSettlementAccount(String acctNo) {
+		PaydayLoan l = new PaydayLoan();
+		l.setId(1);
+		l.setSettlementAccountNo(acctNo);
+		when(repo.findByUserId(CURRENT_ID)).thenReturn(List.of(l));
+		return l;
+	}
+
+	@Test
+	void settlement_livePrimaryLookupMapsTheSbfAccount() throws Exception {
+		liveSettlement();
+		loanWithSettlementAccount("120-333-055417-5");
+		when(sbfGateway.savingByAccountNo("120-333-055417-5"))
+				.thenReturn(sbfAccount("120-333-055417-5", "ACTIVE", "USD", "12.34"));
+
+		var body = service.getSettlementAccount().getBody();
+
+		assertThat(body.getType()).isEqualTo("SUCCESS");
+		assertThat(body.getData().getAccountNo()).isEqualTo("120-333-055417-5");
+		assertThat(body.getData().getAccountName()).isEqualTo("TAN BUNTEK");
+		assertThat(body.getData().getCurrency()).isEqualTo("USD");
+		assertThat(body.getData().getBalance()).isEqualTo(12.34);
+		assertThat(body.getData().isMock()).isFalse();
+	}
+
+	@Test
+	void settlement_fallsBackToCifAndPrefersTheActiveAccount() throws Exception {
+		// Regression: UAT reports accStatus "ACTIVE" (not "A") — an equalsIgnoreCase("A")
+		// preference silently kept whichever account happened to be listed first.
+		liveSettlement();
+		when(repo.findByUserId(CURRENT_ID)).thenReturn(List.of());
+		User withCif = user(CURRENT_ID);
+		lenient().when(withCif.getRegistedId()).thenReturn("62581");
+		when(userService.findUserByUsername("012551101")).thenReturn(withCif);
+		com.fasterxml.jackson.databind.node.ArrayNode list =
+				new com.fasterxml.jackson.databind.ObjectMapper().createArrayNode();
+		list.add(sbfAccount("111-CLOSED", "CLOSED", "USD", "0"));
+		list.add(sbfAccount("222-ACTIVE", "ACTIVE", "USD", "50"));
+		when(sbfGateway.savingsByCif(62581)).thenReturn(list);
+
+		var body = service.getSettlementAccount().getBody();
+
+		assertThat(body.getType()).isEqualTo("SUCCESS");
+		assertThat(body.getData().getAccountNo()).isEqualTo("222-ACTIVE");
+		assertThat(body.getData().getBalance()).isEqualTo(50.0);
+	}
+
+	@Test
+	void settlement_degradesToAccountNoWhenSbfIsUnavailable() throws Exception {
+		// The profile screen must never error on a core-banking hiccup: show the
+		// account number, leave the balance unknown (app renders '-').
+		liveSettlement();
+		loanWithSettlementAccount("1122334");
+		when(sbfGateway.savingByAccountNo("1122334")).thenThrow(new IllegalStateException("SBF 503"));
+
+		var body = service.getSettlementAccount().getBody();
+
+		assertThat(body.getType()).isEqualTo("SUCCESS");
+		assertThat(body.getData().getAccountNo()).isEqualTo("1122334");
+		assertThat(body.getData().getBalance()).isNull();
+		assertThat(body.getData().isMock()).isFalse();
+	}
+
+	@Test
+	void settlement_notFoundWhenNoLoanAccountAndNoCif() {
+		liveSettlement();
+		when(repo.findByUserId(CURRENT_ID)).thenReturn(List.of());
+
+		var body = service.getSettlementAccount().getBody();
+
+		assertThat(body.getType()).isEqualTo("NOT_FOUND");
+		assertThat(body.getData()).isNull();
 	}
 }

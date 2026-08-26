@@ -420,9 +420,14 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 				if (acct == null && user.getRegistedId() != null && !user.getRegistedId().isBlank()) {
 					com.fasterxml.jackson.databind.JsonNode list =
 							sbfGateway.savingsByCif(Integer.parseInt(user.getRegistedId().trim()));
+					// Real UAT data uses accStatus "ACTIVE" (verified 2026-08-26 on
+					// CIF 62581) — prefer the first ACTIVE account, else the first
+					// one. TFF itself just takes savingAccounts.first.
 					if (list != null && list.isArray()) {
 						for (com.fasterxml.jackson.databind.JsonNode a : list) {
-							if (acct == null || "A".equalsIgnoreCase(a.path("accStatus").asText("")))
+							boolean active = a.path("accStatus").asText("").toUpperCase().startsWith("ACTIVE");
+							if (acct == null || (active && !acct.path("accStatus").asText("")
+									.toUpperCase().startsWith("ACTIVE")))
 								acct = a;
 						}
 					}
