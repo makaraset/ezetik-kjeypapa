@@ -68,6 +68,9 @@ public class PdlAccountRequestService {
 	private PdlPersonalInfoRepository personalRepo;
 
 	@Autowired
+	private SbfGatewayClient sbfGateway;
+
+	@Autowired
 	private PdlEmploymentInfoRepository employmentRepo;
 
 	@Autowired
@@ -119,6 +122,17 @@ public class PdlAccountRequestService {
 			user.setPassword(passwordEncoder.encode(p.getPassword()));
 			user.setPasswordNeverExpires(true);
 			user.setEnabled(false);
+			// Resolve the SBF CIF from the KYC ID number (server-authoritative,
+			// Makara 2026-08-26: custId = CIF or 0 at loan submit; backs the
+			// profile "CIF No" row). Best-effort — signup never fails on SBF.
+			if (per != null && per.getIdNo() != null && !per.getIdNo().isBlank()) {
+				try {
+					Integer cif = sbfGateway.findCifByIdNo(per.getIdNo());
+					if (cif != null)
+						user.setRegistedId(String.valueOf(cif));
+				} catch (Exception ignore) {
+				}
+			}
 			Role customer = roleRepository.findById(CUSTOMER_ROLE_ID).orElse(null);
 			if (customer == null)
 				return resp("INTERNAL_SERVER_ERROR", "Customer role missing", null, HttpStatus.INTERNAL_SERVER_ERROR);
