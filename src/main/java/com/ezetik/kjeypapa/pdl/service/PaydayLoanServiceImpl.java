@@ -397,16 +397,54 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 					.filter(a -> a != null && !a.isBlank())
 					.reduce((first, second) -> second) // latest wins
 					.orElse(null);
+			String name = ((user.getFirstname() == null ? "" : user.getFirstname()) + " "
+					+ (user.getLastname() == null ? "" : user.getLastname())).trim();
+
+			if (settlementMock) {
+				if (accountNo == null)
+					return new ResponseEntity<>(new Message<>("NOT_FOUND", "No settlement account yet", null),
+							HttpStatus.OK);
+				PdlSettlementAccountResponse r = new PdlSettlementAccountResponse(accountNo, name, "USD",
+						settlementMockBalance, Instant.now(), true);
+				return new ResponseEntity<>(new Message<>("SUCCESS", "Settlement account", r), HttpStatus.OK);
+			}
+
+			// LIVE (QC3.1 closed 2026-08-26, TFF-benchmarked): primary lookup by
+			// the LOS-provided account no; fallback to the CIF's account list
+			// (TFF's by-cid pattern); degrade to account-no-only on any SBF gap
+			// so the profile never errors on a core-banking hiccup.
+			try {
+				com.fasterxml.jackson.databind.JsonNode acct = null;
+				if (accountNo != null)
+					acct = sbfGateway.savingByAccountNo(accountNo);
+				if (acct == null && user.getRegistedId() != null && !user.getRegistedId().isBlank()) {
+					com.fasterxml.jackson.databind.JsonNode list =
+							sbfGateway.savingsByCif(Integer.parseInt(user.getRegistedId().trim()));
+					if (list != null && list.isArray()) {
+						for (com.fasterxml.jackson.databind.JsonNode a : list) {
+							if (acct == null || "A".equalsIgnoreCase(a.path("accStatus").asText("")))
+								acct = a;
+						}
+					}
+				}
+				if (acct != null) {
+					PdlSettlementAccountResponse r = new PdlSettlementAccountResponse(
+							acct.path("accountNo").asText(accountNo == null ? "" : accountNo),
+							acct.path("names").asText(name),
+							acct.path("ccy").asText("USD"),
+							acct.path("balance").isNumber() ? acct.path("balance").asDouble() : null,
+							Instant.now(), false);
+					return new ResponseEntity<>(new Message<>("SUCCESS", "Settlement account", r),
+							HttpStatus.OK);
+				}
+			} catch (Exception sbfDown) {
+				// fall through to the degraded response below
+			}
 			if (accountNo == null)
 				return new ResponseEntity<>(new Message<>("NOT_FOUND", "No settlement account yet", null),
 						HttpStatus.OK);
-			String name = ((user.getFirstname() == null ? "" : user.getFirstname()) + " "
-					+ (user.getLastname() == null ? "" : user.getLastname())).trim();
-			if (!settlementMock)
-				return new ResponseEntity<>(new Message<>("NOT_IMPLEMENTED",
-						"Real core-banking balance API pending Sambat (QC3.1)", null), HttpStatus.OK);
 			PdlSettlementAccountResponse r = new PdlSettlementAccountResponse(accountNo, name, "USD",
-					settlementMockBalance, Instant.now(), true);
+					null, Instant.now(), false);
 			return new ResponseEntity<>(new Message<>("SUCCESS", "Settlement account", r), HttpStatus.OK);
 		} catch (Exception e) {
 			e.printStackTrace();

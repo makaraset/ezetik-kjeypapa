@@ -75,6 +75,38 @@ public class SbfGatewayClient {
 	}
 
 	/**
+	 * {@code GET /customer-balance?accountNo=} — one saving/settlement account
+	 * with its live core-banking balance. Null when SBF has no such account.
+	 */
+	public JsonNode savingByAccountNo(String accountNo) throws Exception {
+		String url = urlApi + "/customer-balance?accountNo="
+				+ URLEncoder.encode(accountNo, StandardCharsets.UTF_8);
+		HttpRequest req = HttpRequest.newBuilder().uri(new URI(url))
+				.header("Authorization", "Bearer " + token()).GET().build();
+		HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+		if (resp.statusCode() != 200)
+			throw new IllegalStateException("SBF /customer-balance returned " + resp.statusCode());
+		if (resp.body() == null || resp.body().isBlank())
+			return null;
+		JsonNode n = mapper.readTree(resp.body());
+		return (n == null || n.isNull() || n.path("accountNo").asText("").isBlank()) ? null : n;
+	}
+
+	/**
+	 * {@code GET /saving-info-by-cid?cifNo=} — all saving/settlement accounts
+	 * for a CIF (TFF's by-cid pattern). Empty array when none exist yet.
+	 */
+	public JsonNode savingsByCif(int cifNo) throws Exception {
+		String url = urlApi + "/saving-info-by-cid?cifNo=" + cifNo;
+		HttpRequest req = HttpRequest.newBuilder().uri(new URI(url))
+				.header("Authorization", "Bearer " + token()).GET().build();
+		HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+		if (resp.statusCode() != 200)
+			throw new IllegalStateException("SBF /saving-info-by-cid returned " + resp.statusCode());
+		return mapper.readTree(resp.body());
+	}
+
+	/**
 	 * {@code GET /customer-information/by-idno} — resolve the SBF CIF
 	 * (custKeyNum) for an ID number. Returns null when the customer is new to
 	 * SBF (loan submits then carry {@code custId: 0}).
