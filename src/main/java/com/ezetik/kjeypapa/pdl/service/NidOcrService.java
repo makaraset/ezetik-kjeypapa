@@ -9,18 +9,22 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
+import lombok.extern.slf4j.Slf4j;
+
 import com.ezetik.kjeypapa.pdl.payload.NidOcrResponse;
 import com.ezetik.kjeypapa.security.util.Message;
 import com.fasterxml.jackson.databind.JsonNode;
 
 /**
- * Signup screen-5 NID extraction (2026-08-26). SBF exposes CamDigi OCR at
- * {@code POST /ocr-id-card}, but the UAT endpoint currently 500s on every
- * payload (raised with Sambat) — so, same pattern as the LOS: a mock flag
- * serves the sample-card data until SBF fixes their side, while the CIF
- * lookup ({@code /customer-information/by-idno}) is LIVE either way.
+ * Signup screen-5 NID extraction. SBF's CamDigi OCR at
+ * {@code POST /ocr-id-card} is LIVE as of 2026-08-27 — it 500'd on every
+ * payload until Sambat fixed a cert on their side — and is now the default
+ * ({@code ocr.mock.enabled=false}). The mock still serves sample-card data
+ * for offline/demo runs. The CIF lookup
+ * ({@code /customer-information/by-idno}) is LIVE either way.
  */
 @Service
+@Slf4j
 public class NidOcrService {
 
 	@Value("${ocr.mock.enabled:true}")
@@ -38,8 +42,8 @@ public class NidOcrService {
 
 			NidOcrResponse out;
 			if (mockEnabled) {
-				// Sample card (Makara's NID) so the app flow is fully drivable
-				// before SBF's OCR endpoint works.
+				// Sample card (Makara's NID) so the app flow stays drivable
+				// with no network / when SBF's UAT is down.
 				out = new NidOcrResponse("សែត", "មករា", "SET", "MAKARA", "M",
 						"03/01/1990", "110553867", "13/03/2025", "16/03/2035",
 						"ផ្ទះ៩៤០ ផ្លូវ៨ ភូមិព្រៃខ្លា សង្កាត់ក្រាំងធ្នង់ ខណ្ឌសែនសុខ ភ្នំពេញ",
@@ -72,6 +76,12 @@ public class NidOcrService {
 			}
 			return resp("SUCCESS", "NID extracted", out, HttpStatus.OK);
 		} catch (Exception e) {
+			// The customer-facing message stays generic, but the cause must not
+			// vanish: when a capture failed on-device the only clue we had was
+			// "Could not read the ID card", which says nothing about whether SBF
+			// returned 500, timed out, or rejected the payload size.
+			log.warn("NID OCR failed (image base64 chars={}): {}",
+					imageBase64 == null ? 0 : imageBase64.length(), e.toString());
 			return resp("OCR_FAILED", "Could not read the ID card", null, HttpStatus.EXPECTATION_FAILED);
 		}
 	}
