@@ -6,6 +6,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,7 +44,18 @@ public class SbfGatewayClient {
 	private String accessToken;
 	private Instant tokenExpiry = Instant.EPOCH;
 
-	private final HttpClient http = HttpClient.newHttpClient();
+	@Value("${los.url_api:${url_api}}")
+	private String losUrlApi;
+
+	/** Seconds allowed for a loan submit — a multi-megabyte document payload. */
+	@Value("${los.submit.timeout-seconds:120}")
+	private int submitTimeoutSeconds;
+
+	// A connect timeout matters: this client runs inside the request thread,
+	// and a submit runs inside an open transaction, so a hung SBF would pin a
+	// pool connection indefinitely while the app gives up at 30s.
+	private final HttpClient http = HttpClient.newBuilder()
+			.connectTimeout(Duration.ofSeconds(10)).build();
 
 	private synchronized String token() throws Exception {
 		if (accessToken == null || Instant.now().isAfter(tokenExpiry)) {
@@ -111,6 +123,33 @@ public class SbfGatewayClient {
 	 * (custKeyNum) for an ID number. Returns null when the customer is new to
 	 * SBF (loan submits then carry {@code custId: 0}).
 	 */
+	/**
+	 * {@code POST /new-loan-application} — file a loan application with LOS.
+	 *
+	 * <p>Deviates from this class's usual "throw on non-200 and discard the
+	 * body" rule for two reasons specific to this endpoint: a rejection comes
+	 * back as HTTP <b>200</b> carrying {@code IsSuccess: "False"} and the
+	 * {@code MissingData} field list, so the body is the only thing that says
+	 * whether it worked; and when the status really is non-200 the body
+	 * usually explains why, so it is worth keeping.
+	 */
+	public JsonNode newLoanApplication(Object param) throws Exception {
+		String body = mapper.writeValueAsString(param);
+		HttpRequest req = HttpRequest.newBuilder().uri(new URI(losUrlApi + "/new-loan-application"))
+				.header("Content-Type", "application/json")
+				.header("Authorization", "Bearer " + token())
+				.timeout(Duration.ofSeconds(submitTimeoutSeconds))
+				.POST(HttpRequest.BodyPublishers.ofString(body)).build();
+		HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+		if (resp.statusCode() != 200) {
+			String detail = resp.body() == null ? ""
+					: resp.body().substring(0, Math.min(512, resp.body().length()));
+			throw new IllegalStateException(
+					"SBF /new-loan-application returned " + resp.statusCode() + ": " + detail);
+		}
+		return mapper.readTree(resp.body());
+	}
+
 	public Integer findCifByIdNo(String idNo) throws Exception {
 		String url = urlApi + "/customer-information/by-idno?idNo="
 				+ URLEncoder.encode(idNo, StandardCharsets.UTF_8) + "&page=0&size=1";

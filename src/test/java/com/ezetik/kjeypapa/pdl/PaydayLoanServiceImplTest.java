@@ -42,6 +42,7 @@ import com.ezetik.kjeypapa.pdl.repository.PdlEmploymentInfoRepository;
 import com.ezetik.kjeypapa.pdl.repository.PdlPaymentScheduleRepository;
 import com.ezetik.kjeypapa.pdl.repository.PdlPersonalInfoRepository;
 import com.ezetik.kjeypapa.pdl.service.LosProvider;
+import com.ezetik.kjeypapa.pdl.service.LosSubmitException;
 import com.ezetik.kjeypapa.pdl.service.PaydayLoanServiceImpl;
 import com.ezetik.kjeypapa.pdl.service.PdlPricingService;
 import com.ezetik.kjeypapa.security.model.User;
@@ -166,6 +167,80 @@ class PaydayLoanServiceImplTest {
 		assertThat(out.getStatus()).isEqualTo(PdlStatusEnum.Submitted);
 		assertThat(out.getLosApplicationNo()).isEqualTo("LOS-MOCK-1");
 		verify(losProvider).submitApplication(loan);
+	}
+
+	/** Sets up a loan whose five profile documents are all present. */
+	private PaydayLoan submittableLoan() {
+		PaydayLoan loan = loanOwnedBy(CURRENT_ID, PdlStatusEnum.Draft);
+		PdlPersonalInfo pi = new PdlPersonalInfo();
+		pi.setNidFrontFileRef("nid.png");
+		pi.setNidBackFileRef("nid-back.png");
+		pi.setProfilePhotoFileRef("selfie.png");
+		when(personalRepo.findByUser(CURRENT_ID)).thenReturn(List.of(pi));
+		PdlEmploymentInfo ei = new PdlEmploymentInfo();
+		ei.setEmploymentCardFileRef("empcard.png");
+		when(employmentRepo.findByUser(CURRENT_ID)).thenReturn(List.of(ei));
+		PdlBankInfo bi = new PdlBankInfo();
+		bi.setBankStatementFileRef("stmt.png");
+		when(bankRepo.findByUser(CURRENT_ID)).thenReturn(List.of(bi));
+		return loan;
+	}
+
+	@Test
+	void submit_surfacesTheFieldsLosSaysAreMissing() {
+		PaydayLoan loan = submittableLoan();
+		when(losProvider.submitApplication(loan)).thenThrow(new LosSubmitException("R-MISSINGDATA",
+				"needs more", List.of("CustP_CAddCBCommune", "CustP_Occupation")));
+
+		var body = service.submit(1).getBody();
+
+		assertThat(body.getType()).isEqualTo("LOS_MISSING_DATA");
+		// The customer must be told WHICH details, in words they can act on.
+		assertThat(body.getMessage()).contains("correspondence address - commune");
+		assertThat(body.getMessage()).contains("occupation");
+		// Still fixable: a rejected application stays editable.
+		assertThat(loan.getStatus()).isEqualTo(PdlStatusEnum.Draft);
+		assertThat(loan.getLosStatusCode()).isEqualTo("R-MISSINGDATA");
+	}
+
+	@Test
+	void submit_doesNotStampConsentWhenLosRejects() {
+		PaydayLoan loan = submittableLoan();
+		when(losProvider.submitApplication(loan))
+				.thenThrow(new LosSubmitException("R-REJECTED", "no thanks"));
+
+		service.submit(1);
+
+		// A consent record for a submission that never happened is a false
+		// audit trail — this is why the stamp moved below the LOS call.
+		assertThat(loan.getCbcConsentDate()).isNull();
+		assertThat(loan.getCbcConsentRef()).isNull();
+	}
+
+	@Test
+	void submit_stampsConsentOnlyOnSuccess() {
+		PaydayLoan loan = submittableLoan();
+		when(losProvider.submitApplication(loan)).thenReturn("254906");
+
+		PaydayLoan out = service.submit(1).getBody().getData();
+
+		assertThat(out.getStatus()).isEqualTo(PdlStatusEnum.Submitted);
+		assertThat(out.getLosApplicationNo()).isEqualTo("254906");
+		assertThat(out.getCbcConsentDate()).isNotNull();
+		assertThat(out.getCbcConsentRef()).startsWith("CBC-");
+	}
+
+	@Test
+	void submit_neverLeaksInternalErrorTextToTheCustomer() {
+		PaydayLoan loan = submittableLoan();
+		when(losProvider.submitApplication(loan))
+				.thenThrow(new IllegalStateException("SBF /new-loan-application returned 500 at https://internal"));
+
+		var body = service.submit(1).getBody();
+
+		assertThat(body.getType()).isEqualTo("LOS_UNAVAILABLE");
+		assertThat(body.getMessage()).doesNotContain("https://");
+		assertThat(body.getMessage()).doesNotContain("new-loan-application");
 	}
 
 	@Test

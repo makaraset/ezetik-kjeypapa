@@ -91,6 +91,13 @@ public class PaydayLoan extends UserDateAudit {
 
 	// --- Sambat LOS sync (contract TBD per BRS Appendices 1-6) ---
 	private String losApplicationNo;
+
+	/**
+	 * LOS's own {@code AppId} from the submit response, kept beside
+	 * {@code losApplicationNo} (their {@code AppRefId}) because it is not yet
+	 * settled which of the two their callbacks will quote.
+	 */
+	private Long losAppId;
 	private String losStatusCode; // R-LPO / R-AO / ...
 	private String losMessage;
 	private String loanFormRef; // LOS-pushed generated documents (stored via image/)
