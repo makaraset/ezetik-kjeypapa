@@ -9,7 +9,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -34,9 +33,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @PreAuthorize("hasRole('ADMIN')")
 @Tag(name = "11- PDL Admin API", description = "LPO account-request review + approval")
 public class PdlAdminController {
-
-	@Autowired
-	private com.ezetik.kjeypapa.pdl.service.PdlDictionaryService dictionary;
 
 
 	@Autowired
@@ -66,20 +62,5 @@ public class PdlAdminController {
 				? SecurityContextHolder.getContext().getAuthentication().getName()
 				: "ADMIN";
 		return service.decide(id, approve, reason, decidedBy);
-	}
-	/**
-	 * Pull a fresh copy of Sambat's selection dictionaries now.
-	 *
-	 * <p>ADMIN-only and deliberately manual: the read endpoints never fetch, so
-	 * this and the nightly job are the only things that call Sambat.
-	 */
-	@PostMapping("/dictionary/refresh")
-	public ResponseEntity<Message<String>> refreshDictionary() {
-		try {
-			return ResponseEntity.ok(new Message<>("SUCCESS", "Dictionary refreshed", dictionary.refresh()));
-		} catch (Exception e) {
-			return new ResponseEntity<>(new Message<>("FAILED", "Refresh failed: " + e.getMessage(), null),
-					HttpStatus.EXPECTATION_FAILED);
-		}
 	}
 }

@@ -24,6 +24,21 @@ public class NidOcrResponse {
 	private String idIssuedDate; // dd/MM/yyyy
 	private String idExpiryDate; // dd/MM/yyyy
 	private String address; // raw address line from the card
+	/**
+	 * The card's address line resolved against Sambat's gazetteer. Codes are
+	 * what the loan application and our own records need; the names are the
+	 * matched labels, for display and for the audit trail.
+	 */
+	private String provinceCode;
+	private String provinceName;
+	private String districtCode;
+	private String districtName;
+	private String communeCode;
+	private String communeName;
+	private String villageCode;
+	private String villageName;
+	private String houseStreetNo;
+
 	private Integer cif; // SBF custKeyNum, null when new
 	private boolean mock; // true while ocr.mock.enabled serves sample data
 }

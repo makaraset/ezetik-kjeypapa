@@ -33,6 +33,9 @@ public class NidOcrService {
 	@Autowired
 	private SbfGatewayClient sbf;
 
+	@Autowired
+	private KhAddressResolver addressResolver;
+
 	private static final DateTimeFormatter APP_FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
 	public ResponseEntity<Message<NidOcrResponse>> extract(String imageBase64) {
@@ -44,26 +47,53 @@ public class NidOcrService {
 			if (mockEnabled) {
 				// Sample card (Makara's NID) so the app flow stays drivable
 				// with no network / when SBF's UAT is down.
-				out = new NidOcrResponse("សែត", "មករា", "SET", "MAKARA", "M",
-						"03/01/1990", "110553867", "13/03/2025", "16/03/2035",
-						"ផ្ទះ៩៤០ ផ្លូវ៨ ភូមិព្រៃខ្លា សង្កាត់ក្រាំងធ្នង់ ខណ្ឌសែនសុខ ភ្នំពេញ",
-						null, true);
+				out = new NidOcrResponse();
+				out.setKhmerFamilyName("សែត");
+				out.setKhmerFirstName("មករា");
+				out.setLatinFamilyName("SET");
+				out.setLatinFirstName("MAKARA");
+				out.setGender("M");
+				out.setDateOfBirth("03/01/1990");
+				out.setIdNumber("110553867");
+				out.setIdIssuedDate("13/03/2025");
+				out.setIdExpiryDate("16/03/2035");
+				out.setAddress("ផ្ទះ៩៤០ ផ្លូវ៨ ភូមិព្រៃខ្លា សង្កាត់ក្រាំងធ្នង់ ខណ្ឌសែនសុខ ភ្នំពេញ");
+				out.setMock(true);
 			} else {
 				JsonNode r = sbf.ocrIdCard(imageBase64);
 				if (r.path("error").asInt(0) != 0)
 					return resp("OCR_FAILED", r.path("message").asText("OCR failed"), null,
 							HttpStatus.EXPECTATION_FAILED);
 				JsonNode d = r.path("data");
-				out = new NidOcrResponse(
-						d.path("lastNameKh").asText(""), d.path("firstNameKh").asText(""),
-						d.path("lastNameEn").asText(""), d.path("firstNameEn").asText(""),
-						normGender(d.path("gender").asText("")),
-						normDate(d.path("dob").asText("")),
-						d.path("idNumber").asText(""),
-						normDate(d.path("issuedDate").asText("")),
-						normDate(d.path("expiredDate").asText("")),
-						d.path("address").asText(""), null, false);
+				out = new NidOcrResponse();
+				out.setKhmerFamilyName(d.path("lastNameKh").asText(""));
+				out.setKhmerFirstName(d.path("firstNameKh").asText(""));
+				out.setLatinFamilyName(d.path("lastNameEn").asText(""));
+				out.setLatinFirstName(d.path("firstNameEn").asText(""));
+				out.setGender(normGender(d.path("gender").asText("")));
+				out.setDateOfBirth(normDate(d.path("dob").asText("")));
+				out.setIdNumber(d.path("idNumber").asText(""));
+				out.setIdIssuedDate(normDate(d.path("issuedDate").asText("")));
+				out.setIdExpiryDate(normDate(d.path("expiredDate").asText("")));
+				out.setAddress(d.path("address").asText(""));
+				out.setMock(false);
 			}
+
+			// Resolve the card's address line into Sambat's own geo codes. Done
+			// here, on the server, because matching has to happen against THEIR
+			// gazetteer — the app ships a different vintage whose romanisation
+			// disagrees on 14 districts, so an app-side match yields names
+			// Sambat cannot code.
+			KhAddressResolver.Resolved geo = addressResolver.resolve(out.getAddress());
+			out.setProvinceCode(geo.getProvinceCode());
+			out.setProvinceName(geo.getProvinceName());
+			out.setDistrictCode(geo.getDistrictCode());
+			out.setDistrictName(geo.getDistrictName());
+			out.setCommuneCode(geo.getCommuneCode());
+			out.setCommuneName(geo.getCommuneName());
+			out.setVillageCode(geo.getVillageCode());
+			out.setVillageName(geo.getVillageName());
+			out.setHouseStreetNo(geo.getHouseStreetNo());
 
 			// CIF resolution is LIVE regardless of the OCR mock (verified
 			// working against UAT): null = new-to-SBF -> custId 0 at submit.

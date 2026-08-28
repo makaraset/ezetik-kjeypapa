@@ -155,8 +155,9 @@ public class SbfGatewayClient {
 	}
 
 	/**
-	 * {@code GET /bulk-selection} — every "02- Selection dictionary" list in one
-	 * call, geo levels included.
+	 * {@code GET /bulk-selection-mini} — every "02- Selection dictionary" code
+	 * list in one call (addresses and villages excluded; those come from
+	 * {@link #allAddress()}).
 	 *
 	 * <p>One request beats nine: the lists are consistent with each other, and a
 	 * partial refresh cannot leave districts pointing at provinces from a
@@ -164,13 +165,33 @@ public class SbfGatewayClient {
 	 * far the largest response we fetch — the other GETs here have only a
 	 * connect timeout, which would not save us from a stalled gazetteer.
 	 */
-	public JsonNode bulkSelection() throws Exception {
-		HttpRequest req = HttpRequest.newBuilder().uri(new URI(urlApi + "/bulk-selection"))
+	public JsonNode bulkSelectionMini() throws Exception {
+		HttpRequest req = HttpRequest.newBuilder().uri(new URI(urlApi + "/bulk-selection-mini"))
 				.header("Authorization", "Bearer " + token())
 				.timeout(Duration.ofSeconds(dictionaryTimeoutSeconds)).GET().build();
 		HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
 		if (resp.statusCode() != 200)
-			throw new IllegalStateException("SBF /bulk-selection returned " + resp.statusCode());
+			throw new IllegalStateException("SBF /bulk-selection-mini returned " + resp.statusCode());
+		return mapper.readTree(resp.body());
+	}
+
+	/**
+	 * {@code GET /all-address} — the whole gazetteer, denormalised one row per
+	 * village, carrying every level's id AND its Khmer name.
+	 *
+	 * <p>This is the only source of Khmer names: {@code /province},
+	 * {@code /district}, {@code /commune} and {@code /village} return an
+	 * English {@code description} and nothing else. Verified complete against
+	 * those four endpoints (25 / 208 / 1,652 / 16,226), so it replaces all of
+	 * them.
+	 */
+	public JsonNode allAddress() throws Exception {
+		HttpRequest req = HttpRequest.newBuilder().uri(new URI(urlApi + "/all-address"))
+				.header("Authorization", "Bearer " + token())
+				.timeout(Duration.ofSeconds(dictionaryTimeoutSeconds)).GET().build();
+		HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+		if (resp.statusCode() != 200)
+			throw new IllegalStateException("SBF /all-address returned " + resp.statusCode());
 		return mapper.readTree(resp.body());
 	}
 

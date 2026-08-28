@@ -2,8 +2,10 @@ package com.ezetik.kjeypapa.pdl.service;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -123,16 +125,13 @@ public class PdlDictionaryService {
 	 */
 	@Transactional
 	public String refresh() throws Exception {
-		JsonNode bulk = sbf.bulkSelection();
-		JsonNode villages = sbf.villages();
+		JsonNode bulk = sbf.bulkSelectionMini();
+		JsonNode addresses = sbf.allAddress();
 
-		List<PdlGeoUnit> geo = new ArrayList<>();
-		// province {id, description, ctryId} / district {id, description, proId}
-		// / commune {id, description, disId} / village {id, description, comId}
-		collectGeo(bulk.path("province"), PROVINCE, null, geo);
-		collectGeo(bulk.path("district"), DISTRICT, "proId", geo);
-		collectGeo(bulk.path("commune"), COMMUNE, "disId", geo);
-		collectGeo(villages, VILLAGE, "comId", geo);
+		// One denormalised call covers all four levels WITH Khmer names, which
+		// the per-level endpoints do not carry at all. Verified complete
+		// against them: 25 / 208 / 1,652 / 16,226.
+		List<PdlGeoUnit> geo = collectGeoFromAllAddress(addresses);
 
 		List<PdlCodeList> lists = new ArrayList<>();
 		for (String[] pair : CODE_LISTS)
@@ -154,6 +153,39 @@ public class PdlDictionaryService {
 				count(geo, VILLAGE), lists.size());
 		log.info("PDL dictionary refreshed: {}", summary);
 		return summary;
+	}
+
+	/**
+	 * Folds {@code /all-address}'s one-row-per-village shape into the four
+	 * levels, de-duplicated and parent-linked.
+	 *
+	 * <p>Khmer names come only from here, and their field names are misspelled
+	 * in Sambat's schema — {@code khProvinace}, {@code khCommnune}. Those
+	 * spellings are the contract; "correcting" them silently yields blank
+	 * Khmer, which is what the customer sees on a Khmer-locale phone.
+	 */
+	public static List<PdlGeoUnit> collectGeoFromAllAddress(JsonNode rows) {
+		Map<String, PdlGeoUnit> byKey = new LinkedHashMap<>();
+		if (rows == null || !rows.isArray())
+			return new ArrayList<>();
+		for (JsonNode r : rows) {
+			put(byKey, PROVINCE, text(r, "provinceId"), null, text(r, "province"), text(r, "khProvinace"));
+			put(byKey, DISTRICT, text(r, "districtId"), text(r, "provinceId"), text(r, "district"),
+					text(r, "khDistrict"));
+			put(byKey, COMMUNE, text(r, "communeId"), text(r, "districtId"), text(r, "commune"),
+					text(r, "khCommnune"));
+			// The village id is the row id — /all-address has no villageId field.
+			put(byKey, VILLAGE, text(r, "id"), text(r, "communeId"), text(r, "village"), text(r, "khVillage"));
+		}
+		return new ArrayList<>(byKey.values());
+	}
+
+	private static void put(Map<String, PdlGeoUnit> into, String level, String code, String parent, String en,
+			String kh) {
+		if (code == null || code.isEmpty())
+			return;
+		into.putIfAbsent(level + ":" + code,
+				new PdlGeoUnit(level, code, parent == null || parent.isEmpty() ? null : parent, en, kh));
 	}
 
 	/** Pure; public so the parsing rules can be pinned by tests. */
