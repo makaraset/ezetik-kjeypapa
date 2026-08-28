@@ -83,6 +83,26 @@ public class PdlPersonalInfo extends UserDateAudit {
 	private String permVillage;
 	private String permHouseStreetNo;
 
+	/**
+	 * Sambat's own geo codes (NCDD: 2/4/6/8 digits), confirmed by them
+	 * 2026-08-28. These are what the loan application sends and what any
+	 * matching uses; the name columns beside them are kept as the label
+	 * captured at the time, for display and for the audit trail — Sambat's
+	 * master list changes, and a credit file should still read correctly
+	 * years later. Blank on rows captured before codes existed.
+	 */
+	private String birthProvinceCode;
+	private String birthDistrictCode;
+	private String corrProvinceCode;
+	private String corrDistrictCode;
+	private String corrCommuneCode;
+	private String corrVillageCode;
+	private String permProvinceCode;
+	private String permDistrictCode;
+	private String permCommuneCode;
+	private String permVillageCode;
+
+
 	// KYC document refs (stored via image/ or file/upload)
 	private String nidFrontFileRef;
 	private String nidBackFileRef;

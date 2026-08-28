@@ -319,21 +319,31 @@ public class PdlAccountRequestService {
 		p.setIdExpiryDate(req.getIdExpiryDate());
 		p.setBirthCountry(req.getBirthCountry());
 		p.setBirthProvince(req.getBirthProvince());
+		p.setBirthProvinceCode(req.getBirthProvinceCode());
 		p.setBirthDistrict(req.getBirthDistrict());
+		p.setBirthDistrictCode(req.getBirthDistrictCode());
 		p.setNationality(req.getNationality());
 		p.setMaritalStatus(req.getMaritalStatus());
 		p.setMobilePhone(req.getMobilePhone());
 		p.setCorrCountry(req.getCorrCountry());
 		p.setCorrProvince(req.getCorrProvince());
+		p.setCorrProvinceCode(req.getCorrProvinceCode());
 		p.setCorrDistrict(req.getCorrDistrict());
+		p.setCorrDistrictCode(req.getCorrDistrictCode());
 		p.setCorrCommune(req.getCorrCommune());
+		p.setCorrCommuneCode(req.getCorrCommuneCode());
 		p.setCorrVillage(req.getCorrVillage());
+		p.setCorrVillageCode(req.getCorrVillageCode());
 		p.setCorrHouseStreetNo(req.getCorrHouseStreetNo());
 		p.setPermCountry(req.getPermCountry());
 		p.setPermProvince(req.getPermProvince());
+		p.setPermProvinceCode(req.getPermProvinceCode());
 		p.setPermDistrict(req.getPermDistrict());
+		p.setPermDistrictCode(req.getPermDistrictCode());
 		p.setPermCommune(req.getPermCommune());
+		p.setPermCommuneCode(req.getPermCommuneCode());
 		p.setPermVillage(req.getPermVillage());
+		p.setPermVillageCode(req.getPermVillageCode());
 		p.setPermHouseStreetNo(req.getPermHouseStreetNo());
 	}
 
@@ -348,9 +358,13 @@ public class PdlAccountRequestService {
 		e.setCurrency(req.getCurrency());
 		e.setWorkCountry(req.getWorkCountry());
 		e.setWorkProvince(req.getWorkProvince());
+		e.setWorkProvinceCode(req.getWorkProvinceCode());
 		e.setWorkDistrict(req.getWorkDistrict());
+		e.setWorkDistrictCode(req.getWorkDistrictCode());
 		e.setWorkCommune(req.getWorkCommune());
+		e.setWorkCommuneCode(req.getWorkCommuneCode());
 		e.setWorkVillage(req.getWorkVillage());
+		e.setWorkVillageCode(req.getWorkVillageCode());
 	}
 
 	private static boolean isBlank(String s) {

@@ -19,8 +19,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 /**
  * Sambat's selection dictionaries, served to the app.
  *
- * <p>Mounted under {@code /api/public/**}, which the security config already
- * permits, because the address pickers run on the pre-login signup screens
+ * <p>Explicitly whitelisted in the security config, because the address pickers run on the pre-login signup screens
  * (V8 5-6) — there is no JWT yet at that point. Nothing here is
  * customer-specific: it is Sambat's public master data.
  *
@@ -28,7 +27,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  * {@link PdlDictionaryService}.
  */
 @RestController
-@RequestMapping("/api/public/pdl/dictionary")
+@RequestMapping("/api/v1/pdl/dictionary")
 @Tag(name = "12- PDL Dictionary API", description = "Sambat selection dictionaries (geo + code lists)")
 public class PdlDictionaryController {
 

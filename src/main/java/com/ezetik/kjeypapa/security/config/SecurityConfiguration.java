@@ -47,7 +47,11 @@ public class SecurityConfiguration {
 		  "/api/v1/pdl/los/**",
 		  // Pre-login PDL account request (G7): the caller has no account yet.
 		  "/api/v1/pdl/account-request/**",
-		  "/api/v1/pdl/ocr-nid"
+		  "/api/v1/pdl/ocr-nid",
+		  // Sambat's selection dictionaries: read-only public master data
+		  // (provinces, occupations...), needed by the signup address pickers
+		  // before an account exists. No customer data is reachable here.
+		  "/api/v1/pdl/dictionary/**"
 		 };
 
 	@Bean
