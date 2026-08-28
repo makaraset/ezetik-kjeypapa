@@ -101,7 +101,7 @@ public class LosApplicationMapper {
 			r.setCustP_IdExpiryDate(losDate(pi.getIdExpiryDate()));
 			r.setCustP_Nationality(str(pi.getNationality()));
 			r.setCustP_PhoneNo(str(pi.getMobilePhone()));
-			r.setCustP_CBIdType(str(config.getIdType()));
+			r.setCustP_CBIdType(idTypeCode(pi.getIdType()));
 			r.setCustP_CBIdIssuedBy(str(config.getIdIssuedBy()));
 
 			r.setCustP_Nationality(KHM);
@@ -223,6 +223,33 @@ public class LosApplicationMapper {
 		}
 		default -> throw new IllegalArgumentException("unknown document slot " + slot);
 		}
+	}
+
+	/**
+	 * Our stored ID-type label to Sambat's {@code idCode} from
+	 * {@code /idregistration} ({@code N} = National ID, {@code P} = Passport).
+	 *
+	 * <p>Normalised rather than exact: we have stored "National ID Card" and
+	 * "NID" for what they call "National ID". Those are the same document, so
+	 * folding them is not a guess — unlike marital "Other", which is a different
+	 * claim and is left blank.
+	 */
+	public String idTypeCode(String label) {
+		String n = normaliseIdType(label);
+		if (n.isEmpty())
+			return "";
+		for (PdlCodeList row : codeRepo.findByListNameOrderByNameEnAsc("ID_TYPE")) {
+			if (normaliseIdType(row.getNameEn()).equals(n))
+				return str(row.getCode());
+		}
+		return "";
+	}
+
+	static String normaliseIdType(String s) {
+		String n = str(s).trim().toLowerCase(java.util.Locale.ROOT);
+		if (n.equals("nid"))
+			return "national id";
+		return n.replaceAll("\\s*card$", "").replaceAll("\\s+", " ");
 	}
 
 	/**

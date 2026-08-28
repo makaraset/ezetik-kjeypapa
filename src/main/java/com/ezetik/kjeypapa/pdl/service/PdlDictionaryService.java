@@ -215,10 +215,20 @@ public class PdlDictionaryService {
 			String code = firstNonBlank(n, "cbcCode", "code", "idCode", "id");
 			if (code.isEmpty())
 				continue;
-			out.add(new PdlCodeList(listName, code,
-					firstNonBlank(n, "description", "regDescription", "valueEn"),
+			String nameEn = firstNonBlank(n, "description", "regDescription", "valueEn");
+			// Sambat's lists carry placeholder rows such as {idCode:"0",
+			// regDescription:"............"}. Offering one as a choice would let
+			// a customer file "ID type: ............" on a credit application.
+			if (isPlaceholder(nameEn))
+				continue;
+			out.add(new PdlCodeList(listName, code, nameEn,
 					firstNonBlank(n, "descriptionKh", "khDescription", "valueKh")));
 		}
+	}
+
+	/** A description made only of dots, dashes or whitespace is a placeholder, not a value. */
+	public static boolean isPlaceholder(String name) {
+		return name == null || name.isBlank() || name.matches("[.\\-_\\s]+");
 	}
 
 	/** Sambat marks retired rows with a "deleted" flag rather than removing them. */

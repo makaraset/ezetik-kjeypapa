@@ -128,4 +128,20 @@ class PdlDictionaryParsingTest {
 	private PdlCodeList pick(List<PdlCodeList> all, String list) {
 		return all.stream().filter(c -> list.equals(c.getListName())).findFirst().orElseThrow();
 	}
+
+	@Test
+	@DisplayName("placeholder rows like {idCode:\"0\", regDescription:\"............\"} are dropped")
+	void placeholderRowsSkipped() throws Exception {
+		// Real shape from GET /idregistration on 2026-08-28: a leading junk
+		// entry that would otherwise be offered as an ID type.
+		JsonNode arr = om.readTree(
+				"[{\"id\":1,\"idCode\":\"0\",\"regDescription\":\"............\"},"
+				+ "{\"id\":2,\"idCode\":\"N\",\"regDescription\":\"National ID\"}]");
+		List<PdlCodeList> out = new ArrayList<>();
+		PdlDictionaryService.collectList(arr, "ID_TYPE", out);
+		assertThat(out).hasSize(1);
+		assertThat(out.get(0).getCode()).isEqualTo("N");
+		assertThat(PdlDictionaryService.isPlaceholder("- - -")).isTrue();
+		assertThat(PdlDictionaryService.isPlaceholder("Passport")).isFalse();
+	}
 }

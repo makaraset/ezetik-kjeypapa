@@ -69,10 +69,6 @@ public class LosSubmitConfig {
 	@Value("${los.const.id-issued-by:}")
 	private String idIssuedBy;
 
-	/** CBC id-type code for a Cambodian national ID card. */
-	@Value("${los.const.id-type:}")
-	private String idType;
-
 	/** CBC payment channel code — PDL disburses to the customer's own account. */
 	@Value("${los.const.payment-channel:}")
 	private String paymentChannel;
@@ -89,7 +85,6 @@ public class LosSubmitConfig {
 		m.put("los.const.employment-type", employmentType);
 		m.put("los.const.employment-contract-type", employmentContractType);
 		m.put("los.const.id-issued-by", idIssuedBy);
-		m.put("los.const.id-type", idType);
 		m.put("los.const.payment-channel", paymentChannel);
 		return m;
 	}

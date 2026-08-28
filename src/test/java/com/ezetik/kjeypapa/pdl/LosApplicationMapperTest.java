@@ -83,6 +83,10 @@ class LosApplicationMapperTest {
 		when(codeRepo.findFirstByListNameAndNameEnIgnoreCase(eq("MARITAL_STATUS"), eq("Married")))
 				.thenReturn(new PdlCodeList("MARITAL_STATUS", "M", "Married", ""));
 
+		when(codeRepo.findByListNameOrderByNameEnAsc("ID_TYPE")).thenReturn(List.of(
+				new PdlCodeList("ID_TYPE", "N", "National ID", ""),
+				new PdlCodeList("ID_TYPE", "P", "Passport", "")));
+
 		// The config gate is exercised by its own tests; here it is simply
 		// satisfied so the mapping itself is what is under test.
 		when(config.getHidCurrentUserId()).thenReturn("541");
@@ -158,5 +162,26 @@ class LosApplicationMapperTest {
 		pi.setCorrDistrict("Saensokh");
 		pi.setPermDistrict("Saensokh");
 		assertThat(map().isCustP_PRAddCBCoincide()).isTrue();
+	}
+
+	@Test
+	@DisplayName("ID type resolves our three stored spellings to their idCode")
+	void idType() {
+		// "National ID Card" and "NID" are both what Sambat calls "National ID";
+		// the same document, so folding them is not a guess.
+		pi.setIdType("National ID Card");
+		assertThat(map().getCustP_CBIdType()).isEqualTo("N");
+		pi.setIdType("NID");
+		assertThat(map().getCustP_CBIdType()).isEqualTo("N");
+		pi.setIdType("Passport");
+		assertThat(map().getCustP_CBIdType()).isEqualTo("P");
+	}
+
+	@Test
+	@DisplayName("an ID type they do not list sends blank")
+	void idTypeUnknown() {
+		pi.setIdType("Monk Card");
+		assertThat(map().getCustP_CBIdType()).isEmpty();
+		assertThat(mapper.idTypeCode(null)).isEmpty();
 	}
 }
