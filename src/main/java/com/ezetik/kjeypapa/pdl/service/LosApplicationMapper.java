@@ -17,7 +17,9 @@ import com.ezetik.kjeypapa.pdl.model.PdlPersonalInfo;
 import com.ezetik.kjeypapa.pdl.payload.los.MonthlyIncomeItem;
 import com.ezetik.kjeypapa.pdl.payload.los.NewApplicationParam;
 import com.ezetik.kjeypapa.pdl.payload.los.NewApplicationRequest;
+import com.ezetik.kjeypapa.pdl.model.PdlCodeList;
 import com.ezetik.kjeypapa.pdl.repository.PdlBankInfoRepository;
+import com.ezetik.kjeypapa.pdl.repository.PdlCodeListRepository;
 import com.ezetik.kjeypapa.pdl.repository.PdlEmploymentInfoRepository;
 import com.ezetik.kjeypapa.pdl.repository.PdlPersonalInfoRepository;
 import com.ezetik.kjeypapa.pdl.service.LosDocumentAssembler.Doc;
@@ -56,6 +58,11 @@ public class LosApplicationMapper {
 	private LosDocumentAssembler docs;
 	@Autowired
 	private LosSubmitConfig config;
+	@Autowired
+	private PdlCodeListRepository codeRepo;
+
+	/** Cambodia, per Sambat (2026-08-28): nationality and country both take KHM. */
+	private static final String KHM = "KHM";
 
 	public NewApplicationParam toParam(PaydayLoan loan) {
 		config.assertConfigured();
@@ -97,15 +104,39 @@ public class LosApplicationMapper {
 			r.setCustP_CBIdType(str(config.getIdType()));
 			r.setCustP_CBIdIssuedBy(str(config.getIdIssuedBy()));
 
+			r.setCustP_Nationality(KHM);
+			r.setCustP_CBMaritalStatus(maritalCode(pi.getMaritalStatus()));
+
 			// ----- addresses -----
-			// Street/number are free text and go through as-is. The five CB geo
-			// slots per block stay EMPTY: SBF wants NCDD codes ("12", "1214",
-			// "121402", "12140204") and we store English names.
+			// The geo slots now carry Sambat's own NCDD codes, mirrored from
+			// their gazetteer; a blank means we hold no code for that level and
+			// their MissingData will say so, which beats sending a guess.
 			r.setCustP_CAddNo(str(pi.getCorrHouseStreetNo()));
 			r.setCustP_CAddPhoneNo(str(pi.getMobilePhone()));
+			r.setCustP_CAddCBCountry(KHM);
+			r.setCustP_CAddCBProvinceCity(str(pi.getCorrProvinceCode()));
+			r.setCustP_CAddCBDistrict(str(pi.getCorrDistrictCode()));
+			r.setCustP_CAddCBCommune(str(pi.getCorrCommuneCode()));
+			r.setCustP_CAddCBVillage(str(pi.getCorrVillageCode()));
+
 			r.setCustP_PRAddNo(str(pi.getPermHouseStreetNo()));
 			r.setCustP_PRAddPhoneNo(str(pi.getMobilePhone()));
+			r.setCustP_PRAddCBCountry(KHM);
+			r.setCustP_PRAddCBProvinceCity(str(pi.getPermProvinceCode()));
+			r.setCustP_PRAddCBDistrict(str(pi.getPermDistrictCode()));
+			r.setCustP_PRAddCBCommune(str(pi.getPermCommuneCode()));
+			r.setCustP_PRAddCBVillage(str(pi.getPermVillageCode()));
 			r.setCustP_PRAddCBCoincide(sameAddress(pi));
+
+			// Place of birth: the form collects province and district only.
+			r.setCustP_POBCBCountry(KHM);
+			r.setCustP_POBCBProvinceCity(str(pi.getBirthProvinceCode()));
+			r.setCustP_POBCBDistrict(str(pi.getBirthDistrictCode()));
+
+			// CustP_CAddLocationId / PRAddLocationId / EmpAddLocationId are
+			// Google Maps coordinates (Sambat, 2026-08-28). The app does not
+			// collect a map pin, so they stay empty rather than carrying
+			// something that is not a location.
 		}
 		if (loan.getUser() != null)
 			r.setCustP_Email(str(loan.getUser().getEmail()));
@@ -116,6 +147,11 @@ public class LosApplicationMapper {
 			r.setCustP_EmployerName(str(ei.getEmployerName()));
 			r.setCustP_JobBusinessStartDate(losDate(ei.getEmploymentStartDate()));
 			r.setCustP_EmpAddNo("");
+			r.setCustP_EmpAddCBCountry(KHM);
+			r.setCustP_EmpAddCBProvinceCity(str(ei.getWorkProvinceCode()));
+			r.setCustP_EmpAddCBDistrict(str(ei.getWorkDistrictCode()));
+			r.setCustP_EmpAddCBCommune(str(ei.getWorkCommuneCode()));
+			r.setCustP_EmpAddCBVillage(str(ei.getWorkVillageCode()));
 			r.setCustP_CBEmploymentType(str(config.getEmploymentType()));
 			r.setCustP_CBEmploymentContractType(str(config.getEmploymentContractType()));
 
@@ -187,6 +223,22 @@ public class LosApplicationMapper {
 		}
 		default -> throw new IllegalArgumentException("unknown document slot " + slot);
 		}
+	}
+
+	/**
+	 * Turns our stored marital label into Sambat's {@code cbcCode} (confirmed
+	 * 2026-08-28 as the member this field wants).
+	 *
+	 * <p>Exact description match against their mirrored list, and blank when
+	 * there is none. Our option list offers "Other", which has no counterpart
+	 * in theirs — mapping it to their "Unknown" would be us deciding something
+	 * about a customer that they did not tell us.
+	 */
+	public String maritalCode(String label) {
+		if (label == null || label.isBlank())
+			return "";
+		PdlCodeList row = codeRepo.findFirstByListNameAndNameEnIgnoreCase("MARITAL_STATUS", label.trim());
+		return row == null ? "" : str(row.getCode());
 	}
 
 	/** SBF CIF, or 0 when they have never seen this customer. */

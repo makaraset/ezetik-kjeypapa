@@ -41,7 +41,29 @@ lookup endpoint we could resolve at runtime.
 | `CustP_CBIdType` | — | Code for a Cambodian national ID card. |
 | `PC_PaymentChannel` | *(empty in your sample)* | Required "if via own account", which payday always is. Your sample leaves all `PC_*` empty, so it gives us no guidance. |
 
-## 3. Geo codes (blocking — 20 fields)
+**Answered 2026-08-28 — thank you.** `CustP_CBMaritalStatus` takes the `cbcCode`,
+`CustP_Nationality` takes `KHM`, and the `CustP_*LocationId` fields are Google
+Maps coordinates. All three are implemented and tested. We do **not** collect a
+map pin in the app, so the `LocationId` fields are sent empty — tell us if that
+blocks an application and we will add a map step.
+
+One consequence worth raising: your marital list has 7 entries and ours has 3,
+including an "Other" that has no counterpart in yours. We send blank rather than
+mapping it onto your "Unknown", which would assert something about the customer
+you never told us. We would rather drive our dropdown from your list — confirm
+and we will.
+
+## 3. Geo codes — RESOLVED 2026-08-28
+
+Confirmed that your ids ARE the NCDD codes, verified end to end
+(`12` / `1208` / `120807` / `12080705`). We now mirror `/all-address` and
+`/bulk-selection-mini` and store your codes directly. Nothing outstanding here.
+
+One note for your side: our previous dataset romanised 14 districts differently
+(we had "Sen Sok", you have "Saensokh") and had 1,648 fewer villages, so we have
+retired ours entirely in favour of yours.
+
+## 3b. The original geo question (kept for the record)
 
 Your sample sends NCDD-style numeric codes:
 

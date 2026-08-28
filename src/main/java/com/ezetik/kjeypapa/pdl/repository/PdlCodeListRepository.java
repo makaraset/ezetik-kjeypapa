@@ -11,4 +11,7 @@ public interface PdlCodeListRepository extends JpaRepository<PdlCodeList, Intege
 	List<PdlCodeList> findByListNameOrderByNameEnAsc(String listName);
 
 	PdlCodeList findByListNameAndCode(String listName, String code);
+
+	/** Exact-description lookup; used to turn a stored label into their code. */
+	PdlCodeList findFirstByListNameAndNameEnIgnoreCase(String listName, String nameEn);
 }
