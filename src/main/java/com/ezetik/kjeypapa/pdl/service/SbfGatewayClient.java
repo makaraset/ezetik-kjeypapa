@@ -51,6 +51,10 @@ public class SbfGatewayClient {
 	@Value("${los.submit.timeout-seconds:120}")
 	private int submitTimeoutSeconds;
 
+	/** Seconds allowed for a dictionary pull — the gazetteer is large. */
+	@Value("${pdl.dictionary.timeout-seconds:180}")
+	private int dictionaryTimeoutSeconds;
+
 	// A connect timeout matters: this client runs inside the request thread,
 	// and a submit runs inside an open transaction, so a hung SBF would pin a
 	// pool connection indefinitely while the app gives up at 30s.
@@ -147,6 +151,44 @@ public class SbfGatewayClient {
 			throw new IllegalStateException(
 					"SBF /new-loan-application returned " + resp.statusCode() + ": " + detail);
 		}
+		return mapper.readTree(resp.body());
+	}
+
+	/**
+	 * {@code GET /bulk-selection} — every "02- Selection dictionary" list in one
+	 * call, geo levels included.
+	 *
+	 * <p>One request beats nine: the lists are consistent with each other, and a
+	 * partial refresh cannot leave districts pointing at provinces from a
+	 * different snapshot. Carries an explicit read timeout because this is by
+	 * far the largest response we fetch — the other GETs here have only a
+	 * connect timeout, which would not save us from a stalled gazetteer.
+	 */
+	public JsonNode bulkSelection() throws Exception {
+		HttpRequest req = HttpRequest.newBuilder().uri(new URI(urlApi + "/bulk-selection"))
+				.header("Authorization", "Bearer " + token())
+				.timeout(Duration.ofSeconds(dictionaryTimeoutSeconds)).GET().build();
+		HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+		if (resp.statusCode() != 200)
+			throw new IllegalStateException("SBF /bulk-selection returned " + resp.statusCode());
+		return mapper.readTree(resp.body());
+	}
+
+	/**
+	 * {@code GET /village} — village codes with their parent commune.
+	 *
+	 * <p>Needed separately because {@code /all-address} carries province,
+	 * district and commune ids but NO village id (village is a bare string
+	 * there), while our pickers and LOS's {@code CustP_*CBVillage} both work in
+	 * village codes.
+	 */
+	public JsonNode villages() throws Exception {
+		HttpRequest req = HttpRequest.newBuilder().uri(new URI(urlApi + "/village"))
+				.header("Authorization", "Bearer " + token())
+				.timeout(Duration.ofSeconds(dictionaryTimeoutSeconds)).GET().build();
+		HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+		if (resp.statusCode() != 200)
+			throw new IllegalStateException("SBF /village returned " + resp.statusCode());
 		return mapper.readTree(resp.body());
 	}
 
