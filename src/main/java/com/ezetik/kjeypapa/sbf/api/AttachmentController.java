@@ -32,6 +32,9 @@ import jakarta.transaction.Transactional;
 public class AttachmentController {
 
 	@Autowired
+	private com.ezetik.kjeypapa.pdl.service.PdlDocumentAccess documentAccess;
+
+	@Autowired
 	private ImageService imageService;
 
 	private FileNameHelper fileHelper = new FileNameHelper();
@@ -203,7 +206,21 @@ public class AttachmentController {
 		if (image == null) {
 			return Image.defaultImage();
 		}
+		guard(image);
 		return image;
+	}
+
+	/**
+	 * A KYC document is readable only by its owner or an ADMIN. A denied read
+	 * is a hard 403, never the placeholder image — a placeholder looks like a
+	 * successful fetch to a caller and to a log. (Any status thrown here goes
+	 * through Boot's /error dispatch, which the stateless JWT context does not
+	 * survive, so it reaches the client as 403 regardless; say so explicitly.)
+	 */
+	private void guard(Image image) {
+		if (documentAccess.isPdlDocument(image) && !documentAccess.canRead(image))
+			throw new org.springframework.web.server.ResponseStatusException(
+					org.springframework.http.HttpStatus.FORBIDDEN);
 	}
 
 	/**
@@ -222,6 +239,7 @@ public class AttachmentController {
 			defImage.scale(width, height);
 			return defImage;
 		}
+		guard(image);
 		image.scale(width, height);
 		return image;
 	}
@@ -237,6 +255,7 @@ public class AttachmentController {
 		if (image == null) {
 			return Image.defaultImage();
 		}
+		guard(image);
 		return image;
 	}
 
@@ -256,6 +275,7 @@ public class AttachmentController {
 			defImage.scale(width, height);
 			return defImage;
 		}
+		guard(image);
 		image.scale(width, height);
 		return image;
 	}

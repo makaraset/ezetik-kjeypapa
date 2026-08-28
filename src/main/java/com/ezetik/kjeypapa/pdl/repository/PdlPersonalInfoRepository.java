@@ -13,4 +13,7 @@ public interface PdlPersonalInfoRepository extends JpaRepository<PdlPersonalInfo
 
 	@Query("select p from PdlPersonalInfo p where p.user.id = :userId order by p.id desc")
 	List<PdlPersonalInfo> findByUser(int userId);
+
+	/** Every row carrying this ID number — used to refuse a second identity. */
+	List<PdlPersonalInfo> findByIdNo(String idNo);
 }

@@ -632,6 +632,16 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 	public ResponseEntity<Message<PdlPersonalInfo>> savePersonalInfo(PersonalInfoRequest req) {
 		try {
 			User user = getCurrentUser();
+			PersonalInfoValidator.normalise(req);
+			List<String> problems = PersonalInfoValidator.validate(req);
+			if (!problems.isEmpty())
+				return resp("INVALID", String.join("; ", problems), null, HttpStatus.EXPECTATION_FAILED);
+			// One identity, one account: the same ID number on another user is
+			// refused rather than filed twice at Sambat under one CIF.
+			for (PdlPersonalInfo other : personalRepo.findByIdNo(req.getIdNo()))
+				if (other.getUser() != null && !other.getUser().getId().equals(user.getId()))
+					return resp("ID_NO_EXIST", "This ID number is already registered to another account", null,
+							HttpStatus.NOT_ACCEPTABLE);
 			List<PdlPersonalInfo> existing = personalRepo.findByUser(user.getId());
 			PdlPersonalInfo p = existing.isEmpty() ? new PdlPersonalInfo() : existing.get(0);
 

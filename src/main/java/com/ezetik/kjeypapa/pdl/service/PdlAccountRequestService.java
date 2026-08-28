@@ -97,6 +97,22 @@ public class PdlAccountRequestService {
 			if (userRepository.findByUsername(p.getUsername()) != null)
 				return resp("USERNAME_EXIST", "Username is already exist, Please change it.", null,
 						HttpStatus.NOT_ACCEPTABLE);
+			if (p.getPersonal() != null) {
+				PersonalInfoValidator.normalise(p.getPersonal());
+				List<String> problems = PersonalInfoValidator.validate(p.getPersonal());
+				if (!problems.isEmpty())
+					return resp("INVALID", String.join("; ", problems), null, HttpStatus.EXPECTATION_FAILED);
+				// A second account on the same ID number would resolve to the same
+				// SBF CIF and let one person hold two loans. Rejected accounts do
+				// not block a retry.
+				for (PdlPersonalInfo dup : personalRepo.findByIdNo(p.getPersonal().getIdNo())) {
+					PdlAccountRequest prior = dup.getUser() == null ? null
+							: requestRepo.findByUser_Username(dup.getUser().getUsername()).orElse(null);
+					if (prior == null || prior.getStatus() != PdlAccountStatusEnum.REJECTED)
+						return resp("ID_NO_EXIST", "This ID number is already registered", null,
+								HttpStatus.NOT_ACCEPTABLE);
+				}
+			}
 
 			// --- user (disabled until OTP; login gated on the LPO decision) ---
 			User user = new User();

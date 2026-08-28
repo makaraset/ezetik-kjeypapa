@@ -66,11 +66,10 @@ public class LosWebhookController {
 		return service.handleLoanUpdate(payload);
 	}
 
-	/** V26 page 1 — SAMBAT account decision (LPO review; mock until QC2.1 channel confirmed). */
-	@PostMapping("/account-decision")
-	public ResponseEntity<Message<String>> accountDecision(@RequestBody java.util.Map<String, String> body) {
-		return service.handleAccountDecision(body.get("username"), body.get("decision"), body.get("reason"));
-	}
+	// The former POST /account-decision mock was removed on 2026-08-28. It sat on
+	// the unauthenticated LOS-webhook whitelist and could approve ANY pending
+	// account by username — i.e. mint a customer login with no LPO review —
+	// while nothing called it: approval is owned by our own PdlAdminController.
 
 	/**
 	 * V21 — result of the Bank-Mobile-App verification / disbursement-consent step
