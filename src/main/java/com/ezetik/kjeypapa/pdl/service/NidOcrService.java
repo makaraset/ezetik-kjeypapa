@@ -95,15 +95,11 @@ public class NidOcrService {
 			out.setVillageName(geo.getVillageName());
 			out.setHouseStreetNo(geo.getHouseStreetNo());
 
-			// CIF resolution is LIVE regardless of the OCR mock (verified
-			// working against UAT): null = new-to-SBF -> custId 0 at submit.
-			if (out.getIdNumber() != null && !out.getIdNumber().isBlank()) {
-				try {
-					out.setCif(sbf.findCifByIdNo(out.getIdNumber()));
-				} catch (Exception e) {
-					// best-effort — signup must not fail on a CIF hiccup
-				}
-			}
+			// No CIF lookup here any more (2026-08-29). This endpoint is
+			// anonymous, and returning a live Sambat CIF for any image anyone
+			// posts turned it into an oracle. The backend resolves the CIF itself
+			// at account-request time (PdlAccountRequestService.create), and the
+			// app never used the value.
 			return resp("SUCCESS", "NID extracted", out, HttpStatus.OK);
 		} catch (Exception e) {
 			// The customer-facing message stays generic, but the cause must not

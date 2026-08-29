@@ -2,6 +2,7 @@ package com.ezetik.kjeypapa.pdl.service;
 
 import java.sql.Date;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -169,8 +170,8 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 			return resp("SUCCESS", "Application created (Draft)", repo.save(loan), HttpStatus.OK);
 
 		} catch (Exception e) {
-			e.printStackTrace();
-			return resp("INTERNAL_SERVER_ERROR", e.getMessage(), null, HttpStatus.INTERNAL_SERVER_ERROR);
+			log.warn("PDL operation failed: {}", e.toString(), e);
+			return resp("INTERNAL_SERVER_ERROR", "Something went wrong. Please try again.", null, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -302,8 +303,8 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 			return resp("SUCCESS", "Document uploaded", attachmentRepo.save(a), HttpStatus.OK);
 
 		} catch (Exception e) {
-			e.printStackTrace();
-			return resp("INTERNAL_SERVER_ERROR", e.getMessage(), null, HttpStatus.INTERNAL_SERVER_ERROR);
+			log.warn("PDL operation failed: {}", e.toString(), e);
+			return resp("INTERNAL_SERVER_ERROR", "Something went wrong. Please try again.", null, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -348,8 +349,8 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 			}
 
 		} catch (Exception e) {
-			e.printStackTrace();
-			return resp("INTERNAL_SERVER_ERROR", e.getMessage(), null, HttpStatus.INTERNAL_SERVER_ERROR);
+			log.warn("PDL operation failed: {}", e.toString(), e);
+			return resp("INTERNAL_SERVER_ERROR", "Something went wrong. Please try again.", null, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -376,8 +377,8 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 			return resp("SUCCESS", "Application revoked", repo.save(loan), HttpStatus.OK);
 
 		} catch (Exception e) {
-			e.printStackTrace();
-			return resp("INTERNAL_SERVER_ERROR", e.getMessage(), null, HttpStatus.INTERNAL_SERVER_ERROR);
+			log.warn("PDL operation failed: {}", e.toString(), e);
+			return resp("INTERNAL_SERVER_ERROR", "Something went wrong. Please try again.", null, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -389,8 +390,8 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 				return resp("NOT_FOUND", "You don't have any application", null, HttpStatus.OK);
 			return resp("SUCCESS", "Get data success", list, HttpStatus.OK);
 		} catch (Exception e) {
-			e.printStackTrace();
-			return resp("INTERNAL_SERVER_ERROR", e.getMessage(), null, HttpStatus.INTERNAL_SERVER_ERROR);
+			log.warn("PDL operation failed: {}", e.toString(), e);
+			return resp("INTERNAL_SERVER_ERROR", "Something went wrong. Please try again.", null, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -399,8 +400,8 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 		try {
 			return resp("SUCCESS", "Get data success", repo.findByUserId(getCurrentUser().getId()), HttpStatus.OK);
 		} catch (Exception e) {
-			e.printStackTrace();
-			return resp("INTERNAL_SERVER_ERROR", e.getMessage(), null, HttpStatus.INTERNAL_SERVER_ERROR);
+			log.warn("PDL operation failed: {}", e.toString(), e);
+			return resp("INTERNAL_SERVER_ERROR", "Something went wrong. Please try again.", null, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -411,8 +412,8 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 				return resp("NOT_FOUND", "Application not found", null, HttpStatus.EXPECTATION_FAILED);
 			return resp("SUCCESS", "Get data success", scheduleRepo.findSchedule(id), HttpStatus.OK);
 		} catch (Exception e) {
-			e.printStackTrace();
-			return resp("INTERNAL_SERVER_ERROR", e.getMessage(), null, HttpStatus.INTERNAL_SERVER_ERROR);
+			log.warn("PDL operation failed: {}", e.toString(), e);
+			return resp("INTERNAL_SERVER_ERROR", "Something went wrong. Please try again.", null, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -424,8 +425,8 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 				return resp("NOT_FOUND", "Application not found", null, HttpStatus.EXPECTATION_FAILED);
 			return resp("SUCCESS", "Get data success", loan, HttpStatus.OK);
 		} catch (Exception e) {
-			e.printStackTrace();
-			return resp("INTERNAL_SERVER_ERROR", e.getMessage(), null, HttpStatus.INTERNAL_SERVER_ERROR);
+			log.warn("PDL operation failed: {}", e.toString(), e);
+			return resp("INTERNAL_SERVER_ERROR", "Something went wrong. Please try again.", null, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -572,8 +573,8 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 
 			return resp("SUCCESS", "Employment info saved", employmentRepo.save(e), HttpStatus.OK);
 		} catch (Exception ex) {
-			ex.printStackTrace();
-			return resp("INTERNAL_SERVER_ERROR", ex.getMessage(), null, HttpStatus.INTERNAL_SERVER_ERROR);
+			log.warn("PDL operation failed: {}", ex.toString(), ex);
+			return resp("INTERNAL_SERVER_ERROR", "Something went wrong. Please try again.", null, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -585,8 +586,8 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 			return resp(e == null ? "NOT_FOUND" : "SUCCESS",
 					e == null ? "No employment info" : "Get data success", e, HttpStatus.OK);
 		} catch (Exception ex) {
-			ex.printStackTrace();
-			return resp("INTERNAL_SERVER_ERROR", ex.getMessage(), null, HttpStatus.INTERNAL_SERVER_ERROR);
+			log.warn("PDL operation failed: {}", ex.toString(), ex);
+			return resp("INTERNAL_SERVER_ERROR", "Something went wrong. Please try again.", null, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -609,8 +610,8 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 
 			return resp("SUCCESS", "Bank info saved", bankRepo.save(b), HttpStatus.OK);
 		} catch (Exception ex) {
-			ex.printStackTrace();
-			return resp("INTERNAL_SERVER_ERROR", ex.getMessage(), null, HttpStatus.INTERNAL_SERVER_ERROR);
+			log.warn("PDL operation failed: {}", ex.toString(), ex);
+			return resp("INTERNAL_SERVER_ERROR", "Something went wrong. Please try again.", null, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -622,8 +623,8 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 			return resp(b == null ? "NOT_FOUND" : "SUCCESS",
 					b == null ? "No bank info" : "Get data success", b, HttpStatus.OK);
 		} catch (Exception ex) {
-			ex.printStackTrace();
-			return resp("INTERNAL_SERVER_ERROR", ex.getMessage(), null, HttpStatus.INTERNAL_SERVER_ERROR);
+			log.warn("PDL operation failed: {}", ex.toString(), ex);
+			return resp("INTERNAL_SERVER_ERROR", "Something went wrong. Please try again.", null, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -644,6 +645,24 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 							HttpStatus.NOT_ACCEPTABLE);
 			List<PdlPersonalInfo> existing = personalRepo.findByUser(user.getId());
 			PdlPersonalInfo p = existing.isEmpty() ? new PdlPersonalInfo() : existing.get(0);
+
+			// Once the LPO has verified the record, the identity it verified is
+			// fixed: a customer cannot swap their ID number, name or birth date
+			// under an approved account and a resolved CIF. Addresses, contact
+			// details and documents stay editable.
+			if (p.isVerified()) {
+				List<String> locked = new ArrayList<>();
+				if (!same(p.getIdNo(), req.getIdNo())) locked.add("ID number");
+				if (!same(p.getIdType(), req.getIdType())) locked.add("ID type");
+				if (!same(p.getDateOfBirth(), req.getDateOfBirth())) locked.add("date of birth");
+				if (!same(p.getGender(), req.getGender())) locked.add("gender");
+				if (!same(p.getLatinFamilyName(), req.getLatinFamilyName())
+						|| !same(p.getLatinFirstName(), req.getLatinFirstName())) locked.add("name");
+				if (!locked.isEmpty())
+					return resp("IDENTITY_LOCKED", "Verified identity details cannot be changed here: "
+							+ String.join(", ", locked) + ". Please contact support.", null,
+							HttpStatus.EXPECTATION_FAILED);
+			}
 
 			p.setUser(user);
 			p.setKhmerFamilyName(req.getKhmerFamilyName());
@@ -694,8 +713,8 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 
 			return resp("SUCCESS", "Personal info saved", personalRepo.save(p), HttpStatus.OK);
 		} catch (Exception ex) {
-			ex.printStackTrace();
-			return resp("INTERNAL_SERVER_ERROR", ex.getMessage(), null, HttpStatus.INTERNAL_SERVER_ERROR);
+			log.warn("PDL operation failed: {}", ex.toString(), ex);
+			return resp("INTERNAL_SERVER_ERROR", "Something went wrong. Please try again.", null, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -707,8 +726,8 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 			return resp(p == null ? "NOT_FOUND" : "SUCCESS",
 					p == null ? "No personal info" : "Get data success", p, HttpStatus.OK);
 		} catch (Exception ex) {
-			ex.printStackTrace();
-			return resp("INTERNAL_SERVER_ERROR", ex.getMessage(), null, HttpStatus.INTERNAL_SERVER_ERROR);
+			log.warn("PDL operation failed: {}", ex.toString(), ex);
+			return resp("INTERNAL_SERVER_ERROR", "Something went wrong. Please try again.", null, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -753,8 +772,8 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 
 			return resp("SUCCESS", "Get data success", pr, HttpStatus.OK);
 		} catch (Exception ex) {
-			ex.printStackTrace();
-			return resp("INTERNAL_SERVER_ERROR", ex.getMessage(), null, HttpStatus.INTERNAL_SERVER_ERROR);
+			log.warn("PDL operation failed: {}", ex.toString(), ex);
+			return resp("INTERNAL_SERVER_ERROR", "Something went wrong. Please try again.", null, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -763,6 +782,12 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 
 	@org.springframework.beans.factory.annotation.Autowired
 	private com.ezetik.kjeypapa.security.repository.UserRepository userRepository;
+
+	private static boolean same(String a, String b) {
+		String x = a == null ? "" : a.trim();
+		String y = b == null ? "" : b.trim();
+		return x.equalsIgnoreCase(y);
+	}
 
 	User getCurrentUser() {
 		String userPrincipal = SecurityContextHolder.getContext().getAuthentication().getName();

@@ -51,7 +51,9 @@ public class PdlBankInfo extends UserDateAudit {
 
 	@Column(columnDefinition = "bool default false")
 	private boolean verified;
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	private String verifiedBy;
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	private Instant verifiedDate;
 
 }

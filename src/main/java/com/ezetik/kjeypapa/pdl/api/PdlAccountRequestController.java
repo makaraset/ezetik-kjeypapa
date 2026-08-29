@@ -35,8 +35,9 @@ public class PdlAccountRequestController {
 	}
 
 	/** Status probe for the pending screen (PENDING/APPROVED/REJECTED only). */
-	@GetMapping("/status")
-	public ResponseEntity<Message<String>> status(@RequestParam("username") String username) {
-		return service.status(username);
+	/** POST so the phone number never appears in a URL, proxy log or query string. */
+	@PostMapping("/status")
+	public ResponseEntity<Message<String>> status(@RequestBody java.util.Map<String, String> body) {
+		return service.status(body == null ? null : body.get("username"));
 	}
 }

@@ -238,6 +238,10 @@ public class LosApplicationMapper {
 		String n = normaliseIdType(label);
 		if (n.isEmpty())
 			return "";
+		// Stored as the idCode itself since 2026-08-29: pass a known code through.
+		for (PdlCodeList row : codeRepo.findByListNameOrderByNameEnAsc("ID_TYPE"))
+			if (row.getCode() != null && row.getCode().equalsIgnoreCase(label.trim()))
+				return row.getCode();
 		for (PdlCodeList row : codeRepo.findByListNameOrderByNameEnAsc("ID_TYPE")) {
 			if (normaliseIdType(row.getNameEn()).equals(n))
 				return str(row.getCode());

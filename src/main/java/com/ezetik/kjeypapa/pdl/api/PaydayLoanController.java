@@ -129,6 +129,11 @@ public class PaydayLoanController {
 		List<Image> images = new ArrayList<>();
 		for (MultipartFile file : files) {
 			Image image = Image.buildImage(file, fileHelper);
+			// Unguessable reference (see PdlAccountRequestService.storeDoc).
+			String orig = image.getFileName() == null ? "" : image.getFileName();
+			int dot = orig.lastIndexOf('.');
+			image.setFileName("pdl-" + java.util.UUID.randomUUID()
+					+ ((dot > -1 && dot < orig.length() - 1) ? orig.substring(dot).toLowerCase() : ".jpg"));
 			image.setEntityClass(docType);
 			image.setEntityId(pdlId);
 			images.add(image);

@@ -54,6 +54,7 @@ public class PdlPersonalInfo extends UserDateAudit {
 
 	// Identity document
 	private String idType; // National ID Card, Passport, ...
+	@Column(length = 30)
 	private String idNo;
 	private String idIssuedDate; // dd/MM/yyyy
 	private String idExpiryDate; // dd/MM/yyyy
@@ -65,6 +66,7 @@ public class PdlPersonalInfo extends UserDateAudit {
 
 	private String nationality;
 	private String maritalStatus;
+	@Column(length = 15)
 	private String mobilePhone;
 
 	// Correspondence address
@@ -108,9 +110,11 @@ public class PdlPersonalInfo extends UserDateAudit {
 	private String nidBackFileRef;
 	private String profilePhotoFileRef;
 
-	@Column(columnDefinition = "bool default false")
+	@Column(nullable = false, columnDefinition = "boolean not null default false")
 	private boolean verified;
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	private String verifiedBy;
+	@com.fasterxml.jackson.annotation.JsonIgnore
 	private Instant verifiedDate;
 
 }

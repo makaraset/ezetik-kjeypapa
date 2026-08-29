@@ -29,6 +29,9 @@ public class PdlDictionaryAdminController {
 	@Autowired
 	private PdlDictionaryService dictionary;
 
+	@Autowired
+	private com.ezetik.kjeypapa.pdl.service.PdlGeoBackfillService backfill;
+
 	/**
 	 * Pull Sambat's dictionaries now. The read endpoints never fetch, so this
 	 * and the nightly job are the only callers.
@@ -41,5 +44,17 @@ public class PdlDictionaryAdminController {
 			return new ResponseEntity<>(new Message<>("FAILED", "Refresh failed: " + e.getMessage(), null),
 					HttpStatus.EXPECTATION_FAILED);
 		}
+	}
+
+	/**
+	 * Code the address rows captured before Sambat's geo codes existed, by
+	 * exact name match against the mirror. Safe to re-run; only blank codes
+	 * are touched.
+	 */
+	@PostMapping("/backfill-geo-codes")
+	public ResponseEntity<Message<String>> backfillGeoCodes() {
+		var r = backfill.run();
+		return ResponseEntity.ok(new Message<>("SUCCESS", "Backfill complete",
+				"rows=" + r.rowsSeen() + " levelsFilled=" + r.levelsFilled() + " levelsUnmatched=" + r.levelsUnmatched()));
 	}
 }

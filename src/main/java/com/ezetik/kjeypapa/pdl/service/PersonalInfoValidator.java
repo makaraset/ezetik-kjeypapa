@@ -52,7 +52,7 @@ public final class PersonalInfoValidator {
 				: r.getMobilePhone().trim().replaceAll("[\\s-]", ""));
 		r.setLatinFamilyName(trimToNull(r.getLatinFamilyName()));
 		r.setLatinFirstName(trimToNull(r.getLatinFirstName()));
-		r.setIdType(trimToNull(r.getIdType()));
+		r.setIdType(canonIdType(r.getIdType()));
 	}
 
 	/** Human-readable problems; empty means acceptable. */
@@ -105,11 +105,12 @@ public final class PersonalInfoValidator {
 	}
 
 	/** Same fold LosApplicationMapper uses: "National ID Card" / "NID" / "National ID". */
+	/** Stored as Sambat's idCode since 2026-08-29 ("N"); legacy labels still fold. */
 	static boolean isNationalId(String idType) {
 		String n = idType == null ? "" : idType.trim().toLowerCase(Locale.ROOT);
 		if (n.isEmpty())
 			return true; // the only ID we issue accounts on today
-		return n.equals("nid") || n.replaceAll("\\s*card$", "").equals("national id");
+		return n.equals("n") || n.equals("nid") || n.replaceAll("\\s*card$", "").equals("national id");
 	}
 
 	static LocalDate parse(String s) {
@@ -138,6 +139,19 @@ public final class PersonalInfoValidator {
 			return null;
 		char c = Character.toUpperCase(t.charAt(0));
 		return (c == 'M' || c == 'F') ? String.valueOf(c) : null;
+	}
+
+	/** Canonical id type = Sambat's idCode: N national ID, P passport. */
+	static String canonIdType(String s) {
+		String t = trimToNull(s);
+		if (t == null)
+			return "N";
+		if (isNationalId(t))
+			return "N";
+		String n = t.toLowerCase(Locale.ROOT);
+		if (n.equals("p") || n.equals("passport"))
+			return "P";
+		return t.toUpperCase(Locale.ROOT); // any other Sambat idCode, verbatim
 	}
 
 	static String trimToNull(String s) {

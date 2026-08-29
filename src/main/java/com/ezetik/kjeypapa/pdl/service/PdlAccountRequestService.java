@@ -255,6 +255,29 @@ public class PdlAccountRequestService {
 		if (u != null)
 			u.setEnabled(approve);
 		requestRepo.save(req);
+		// The LPO's approval IS the KYC verification: record who and when on
+		// the rows they reviewed. verified then locks the identity fields.
+		if (approve && u != null) {
+			java.time.Instant now = java.time.Instant.now();
+			for (PdlPersonalInfo pi : personalRepo.findByUser(u.getId())) {
+				pi.setVerified(true);
+				pi.setVerifiedBy(decidedBy);
+				pi.setVerifiedDate(now);
+				personalRepo.save(pi);
+			}
+			for (var ei : employmentRepo.findByUser(u.getId())) {
+				ei.setVerified(true);
+				ei.setVerifiedBy(decidedBy);
+				ei.setVerifiedDate(now);
+				employmentRepo.save(ei);
+			}
+			for (var bi : bankRepo.findByUser(u.getId())) {
+				bi.setVerified(true);
+				bi.setVerifiedBy(decidedBy);
+				bi.setVerifiedDate(now);
+				bankRepo.save(bi);
+			}
+		}
 		try {
 			if (u != null && u.getPhoneNumber() != null)
 				sms.sendSms(u.getPhoneNumber(), approve
@@ -300,7 +323,7 @@ public class PdlAccountRequestService {
 		return new ResponseEntity<>(new Message<>("SUCCESS", "Account request detail", out), HttpStatus.OK);
 	}
 
-	/** Public status probe for the pending screen (returns the status only). */
+	/** Public status probe for the pending screen (returns the status only; POST body, never a query string). */
 	public ResponseEntity<Message<String>> status(String username) {
 		PdlAccountRequest r = requestRepo.findByUser_Username(username).orElse(null);
 		if (r == null)
@@ -308,15 +331,24 @@ public class PdlAccountRequestService {
 		return resp2("SUCCESS", "Status", r.getStatus().name(), HttpStatus.OK);
 	}
 
+	private static String extOf(String fileName) {
+		int dot = fileName.lastIndexOf('.');
+		return (dot > -1 && dot < fileName.length() - 1) ? fileName.substring(dot).toLowerCase() : ".jpg";
+	}
+
 	private String storeDoc(DocFile d, byte[] bytes, Integer userId) {
 		Image image = Image.build();
-		String name = fileHelper.generateDisplayName(
+		// The stored name IS the reference the app fetches by, so it must not
+		// be guessable: the old HHmmss_ddMMyyyy_NNNNN form was a timestamp plus
+		// a 5-digit random. 122 bits of UUID instead; extension kept for MIME.
+		String name = "pdl-" + java.util.UUID.randomUUID() + extOf(
 				isBlank(d.getFileName()) ? (d.getDocType() + ".jpg") : d.getFileName());
 		image.setFileName(name);
 		image.setFileType(isBlank(d.getContentType()) ? "image/jpeg" : d.getContentType());
 		image.setSize(bytes.length);
 		image.setData(bytes);
 		image.setEntityClass("PDL_ACCOUNT_REQUEST");
+		image.setUuid(java.util.UUID.randomUUID().toString());
 		image.setEntityId(String.valueOf(userId));
 		imageRepo.save(image);
 		return name;
