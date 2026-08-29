@@ -39,6 +39,5 @@ public class NidOcrResponse {
 	private String villageName;
 	private String houseStreetNo;
 
-	private Integer cif; // SBF custKeyNum, null when new
 	private boolean mock; // true while ocr.mock.enabled serves sample data
 }
