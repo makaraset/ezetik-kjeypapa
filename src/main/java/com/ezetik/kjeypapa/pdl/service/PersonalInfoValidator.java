@@ -47,7 +47,7 @@ public final class PersonalInfoValidator {
 		r.setIdIssuedDate(canonDate(r.getIdIssuedDate()));
 		r.setIdExpiryDate(canonDate(r.getIdExpiryDate()));
 		r.setGender(canonGender(r.getGender()));
-		r.setIdNo(trimToNull(r.getIdNo()));
+		r.setIdNo(trimToNull(r.getIdNo()) == null ? null : r.getIdNo().trim().toUpperCase(Locale.ROOT));
 		r.setMobilePhone(trimToNull(r.getMobilePhone()) == null ? null
 				: r.getMobilePhone().trim().replaceAll("[\\s-]", ""));
 		r.setLatinFamilyName(trimToNull(r.getLatinFamilyName()));
@@ -57,11 +57,36 @@ public final class PersonalInfoValidator {
 
 	/** Human-readable problems; empty means acceptable. */
 	public static List<String> validate(PersonalInfoRequest r) {
+		return validate(r, false);
+	}
+
+	/**
+	 * @param identityLocked the row is verified and the identity fields are
+	 *                       unchanged — the LPO already accepted them, so do
+	 *                       not re-judge them. Without this, a verified customer
+	 *                       whose legacy row predates the rules could neither
+	 *                       save an address change (validation fails on the
+	 *                       old ID number) nor fix the ID number (locked).
+	 */
+	public static List<String> validate(PersonalInfoRequest r, boolean identityLocked) {
 		List<String> e = new ArrayList<>();
 		if (r == null) {
 			e.add("personal information is required");
 			return e;
 		}
+		tooLong(e, "Khmer family name", r.getKhmerFamilyName(), 100);
+		tooLong(e, "Khmer first name", r.getKhmerFirstName(), 100);
+		tooLong(e, "Latin family name", r.getLatinFamilyName(), 100);
+		tooLong(e, "Latin first name", r.getLatinFirstName(), 100);
+		tooLong(e, "nationality", r.getNationality(), 50);
+		tooLong(e, "marital status", r.getMaritalStatus(), 50);
+		tooLong(e, "correspondence house/street", r.getCorrHouseStreetNo(), 200);
+		tooLong(e, "permanent house/street", r.getPermHouseStreetNo(), 200);
+		if (r.getMobilePhone() == null || !r.getMobilePhone().matches("0\\d{8,9}"))
+			e.add("mobile phone must be a Cambodian number (0 followed by 8-9 digits)");
+		if (identityLocked)
+			return e;
+
 		if (r.getLatinFamilyName() == null || r.getLatinFirstName() == null)
 			e.add("Latin family and first name are required");
 
@@ -98,10 +123,26 @@ public final class PersonalInfoValidator {
 
 		if (r.getGender() == null)
 			e.add("gender must be M or F");
-
-		if (r.getMobilePhone() == null || !r.getMobilePhone().matches("0\\d{8,9}"))
-			e.add("mobile phone must be a Cambodian number (0 followed by 8-9 digits)");
 		return e;
+	}
+
+	private static void tooLong(List<String> e, String what, String v, int max) {
+		if (v != null && v.length() > max)
+			e.add(what + " is too long (max " + max + ")");
+	}
+
+	/** Same value after canonicalisation — so 1990-01-03 and 03/01/1990 agree. */
+	public static boolean sameIdentityValue(String stored, String incoming) {
+		String a = canonAny(stored), b = canonAny(incoming);
+		return a.equalsIgnoreCase(b);
+	}
+
+	private static String canonAny(String s) {
+		String t = trimToNull(s);
+		if (t == null)
+			return "";
+		LocalDate d = parse(t);
+		return d != null ? d.format(APP) : t.replaceAll("\\s+", " ");
 	}
 
 	/** Same fold LosApplicationMapper uses: "National ID Card" / "NID" / "National ID". */

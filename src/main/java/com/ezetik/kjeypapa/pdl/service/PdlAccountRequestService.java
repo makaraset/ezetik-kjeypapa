@@ -47,6 +47,7 @@ import jakarta.transaction.Transactional;
  * request (QC2.1). Employee → ROLE CUSTOMER (id 2).
  */
 @Service
+@lombok.extern.slf4j.Slf4j
 public class PdlAccountRequestService {
 
 	private static final long CUSTOMER_ROLE_ID = 2L;
@@ -111,6 +112,13 @@ public class PdlAccountRequestService {
 					if (prior == null || prior.getStatus() != PdlAccountStatusEnum.REJECTED)
 						return resp("ID_NO_EXIST", "This ID number is already registered", null,
 								HttpStatus.NOT_ACCEPTABLE);
+					// A rejected request may be retried, but the unique index on
+					// id_no would refuse the new row while the rejected one still
+					// carries the number. Release it from the dead row; the
+					// request row keeps the decision and its reason.
+					log.info("Releasing id_no from rejected personal row {} for a retry", dup.getId());
+					dup.setIdNo(null);
+					personalRepo.save(dup);
 				}
 			}
 
@@ -230,8 +238,8 @@ public class PdlAccountRequestService {
 			return resp("SUCCESS", "Account request submitted — verify the OTP sent to your phone", req,
 					HttpStatus.OK);
 		} catch (Exception e) {
-			e.printStackTrace();
-			return resp("INTERNAL_SERVER_ERROR", e.getMessage(), null, HttpStatus.INTERNAL_SERVER_ERROR);
+			log.warn("PDL account request failed: {}", e.toString(), e);
+			return resp("INTERNAL_SERVER_ERROR", "Something went wrong. Please try again.", null, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 

@@ -54,8 +54,10 @@ public class PdlGeoBackfillService {
 			c = chain(p.getBirthProvince(), p.getBirthDistrict(), null, null,
 					p.getBirthProvinceCode(), p.getBirthDistrictCode(), null, null,
 					codes -> { p.setBirthProvinceCode(codes[0]); p.setBirthDistrictCode(codes[1]); });
+			int before = filled - c[0];
 			filled += c[0]; missed += c[1];
-			personalRepo.save(p);
+			if (filled > before + 0 || c[0] > 0)
+				personalRepo.save(p);
 		}
 		for (PdlEmploymentInfo e : employmentRepo.findAll()) {
 			seen++;
@@ -64,7 +66,8 @@ public class PdlGeoBackfillService {
 					codes -> { e.setWorkProvinceCode(codes[0]); e.setWorkDistrictCode(codes[1]);
 							e.setWorkCommuneCode(codes[2]); e.setWorkVillageCode(codes[3]); });
 			filled += c[0]; missed += c[1];
-			employmentRepo.save(e);
+			if (c[0] > 0)
+				employmentRepo.save(e); // only rows that gained a code; keep audit columns honest
 		}
 		return new Result(seen, filled, missed);
 	}

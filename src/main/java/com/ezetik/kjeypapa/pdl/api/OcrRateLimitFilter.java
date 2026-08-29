@@ -30,6 +30,15 @@ public class OcrRateLimitFilter extends OncePerRequestFilter {
 	@Value("${pdl.ocr.rate-limit.per-minute:6}")
 	private int perMinute;
 
+	/**
+	 * Peers whose X-Forwarded-For we believe (the reverse proxy in front of
+	 * this app). Empty means: trust nobody's header and key on the socket
+	 * address. The first version honoured any client-supplied header, which a
+	 * rotating value defeated in twelve requests.
+	 */
+	@Value("${pdl.ocr.rate-limit.trusted-proxies:}")
+	private String trustedProxies;
+
 	private final Map<String, long[]> buckets = new ConcurrentHashMap<>();
 
 	@Override
@@ -51,8 +60,8 @@ public class OcrRateLimitFilter extends OncePerRequestFilter {
 			}
 			over = ++b[1] > perMinute;
 		}
-		if (buckets.size() > 10_000)
-			buckets.clear(); // crude memory bound; the map is a courtesy, not a ledger
+		if (buckets.size() > 10_000) // bound memory by dropping only STALE windows,
+			buckets.entrySet().removeIf(e -> e.getValue()[0] != minute); // never live counters
 		if (over) {
 			res.setStatus(429);
 			res.setContentType("application/json");
@@ -62,10 +71,17 @@ public class OcrRateLimitFilter extends OncePerRequestFilter {
 		chain.doFilter(req, res);
 	}
 
-	private static String clientKey(HttpServletRequest req) {
+	private String clientKey(HttpServletRequest req) {
+		String peer = req.getRemoteAddr();
+		if (trustedProxies == null || trustedProxies.isBlank())
+			return peer;
+		boolean trusted = java.util.Arrays.stream(trustedProxies.split(",")).map(String::trim)
+				.anyMatch(p -> !p.isEmpty() && p.equals(peer));
 		String fwd = req.getHeader("X-Forwarded-For");
-		if (fwd != null && !fwd.isBlank())
-			return fwd.split(",")[0].trim();
-		return req.getRemoteAddr();
+		if (!trusted || fwd == null || fwd.isBlank())
+			return peer;
+		// The right-most entry is the one the trusted proxy itself appended.
+		String[] hops = fwd.split(",");
+		return hops[hops.length - 1].trim();
 	}
 }

@@ -32,11 +32,6 @@ import com.ezetik.kjeypapa.security.service.UserService;
 @Component
 public class PdlDocumentAccess {
 
-	/** Entity tags that mark a PDL/KYC document (see PdlDocTypeEnum + signup). */
-	private static final Set<String> PDL_TAGS = Set.of("PDL_ACCOUNT_REQUEST", "PDL_PROFILE_PHOTO",
-			"PDL_NID_FRONT", "PDL_NID_BACK", "PDL_DOC", "E_CBC_CONSENT", "PROFILE_PHOTO", "NID",
-			"EMPLOYMENT_CARD", "BANK_STATEMENT", "SIGNED_CONTRACT");
-
 	@Autowired
 	private UserService userService;
 	@Autowired
@@ -49,11 +44,29 @@ public class PdlDocumentAccess {
 	private PaydayLoanRepository loanRepo;
 
 	public boolean isPdlDocument(Image image) {
-		return image != null && image.getEntityClass() != null
-				&& PDL_TAGS.contains(image.getEntityClass().toUpperCase());
+		if (image == null || image.getEntityClass() == null)
+			return false;
+		String tag = image.getEntityClass().toUpperCase();
+		return SIGNUP_TAGS.contains(tag) || LOAN_TAGS.contains(tag);
 	}
 
-	/** True when the current principal owns [image] or is an ADMIN. */
+	/** Signup-time uploads: entity_id is the owning USER id. */
+	private static final Set<String> SIGNUP_TAGS = Set.of("PDL_ACCOUNT_REQUEST", "PDL_PROFILE_PHOTO",
+			"PDL_NID_FRONT", "PDL_NID_BACK", "PDL_DOC");
+
+	/** Per-loan uploads (PdlDocTypeEnum): entity_id is a LOAN id. */
+	private static final Set<String> LOAN_TAGS = Set.of("E_CBC_CONSENT", "NID", "EMPLOYMENT_CARD",
+			"BANK_STATEMENT", "SIGNED_CONTRACT", "PROFILE_PHOTO");
+
+	/**
+	 * True when the current principal owns [image] or is an ADMIN.
+	 *
+	 * <p>The decision is made by what the tag MEANS, and each branch is
+	 * terminal. The first version of this check fell through from the signup
+	 * rule to the loan rule; user ids and loan ids share one integer sequence,
+	 * so whoever owned loan #13 could read user #13's ID card. Found by the
+	 * adversarial review of the change, live, before it shipped.
+	 */
 	public boolean canRead(Image image) {
 		Authentication auth = SecurityContextHolder.getContext().getAuthentication();
 		if (auth == null || auth.getName() == null)
@@ -63,26 +76,36 @@ public class PdlDocumentAccess {
 		User me = userService.findUserByUsername(auth.getName());
 		if (me == null)
 			return false;
-		String uid = String.valueOf(me.getId());
 		String tag = image.getEntityClass() == null ? "" : image.getEntityClass().toUpperCase();
+		String entityId = image.getEntityId() == null ? "" : image.getEntityId().trim();
 		String ref = image.getFileName();
 
-		// Signup uploads are tagged with the owning user id directly.
-		if (tag.startsWith("PDL_") && uid.equals(image.getEntityId()))
-			return true;
+		if (SIGNUP_TAGS.contains(tag))
+			return String.valueOf(me.getId()).equals(entityId) || referencedByMyProfile(me.getId(), ref);
 
-		// Per-loan uploads are tagged with the loan id; the loan must be mine.
-		if (image.getEntityId() != null) {
-			try {
-				PaydayLoan loan = loanRepo.findById(Integer.parseInt(image.getEntityId())).orElse(null);
-				if (loan != null && loan.getUser() != null && Objects.equals(loan.getUser().getId(), me.getId()))
-					return true;
-			} catch (NumberFormatException ignore) {
-			}
+		if (LOAN_TAGS.contains(tag)) {
+			// PROFILE_PHOTO doubles as the generic account avatar, tagged with
+			// the username rather than a loan id.
+			if ("PROFILE_PHOTO".equals(tag) && me.getUsername() != null && me.getUsername().equals(entityId))
+				return true;
+			return ownsLoan(me, entityId) || referencedByMyProfile(me.getId(), ref);
 		}
+		return false;
+	}
 
-		// Anything referenced from my own profile rows is mine.
-		int id = me.getId();
+	private boolean ownsLoan(User me, String entityId) {
+		try {
+			PaydayLoan loan = loanRepo.findById(Integer.parseInt(entityId)).orElse(null);
+			return loan != null && loan.getUser() != null && Objects.equals(loan.getUser().getId(), me.getId());
+		} catch (NumberFormatException e) {
+			return false;
+		}
+	}
+
+	/** Anything referenced from my own profile rows is mine, whatever its tag. */
+	private boolean referencedByMyProfile(int id, String ref) {
+		if (ref == null)
+			return false;
 		return personalRepo.findByUser(id).stream().anyMatch(p -> eq(ref, p.getNidFrontFileRef())
 				|| eq(ref, p.getNidBackFileRef()) || eq(ref, p.getProfilePhotoFileRef()))
 				|| employmentRepo.findByUser(id).stream().anyMatch(e -> eq(ref, e.getEmploymentCardFileRef()))

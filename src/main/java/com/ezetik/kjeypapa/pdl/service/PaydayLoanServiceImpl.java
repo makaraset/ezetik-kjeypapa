@@ -634,7 +634,31 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 		try {
 			User user = getCurrentUser();
 			PersonalInfoValidator.normalise(req);
-			List<String> problems = PersonalInfoValidator.validate(req);
+			List<PdlPersonalInfo> existing = personalRepo.findByUser(user.getId());
+			PdlPersonalInfo p = existing.isEmpty() ? new PdlPersonalInfo() : existing.get(0);
+
+			// Once the LPO has verified the record, the identity it verified is
+			// fixed: a customer cannot swap their ID number, name or birth date
+			// under an approved account and a resolved CIF. Addresses, contact
+			// details and documents stay editable. Compared in canonical form
+			// so a date the app sends as ISO does not read as a change.
+			boolean locked = p.isVerified();
+			if (locked) {
+				List<String> changed = new ArrayList<>();
+				if (!same(p.getIdNo(), req.getIdNo())) changed.add("ID number");
+				if (!same(p.getIdType(), req.getIdType())) changed.add("ID type");
+				if (!same(p.getDateOfBirth(), req.getDateOfBirth())) changed.add("date of birth");
+				if (!same(p.getGender(), req.getGender())) changed.add("gender");
+				if (!same(p.getLatinFamilyName(), req.getLatinFamilyName())
+						|| !same(p.getLatinFirstName(), req.getLatinFirstName())
+						|| !same(p.getKhmerFamilyName(), req.getKhmerFamilyName())
+						|| !same(p.getKhmerFirstName(), req.getKhmerFirstName())) changed.add("name");
+				if (!changed.isEmpty())
+					return resp("IDENTITY_LOCKED", "Verified identity details cannot be changed here: "
+							+ String.join(", ", changed) + ". Please contact support.", null,
+							HttpStatus.EXPECTATION_FAILED);
+			}
+			List<String> problems = PersonalInfoValidator.validate(req, locked);
 			if (!problems.isEmpty())
 				return resp("INVALID", String.join("; ", problems), null, HttpStatus.EXPECTATION_FAILED);
 			// One identity, one account: the same ID number on another user is
@@ -643,26 +667,6 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 				if (other.getUser() != null && !other.getUser().getId().equals(user.getId()))
 					return resp("ID_NO_EXIST", "This ID number is already registered to another account", null,
 							HttpStatus.NOT_ACCEPTABLE);
-			List<PdlPersonalInfo> existing = personalRepo.findByUser(user.getId());
-			PdlPersonalInfo p = existing.isEmpty() ? new PdlPersonalInfo() : existing.get(0);
-
-			// Once the LPO has verified the record, the identity it verified is
-			// fixed: a customer cannot swap their ID number, name or birth date
-			// under an approved account and a resolved CIF. Addresses, contact
-			// details and documents stay editable.
-			if (p.isVerified()) {
-				List<String> locked = new ArrayList<>();
-				if (!same(p.getIdNo(), req.getIdNo())) locked.add("ID number");
-				if (!same(p.getIdType(), req.getIdType())) locked.add("ID type");
-				if (!same(p.getDateOfBirth(), req.getDateOfBirth())) locked.add("date of birth");
-				if (!same(p.getGender(), req.getGender())) locked.add("gender");
-				if (!same(p.getLatinFamilyName(), req.getLatinFamilyName())
-						|| !same(p.getLatinFirstName(), req.getLatinFirstName())) locked.add("name");
-				if (!locked.isEmpty())
-					return resp("IDENTITY_LOCKED", "Verified identity details cannot be changed here: "
-							+ String.join(", ", locked) + ". Please contact support.", null,
-							HttpStatus.EXPECTATION_FAILED);
-			}
 
 			p.setUser(user);
 			p.setKhmerFamilyName(req.getKhmerFamilyName());
@@ -784,9 +788,7 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 	private com.ezetik.kjeypapa.security.repository.UserRepository userRepository;
 
 	private static boolean same(String a, String b) {
-		String x = a == null ? "" : a.trim();
-		String y = b == null ? "" : b.trim();
-		return x.equalsIgnoreCase(y);
+		return PersonalInfoValidator.sameIdentityValue(a, b);
 	}
 
 	User getCurrentUser() {
