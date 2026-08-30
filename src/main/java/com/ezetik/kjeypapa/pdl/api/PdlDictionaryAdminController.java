@@ -32,6 +32,15 @@ public class PdlDictionaryAdminController {
 	@Autowired
 	private com.ezetik.kjeypapa.pdl.service.PdlGeoBackfillService backfill;
 
+	@Autowired
+	private com.ezetik.kjeypapa.pdl.service.LosApplicationMapper losMapper;
+
+	@Autowired
+	private com.ezetik.kjeypapa.pdl.repository.PaydayLoanRepository loanRepo;
+
+	@Autowired
+	private com.fasterxml.jackson.databind.ObjectMapper om;
+
 	/**
 	 * Pull Sambat's dictionaries now. The read endpoints never fetch, so this
 	 * and the nightly job are the only callers.
@@ -56,5 +65,31 @@ public class PdlDictionaryAdminController {
 		var r = backfill.run();
 		return ResponseEntity.ok(new Message<>("SUCCESS", "Backfill complete",
 				"rows=" + r.rowsSeen() + " levelsFilled=" + r.levelsFilled() + " levelsUnmatched=" + r.levelsUnmatched()));
+	}
+
+	/**
+	 * The exact JSON {@code POST /new-loan-application} would carry for a loan,
+	 * with every {@code Doc_*} base64 replaced by its byte length. Runs the
+	 * real mapper without the config gate, so unset Sambat codes show as
+	 * blank — which is precisely what there is to compare against their
+	 * reference payload. Nothing is sent anywhere.
+	 */
+	@org.springframework.web.bind.annotation.GetMapping("/los-preview/{loanId}")
+	@SuppressWarnings("unchecked")
+	public ResponseEntity<Message<java.util.Map<String, Object>>> losPreview(
+			@org.springframework.web.bind.annotation.PathVariable int loanId) {
+		var loan = loanRepo.findById(loanId).orElse(null);
+		if (loan == null)
+			return new ResponseEntity<>(new Message<>("NOT_FOUND", "No loan " + loanId, null), HttpStatus.OK);
+		// A Map, not a JsonNode: this ObjectMapper is Jackson 2 while the MVC
+		// converter is Jackson 3, and a Jackson-2 node serialises there as a bean.
+		java.util.Map<String, Object> json = om.convertValue(losMapper.preview(loan), java.util.Map.class);
+		java.util.Map<String, Object> req = (java.util.Map<String, Object>) json.get("newAppRequest");
+		for (var e : req.entrySet()) {
+			String f = e.getKey();
+			if (f.startsWith("Doc_") && !f.endsWith("_FileName") && e.getValue() instanceof String v && v.length() > 64)
+				e.setValue("<base64, " + (v.length() * 3 / 4) + " bytes>");
+		}
+		return ResponseEntity.ok(new Message<>("SUCCESS", "LOS payload preview (not sent)", json));
 	}
 }

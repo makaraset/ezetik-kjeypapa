@@ -61,12 +61,28 @@ public class LosApplicationMapper {
 	@Autowired
 	private PdlCodeListRepository codeRepo;
 
+	/** Preview mode: blank numeric config renders as 0 instead of throwing. */
+	private boolean lenient = false;
+
 	/** Cambodia, per Sambat (2026-08-28): nationality and country both take KHM. */
 	private static final String KHM = "KHM";
 
 	public NewApplicationParam toParam(PaydayLoan loan) {
 		config.assertConfigured();
+		return build(loan, false);
+	}
 
+	/**
+	 * The exact payload {@link #toParam} would send, WITHOUT the config gate —
+	 * unset codes render as blank / 0 instead of refusing. For comparing our
+	 * request with Sambat's reference payload; never for a real submit.
+	 */
+	public NewApplicationParam preview(PaydayLoan loan) {
+		return build(loan, true);
+	}
+
+	private NewApplicationParam build(PaydayLoan loan, boolean lenient) {
+		this.lenient = lenient;
 		int uid = loan.getUser().getId();
 		PdlPersonalInfo pi = first(personalRepo.findByUser(uid));
 		PdlEmploymentInfo ei = first(employmentRepo.findByUser(uid));
@@ -343,10 +359,12 @@ public class LosApplicationMapper {
 	 * to LOS. {@link LosSubmitConfig#assertConfigured()} has already refused
 	 * the submit if either is blank, so this only ever parses a set value.
 	 */
-	private static int intOf(String s) {
+	private int intOf(String s) {
 		try {
 			return Integer.parseInt(str(s).trim());
 		} catch (NumberFormatException e) {
+			if (lenient)
+				return 0;
 			throw new LosSubmitException("LOS_NOT_CONFIGURED",
 					"Expected a number in LOS configuration but found '" + s + "'");
 		}
