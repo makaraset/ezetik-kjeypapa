@@ -109,6 +109,36 @@ class LosApplicationMapperTest {
 	}
 
 	@Test
+	@DisplayName("single-digit provinces are zero-padded to the NCDD width Sambat expects")
+	void geoCodesZeroPadded() {
+		// Sambat's dictionary returns Kampot as 7 and its districts as 701/702;
+		// their loan payload sends 07 / 0702 / 070204. A Kampot address must go
+		// out padded or it files against the wrong locality.
+		pi.setCorrProvinceCode("7"); // Kampot
+		pi.setCorrDistrictCode("702"); // Banteay Meas -> 0702
+		pi.setCorrCommuneCode("70204"); // -> 070204
+		pi.setCorrVillageCode("7020401"); // -> 07020401
+		NewApplicationRequest r = map();
+		assertThat(r.getCustP_CAddCBProvinceCity()).isEqualTo("07");
+		assertThat(r.getCustP_CAddCBDistrict()).isEqualTo("0702");
+		assertThat(r.getCustP_CAddCBCommune()).isEqualTo("070204");
+		assertThat(r.getCustP_CAddCBVillage()).isEqualTo("07020401");
+	}
+
+	@Test
+	@DisplayName("monthly income row is typed S (salary), matching Sambat's reference")
+	void incomeTypeSalary() {
+		var ei = new com.ezetik.kjeypapa.pdl.model.PdlEmploymentInfo();
+		ei.setMonthlyIncome(500.0);
+		ei.setCurrency("USD");
+		when(employmentRepo.findByUser(1)).thenReturn(java.util.List.of(ei));
+		var incomes = map().getMonthlyIncomes();
+		assertThat(incomes).hasSize(1);
+		assertThat(incomes.get(0).getIncomeType()).isEqualTo("S");
+		assertThat(incomes.get(0).getIncomeAmount()).isEqualTo(500.0);
+	}
+
+	@Test
 	@DisplayName("nationality and every country slot are KHM")
 	void nationality() {
 		NewApplicationRequest r = map();

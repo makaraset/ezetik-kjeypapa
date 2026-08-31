@@ -130,24 +130,24 @@ public class LosApplicationMapper {
 			r.setCustP_CAddNo(str(pi.getCorrHouseStreetNo()));
 			r.setCustP_CAddPhoneNo(str(pi.getMobilePhone()));
 			r.setCustP_CAddCBCountry(KHM);
-			r.setCustP_CAddCBProvinceCity(str(pi.getCorrProvinceCode()));
-			r.setCustP_CAddCBDistrict(str(pi.getCorrDistrictCode()));
-			r.setCustP_CAddCBCommune(str(pi.getCorrCommuneCode()));
-			r.setCustP_CAddCBVillage(str(pi.getCorrVillageCode()));
+			r.setCustP_CAddCBProvinceCity(province(pi.getCorrProvinceCode()));
+			r.setCustP_CAddCBDistrict(district(pi.getCorrDistrictCode()));
+			r.setCustP_CAddCBCommune(commune(pi.getCorrCommuneCode()));
+			r.setCustP_CAddCBVillage(village(pi.getCorrVillageCode()));
 
 			r.setCustP_PRAddNo(str(pi.getPermHouseStreetNo()));
 			r.setCustP_PRAddPhoneNo(str(pi.getMobilePhone()));
 			r.setCustP_PRAddCBCountry(KHM);
-			r.setCustP_PRAddCBProvinceCity(str(pi.getPermProvinceCode()));
-			r.setCustP_PRAddCBDistrict(str(pi.getPermDistrictCode()));
-			r.setCustP_PRAddCBCommune(str(pi.getPermCommuneCode()));
-			r.setCustP_PRAddCBVillage(str(pi.getPermVillageCode()));
+			r.setCustP_PRAddCBProvinceCity(province(pi.getPermProvinceCode()));
+			r.setCustP_PRAddCBDistrict(district(pi.getPermDistrictCode()));
+			r.setCustP_PRAddCBCommune(commune(pi.getPermCommuneCode()));
+			r.setCustP_PRAddCBVillage(village(pi.getPermVillageCode()));
 			r.setCustP_PRAddCBCoincide(sameAddress(pi));
 
 			// Place of birth: the form collects province and district only.
 			r.setCustP_POBCBCountry(KHM);
-			r.setCustP_POBCBProvinceCity(str(pi.getBirthProvinceCode()));
-			r.setCustP_POBCBDistrict(str(pi.getBirthDistrictCode()));
+			r.setCustP_POBCBProvinceCity(province(pi.getBirthProvinceCode()));
+			r.setCustP_POBCBDistrict(district(pi.getBirthDistrictCode()));
 
 			// CustP_CAddLocationId / PRAddLocationId / EmpAddLocationId are
 			// Google Maps coordinates (Sambat, 2026-08-28). The app does not
@@ -164,18 +164,19 @@ public class LosApplicationMapper {
 			r.setCustP_JobBusinessStartDate(losDate(ei.getEmploymentStartDate()));
 			r.setCustP_EmpAddNo("");
 			r.setCustP_EmpAddCBCountry(KHM);
-			r.setCustP_EmpAddCBProvinceCity(str(ei.getWorkProvinceCode()));
-			r.setCustP_EmpAddCBDistrict(str(ei.getWorkDistrictCode()));
-			r.setCustP_EmpAddCBCommune(str(ei.getWorkCommuneCode()));
-			r.setCustP_EmpAddCBVillage(str(ei.getWorkVillageCode()));
+			r.setCustP_EmpAddCBProvinceCity(province(ei.getWorkProvinceCode()));
+			r.setCustP_EmpAddCBDistrict(district(ei.getWorkDistrictCode()));
+			r.setCustP_EmpAddCBCommune(commune(ei.getWorkCommuneCode()));
+			r.setCustP_EmpAddCBVillage(village(ei.getWorkVillageCode()));
 			r.setCustP_CBEmploymentType(str(config.getEmploymentType()));
 			r.setCustP_CBEmploymentContractType(str(config.getEmploymentContractType()));
 
 			if (ei.getMonthlyIncome() != null && ei.getMonthlyIncome() > 0) {
 				MonthlyIncomeItem income = new MonthlyIncomeItem();
-				// IncomeType is a CBC code we do not hold; the amount and
-				// currency are real, so send the row and let LOS name what it
-				// still needs.
+				// IncomeType "S" = Salary, confirmed by Sambat's reference payload
+				// (Manith, 2026-08-30). Every payday customer is a salaried
+				// employee by product definition, so this is safe.
+				income.setIncomeType("S");
 				income.setIncomeAmount(ei.getMonthlyIncome());
 				income.setCurrency(str(ei.getCurrency()));
 				r.setMonthlyIncomes(List.of(income));
@@ -351,6 +352,41 @@ public class LosApplicationMapper {
 
 	private static String str(String s) {
 		return s == null ? "" : s;
+	}
+
+	/**
+	 * Left-pad an NCDD geo code to its canonical width — province 2, district 4,
+	 * commune 6, village 8.
+	 *
+	 * <p>Sambat's dictionary API returns the codes as integers, so a
+	 * single-digit province and its children arrive with the leading zero
+	 * dropped (Kampot is {@code 7}, its first district {@code 701}). Their own
+	 * loan payload restores it ({@code 07} / {@code 0702} / {@code 070204}), so
+	 * we must too — otherwise every address in the nine single-digit provinces
+	 * (codes 1-9) is filed against a wrong or non-existent locality. Confirmed
+	 * against Sambat's reference payload, 2026-08-30. Blank stays blank.
+	 */
+	static String pad(String code, int width) {
+		String c = str(code).trim();
+		if (c.isEmpty() || c.length() >= width)
+			return c;
+		return "0".repeat(width - c.length()) + c;
+	}
+
+	private static String province(String c) {
+		return pad(c, 2);
+	}
+
+	private static String district(String c) {
+		return pad(c, 4);
+	}
+
+	private static String commune(String c) {
+		return pad(c, 6);
+	}
+
+	private static String village(String c) {
+		return pad(c, 8);
 	}
 
 	/**

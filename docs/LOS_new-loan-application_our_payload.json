@@ -17,8 +17,8 @@
     "CustP_CAddStreet": "",
     "CustP_CBEmploymentContractType": "",
     "CustP_CBEmploymentStatus": "",
-    "CustP_CBEmploymentType": "",
-    "CustP_CBIdIssuedBy": "",
+    "CustP_CBEmploymentType": "E",
+    "CustP_CBIdIssuedBy": "1",
     "CustP_CBIdType": "N",
     "CustP_CBMaritalStatus": "S",
     "CustP_CBSex": "M",
@@ -56,8 +56,8 @@
     "CustP_Occupation": "",
     "CustP_POBCBCommune": "",
     "CustP_POBCBCountry": "KHM",
-    "CustP_POBCBDistrict": "701",
-    "CustP_POBCBProvinceCity": "7",
+    "CustP_POBCBDistrict": "0701",
+    "CustP_POBCBProvinceCity": "07",
     "CustP_POBCBVillage": "",
     "CustP_PRAddCBCoincide": true,
     "CustP_PRAddCBCommune": "120807",
@@ -98,7 +98,7 @@
     "MonthlyExpenses": [],
     "MonthlyIncomes": [
       {
-        "IncomeType": "",
+        "IncomeType": "S",
         "IncomeAmount": 500.0,
         "Currency": "USD"
       }
