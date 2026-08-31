@@ -174,3 +174,40 @@ the NCDD width (2/4/6/8) at submit time.
   `CustP_BusinessActivity` (8-digit), `CustP_CBEmploymentContractType`/`Status`,
   `CustP_ChildNo`, `MonthlyExpenses`, `LoanUtilizationProject`, and whether to
   split house number from street (`PRAddNo` + `PRAddStreet`).
+
+---
+
+## Update — the REAL payday reference (2026-08-31)
+
+Sambat sent a second reference, this one genuinely payday
+(`LR_CBProductType="PDL"`, a filled-in loan, real ~1.7 MB documents, customer
+CIF 56). Still 102 for 102 on structure. It settled every payday loan code —
+all now in `application.properties`:
+
+| field | payday value |
+|---|---|
+| `LR_CBProductType` | `PDL` |
+| `LR_CBLoanCategory` | `SIL` |
+| `LR_CBRepaymentMethod` + `LR_LoanTerm` | `EMI` + `1` — one installment = a single bullet repayment |
+| `LR_DisbursementScheme` | `4` |
+| `PC_PaymentChannel` | `BANK` |
+| `CustP_CBEmploymentContractType` | `N/A` (their payday convention) |
+
+**The submit gate is now down to `hid-current-user-id` alone** — the LOS user
+id for our integration account, which only Sambat can give us.
+
+### Still needs Sambat / a signup change
+- `hidCurrentUserId` — our integration user id (the one hard blocker).
+- `PC_PaymentChannelName` — a bank CODE (`31`); we hold the bank NAME. Need the
+  bank-code list.
+- `CustP_EntityFactoryId` — now populated (`G30020`), so it IS required. Need an
+  employer-entity code source.
+- `CustP_Occupation` / `CustP_BusinessActivity` — numeric codes; drive our
+  dropdowns from `/occupation` etc.
+- `CustP_CBEmploymentStatus` (`2`), `CustP_ChildNo`, `MonthlyExpenses`,
+  `LoanUtilizationProject`, `LR_TotalBudget*` — signup capture, or confirm they
+  are optional for payday.
+- Unknown place-of-birth commune/village: they send `000000` / `00000000`
+  (zero-fill); we send blank — confirm which they require.
+- Amounts/term arrive as strings in this reference, numbers in the earlier one;
+  their swagger types them as numbers and we follow it — confirm the LOS coerces.
