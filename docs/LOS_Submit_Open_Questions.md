@@ -134,3 +134,43 @@ they are mandatory, this is a change to our signup screens, not a mapping fix.
 
 *Prepared from `docs/sbf_tricube_uat_api_docs.json`, `docs/api spec/Appendix 2.docx`
 and your two sample payloads.*
+
+---
+
+## Update — Sambat's reference payload received (2026-08-30)
+
+Manith sent a real `POST /new-loan-application` reference. Diffed field-for-field
+against ours (`docs/LOS_new-loan-application_our_payload.json`): **the key set
+matches exactly, 102 for 102.**
+
+**Their reference is an EMI, 3-installment, `LR_CBProductType="SIL"` loan — NOT
+our single-bullet payday product.** So it settles customer-level fields but does
+*not* answer the loan-terms questions; those still need payday-specific values.
+
+### Bug the diff found (fixed, commit c9329c8)
+Their dictionary returns geo codes as integers (Kampot = `7`, its districts
+`701`/`702`); their loan payload restores the leading zeros (`07` / `0702` /
+`070204`). We were sending the unpadded form, which would misfile every address
+in the **nine single-digit provinces (codes 1–9)**. The mapper now zero-pads to
+the NCDD width (2/4/6/8) at submit time.
+
+### Answered — adopted
+- `CustP_CBEmploymentType = E`, `CustP_CBIdIssuedBy = 1` → set as config; the
+  submit gate no longer blocks on them.
+- `MonthlyIncomes[].IncomeType = "S"` (Salary) → wired.
+- `CustP_EmployerName` is a plain **name** ("Sambat Finance PLC"), not a code —
+  we were already right.
+- `LocationId` optional (they fill only EmpAdd); `CustP_EntityFactoryId` empty
+  even for their employee (not mandatory for a normal employee).
+
+### Still open — payday-specific
+- `LR_CBProductType` (they sent SIL, swagger said PDL), `LR_CBLoanCategory`
+  (null), `LR_CBRepaymentMethod` (EMI vs our bullet), `LR_LoanTerm` (3
+  installments vs our 15 days), `LR_DisbursementScheme` (empty),
+  `PC_PaymentChannel` / `PC_PaymentChannelName` (empty), `hidCurrentUserId`.
+
+### Needs a signup-form change or master-list mapping
+- `CustP_Occupation` (numeric code `61` → drive our dropdown from `/occupation`),
+  `CustP_BusinessActivity` (8-digit), `CustP_CBEmploymentContractType`/`Status`,
+  `CustP_ChildNo`, `MonthlyExpenses`, `LoanUtilizationProject`, and whether to
+  split house number from street (`PRAddNo` + `PRAddStreet`).
