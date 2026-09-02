@@ -42,6 +42,18 @@ public class PdlDictionaryAdminController {
 	private com.fasterxml.jackson.databind.ObjectMapper om;
 
 	/**
+	 * Code-list read for the LPO console — same rows as the public
+	 * {@code /pdl/dictionary/list}, but behind ADMIN so it can also serve
+	 * EMPLOYER (Sambat's approved-employer client list, which the public
+	 * endpoint refuses).
+	 */
+	@org.springframework.web.bind.annotation.GetMapping("/list")
+	public ResponseEntity<Message<java.util.List<com.ezetik.kjeypapa.pdl.model.PdlCodeList>>> list(
+			@org.springframework.web.bind.annotation.RequestParam String name) {
+		return dictionary.list(name);
+	}
+
+	/**
 	 * Pull Sambat's dictionaries now. The read endpoints never fetch, so this
 	 * and the nightly job are the only callers.
 	 */

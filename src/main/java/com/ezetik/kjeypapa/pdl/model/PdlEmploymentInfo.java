@@ -42,6 +42,14 @@ public class PdlEmploymentInfo extends UserDateAudit {
 
 	private String employmentType; // Employee, Self-employed, ...
 	private String employerName;
+
+	/**
+	 * Sambat's employer entity code ({@code CustP_EntityFactoryId}, e.g.
+	 * G30020) — {@code comId} from their GET /employer list. Assigned by the
+	 * LPO at account approval, never by the customer.
+	 */
+	@Column(length = 16)
+	private String employerCode;
 	private String businessActivities;
 	private String occupation;
 	private Instant employmentStartDate;

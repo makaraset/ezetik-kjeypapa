@@ -61,6 +61,7 @@ public class PdlAdminController {
 		String decidedBy = SecurityContextHolder.getContext().getAuthentication() != null
 				? SecurityContextHolder.getContext().getAuthentication().getName()
 				: "ADMIN";
-		return service.decide(id, approve, reason, decidedBy);
+		String employerCode = body.get("employerCode") == null ? null : String.valueOf(body.get("employerCode"));
+		return service.decide(id, approve, reason, decidedBy, employerCode);
 	}
 }

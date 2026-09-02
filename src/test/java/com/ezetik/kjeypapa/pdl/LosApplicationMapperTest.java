@@ -214,4 +214,53 @@ class LosApplicationMapperTest {
 		assertThat(map().getCustP_CBIdType()).isEmpty();
 		assertThat(mapper.idTypeCode(null)).isEmpty();
 	}
+
+	@Test
+	@DisplayName("screen 7's employment type maps to their status id: 1 self / 2 employee / 3 other")
+	void employmentStatus() {
+		var ei = new com.ezetik.kjeypapa.pdl.model.PdlEmploymentInfo();
+		ei.setEmploymentType("Employee");
+		when(employmentRepo.findByUser(1)).thenReturn(java.util.List.of(ei));
+		assertThat(map().getCustP_CBEmploymentStatus()).isEqualTo("2");
+		assertThat(LosApplicationMapper.employmentStatusCode("Self-employed")).isEqualTo("1");
+		assertThat(LosApplicationMapper.employmentStatusCode("self employed")).isEqualTo("1");
+		assertThat(LosApplicationMapper.employmentStatusCode("Freelancer")).isEqualTo("3");
+		// Blank stays blank: an absent answer is not "other".
+		assertThat(LosApplicationMapper.employmentStatusCode(null)).isEmpty();
+		assertThat(LosApplicationMapper.employmentStatusCode(" ")).isEmpty();
+	}
+
+	@Test
+	@DisplayName("EntityFactoryId carries the LPO-assigned employer code, blank until assigned")
+	void entityFactoryId() {
+		var ei = new com.ezetik.kjeypapa.pdl.model.PdlEmploymentInfo();
+		when(employmentRepo.findByUser(1)).thenReturn(java.util.List.of(ei));
+		assertThat(map().getCustP_EntityFactoryId()).isEmpty();
+		ei.setEmployerCode("G30020");
+		assertThat(map().getCustP_EntityFactoryId()).isEqualTo("G30020");
+	}
+
+	@Test
+	@DisplayName("unknown place-of-birth levels are zero-filled to NCDD width, never blank")
+	void pobZeroFill() {
+		// Sambat (2026-08-31): unknown POB is zero-filled. Commune and village
+		// are never captured, so they are always zeros; blank province/district
+		// zero-fill too, while a held code still goes out as itself.
+		NewApplicationRequest r = map();
+		assertThat(r.getCustP_POBCBProvinceCity()).isEqualTo("12");
+		assertThat(r.getCustP_POBCBCommune()).isEqualTo("000000");
+		assertThat(r.getCustP_POBCBVillage()).isEqualTo("00000000");
+		pi.setBirthProvinceCode(null);
+		pi.setBirthDistrictCode("");
+		r = map();
+		assertThat(r.getCustP_POBCBProvinceCity()).isEqualTo("00");
+		assertThat(r.getCustP_POBCBDistrict()).isEqualTo("0000");
+	}
+
+	@Test
+	@DisplayName("payment channel name comes from config — sheet row 12 for now")
+	void paymentChannelName() {
+		when(config.getPaymentChannelName()).thenReturn("12");
+		assertThat(map().getPC_PaymentChannelName()).isEqualTo("12");
+	}
 }

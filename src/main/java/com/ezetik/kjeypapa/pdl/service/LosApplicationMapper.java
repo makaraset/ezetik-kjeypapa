@@ -145,9 +145,14 @@ public class LosApplicationMapper {
 			r.setCustP_PRAddCBCoincide(sameAddress(pi));
 
 			// Place of birth: the form collects province and district only.
+			// Sambat's convention for an unknown POB level is zero-fill to the
+			// NCDD width (confirmed 2026-08-31), so the uncaptured commune and
+			// village always go as zeros, and blank province/district do too.
 			r.setCustP_POBCBCountry(KHM);
-			r.setCustP_POBCBProvinceCity(province(pi.getBirthProvinceCode()));
-			r.setCustP_POBCBDistrict(district(pi.getBirthDistrictCode()));
+			r.setCustP_POBCBProvinceCity(zeroIfBlank(province(pi.getBirthProvinceCode()), 2));
+			r.setCustP_POBCBDistrict(zeroIfBlank(district(pi.getBirthDistrictCode()), 4));
+			r.setCustP_POBCBCommune("000000");
+			r.setCustP_POBCBVillage("00000000");
 
 			// CustP_CAddLocationId / PRAddLocationId / EmpAddLocationId are
 			// Google Maps coordinates (Sambat, 2026-08-28). The app does not
@@ -170,6 +175,12 @@ public class LosApplicationMapper {
 			r.setCustP_EmpAddCBVillage(village(ei.getWorkVillageCode()));
 			r.setCustP_CBEmploymentType(str(config.getEmploymentType()));
 			r.setCustP_CBEmploymentContractType(str(config.getEmploymentContractType()));
+			// Screen 7's employment type IS their status code (Sambat,
+			// 2026-08-31): 1 self-employed, 2 employee, 3 other.
+			r.setCustP_CBEmploymentStatus(employmentStatusCode(ei.getEmploymentType()));
+			// The employer entity code the LPO assigned at approval (their
+			// /employer comId). Blank until assigned — MissingData names it.
+			r.setCustP_EntityFactoryId(str(ei.getEmployerCode()));
 
 			if (ei.getMonthlyIncome() != null && ei.getMonthlyIncome() > 0) {
 				MonthlyIncomeItem income = new MonthlyIncomeItem();
@@ -195,10 +206,13 @@ public class LosApplicationMapper {
 		r.setAgreedFirstDueDate(losDate(loan.getRepaymentDate()));
 
 		// ----- disbursement account -----
+		// Channel and channel-name are config constants (BANK / sheet row 12),
+		// not bank-row data, so they do not depend on the bank row existing.
+		r.setPC_PaymentChannel(str(config.getPaymentChannel()));
+		r.setPC_PaymentChannelName(str(config.getPaymentChannelName()));
 		if (bi != null) {
 			r.setPC_AccountNum(str(bi.getAccountNo()));
 			r.setPC_PaymentChannelAccountName(str(bi.getAccountName()));
-			r.setPC_PaymentChannel(str(config.getPaymentChannel()));
 		}
 
 		// ----- documents -----
@@ -371,6 +385,27 @@ public class LosApplicationMapper {
 		if (c.isEmpty() || c.length() >= width)
 			return c;
 		return "0".repeat(width - c.length()) + c;
+	}
+
+	/**
+	 * Sambat's payment-channel sheet row for now is fixed ("use only #12" =
+	 * BANK / HATTHA BANK PLC, 2026-08-31); per-customer bank mapping comes
+	 * later with their sheet-3 list.
+	 */
+	/** Public so the mapping rule can be pinned by tests. */
+	public static String employmentStatusCode(String employmentType) {
+		String t = str(employmentType).trim().toLowerCase(java.util.Locale.ROOT);
+		if (t.isEmpty())
+			return "";
+		if (t.startsWith("self"))
+			return "1";
+		if (t.startsWith("employ"))
+			return "2";
+		return "3";
+	}
+
+	static String zeroIfBlank(String code, int width) {
+		return code == null || code.isBlank() ? "0".repeat(width) : code;
 	}
 
 	private static String province(String c) {

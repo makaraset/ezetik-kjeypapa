@@ -127,6 +127,7 @@ public class PdlDictionaryService {
 	public String refresh() throws Exception {
 		JsonNode bulk = sbf.bulkSelectionMini();
 		JsonNode addresses = sbf.allAddress();
+		JsonNode employers = sbf.employers();
 
 		// One denormalised call covers all four levels WITH Khmer names, which
 		// the per-level endpoints do not carry at all. Verified complete
@@ -136,6 +137,7 @@ public class PdlDictionaryService {
 		List<PdlCodeList> lists = new ArrayList<>();
 		for (String[] pair : CODE_LISTS)
 			collectList(bulk.path(pair[0]), pair[1], lists);
+		collectEmployers(employers, lists);
 
 		if (geo.isEmpty() && lists.isEmpty())
 			throw new IllegalStateException("Sambat returned no dictionary rows — keeping the previous snapshot");
@@ -200,6 +202,23 @@ public class PdlDictionaryService {
 				continue;
 			out.add(new PdlGeoUnit(level, code, parentField == null ? null : emptyToNull(text(n, parentField)),
 					text(n, "description"), firstNonBlank(n, "descriptionKh", "khDescription", "descriptionKH")));
+		}
+	}
+
+	/**
+	 * {@code /employer} rows: comId is the entity code the LPO assigns at
+	 * approval and the loan application sends as CustP_EntityFactoryId.
+	 * Pure; public so the parsing rules can be pinned by tests.
+	 */
+	public static void collectEmployers(JsonNode array, List<PdlCodeList> out) {
+		if (array == null || !array.isArray())
+			return;
+		for (JsonNode n : array) {
+			String code = text(n, "comId");
+			String name = firstNonBlank(n, "enName", "khName");
+			if (code.isEmpty() || isPlaceholder(name))
+				continue;
+			out.add(new PdlCodeList("EMPLOYER", code, text(n, "enName"), text(n, "khName")));
 		}
 	}
 

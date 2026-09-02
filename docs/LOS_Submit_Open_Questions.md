@@ -211,3 +211,28 @@ id for our integration account, which only Sambat can give us.
   (zero-fill); we send blank — confirm which they require.
 - Amounts/term arrive as strings in this reference, numbers in the earlier one;
   their swagger types them as numbers and we follow it — confirm the LOS coerces.
+
+---
+
+## Update — Sambat answered the remaining set (2026-08-31, implemented 2026-09-02)
+
+Their answers, and what we did with each:
+
+| question | their answer | our implementation |
+|---|---|---|
+| `hidCurrentUserId` | fixed `575` for now (UAT) | `los.hid-current-user-id=575` — **the submit gate is now fully satisfied**; only `los.mock.enabled` stands between the app and a real UAT submission |
+| `PC_PaymentChannelName` | their "Payment Channel Code.xlsx"; "use only #12 for now" | `los.const.payment-channel-name=12` (#12 = BANK / HATTHA BANK PLC). Full 78-row sheet kept in-repo at `docs/payment_channel_codes.csv`; per-customer bank mapping later |
+| `CustP_EntityFactoryId` | the employer, from their `GET /employer` list; assigned by the LPO after approving the account request, stored in our DB | Mirrored `/employer` into the dictionary as list `EMPLOYER` (326 rows, code = `comId`, admin-only — it is their client list, so the unauthenticated dictionary endpoint refuses it). New `employer_code` column on `pdl_employment_info`; the LPO console's Approve now opens an employer picker and the decision endpoint stores the choice; the mapper sends it |
+| `CustP_CBEmploymentStatus` | screen 7's answer, as their id: 1 self-employed / 2 employee / 3 other | Mapped from the stored employment type (`Self-employed`→1, `Employee`→2, else→3; blank stays blank). Payday is always Employee → `2` |
+| `CustP_ChildNo`, `MonthlyExpenses`, `LoanUtilizationProject` | keep optional for now | No change — they go out blank/0 |
+| unknown place of birth | zero-fill (`00000000`) | POB commune/village always `000000`/`00000000` (never captured); blank POB province/district zero-fill too. A held code still goes out as itself |
+
+Verified on the live preview (loan 18): all of the above render exactly as
+specified, and `LosSubmitConfig.missingSettings()` is empty for the first time.
+
+### Still open (non-blocking)
+- `CustP_Occupation` / `CustP_BusinessActivity` — numeric codes; needs the
+  signup dropdowns driven from `/occupation` (deliberately later).
+- Per-customer bank → payment-channel-name mapping (sheet 3), once Sambat moves
+  off "only #12".
+- Amounts-as-strings coercion question stands.

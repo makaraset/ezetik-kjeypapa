@@ -250,6 +250,16 @@ public class PdlAccountRequestService {
 	 */
 	@Transactional
 	public ResponseEntity<Message<String>> decide(int requestId, boolean approve, String reason, String decidedBy) {
+		return decide(requestId, approve, reason, decidedBy, null);
+	}
+
+	/**
+	 * @param employerCode Sambat's employer entity code (comId from their
+	 *                     /employer list), chosen by the LPO on approval; the
+	 *                     loan application sends it as CustP_EntityFactoryId.
+	 */
+	public ResponseEntity<Message<String>> decide(int requestId, boolean approve, String reason, String decidedBy,
+			String employerCode) {
 		PdlAccountRequest req = requestRepo.findById(requestId).orElse(null);
 		if (req == null)
 			return resp2("NOT_FOUND", "Account request not found: " + requestId, null, HttpStatus.OK);
@@ -277,6 +287,8 @@ public class PdlAccountRequestService {
 				ei.setVerified(true);
 				ei.setVerifiedBy(decidedBy);
 				ei.setVerifiedDate(now);
+				if (employerCode != null && !employerCode.isBlank())
+					ei.setEmployerCode(employerCode.trim());
 				employmentRepo.save(ei);
 			}
 			for (var bi : bankRepo.findByUser(u.getId())) {

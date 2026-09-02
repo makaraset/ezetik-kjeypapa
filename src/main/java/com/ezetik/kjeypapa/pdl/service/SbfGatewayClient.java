@@ -213,6 +213,22 @@ public class SbfGatewayClient {
 		return mapper.readTree(resp.body());
 	}
 
+	/**
+	 * {@code GET /employer} — Sambat's APPROVED employer list. {@code comId} is
+	 * the employer entity code the loan application carries as
+	 * {@code CustP_EntityFactoryId} ("G30020" in their reference); the LPO
+	 * assigns it during account approval.
+	 */
+	public JsonNode employers() throws Exception {
+		HttpRequest req = HttpRequest.newBuilder().uri(new URI(urlApi + "/employer"))
+				.header("Authorization", "Bearer " + token())
+				.timeout(Duration.ofSeconds(dictionaryTimeoutSeconds)).GET().build();
+		HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+		if (resp.statusCode() != 200)
+			throw new IllegalStateException("SBF /employer returned " + resp.statusCode());
+		return mapper.readTree(resp.body());
+	}
+
 	public Integer findCifByIdNo(String idNo) throws Exception {
 		String url = urlApi + "/customer-information/by-idno?idNo="
 				+ URLEncoder.encode(idNo, StandardCharsets.UTF_8) + "&page=0&size=1";

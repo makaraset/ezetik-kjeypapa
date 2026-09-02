@@ -144,4 +144,21 @@ class PdlDictionaryParsingTest {
 		assertThat(PdlDictionaryService.isPlaceholder("- - -")).isTrue();
 		assertThat(PdlDictionaryService.isPlaceholder("Passport")).isFalse();
 	}
+
+	@Test
+	@DisplayName("/employer rows: comId is the code, deleted/blank rows are skipped")
+	void collectEmployers() throws Exception {
+		JsonNode arr = om.readTree("""
+				[{"comId":"G30020","enName":"EZETIK CO., LTD.","khName":"អ៊ីហ្សេទិក","sector":"IT","status":"A","type":"P"},
+				 {"comId":"","enName":"No Code Co"},
+				 {"comId":"G99999","enName":".","khName":""}]
+				""");
+		List<PdlCodeList> out = new ArrayList<>();
+		PdlDictionaryService.collectEmployers(arr, out);
+		assertThat(out).hasSize(1);
+		assertThat(out.get(0).getListName()).isEqualTo("EMPLOYER");
+		assertThat(out.get(0).getCode()).isEqualTo("G30020");
+		assertThat(out.get(0).getNameEn()).isEqualTo("EZETIK CO., LTD.");
+		assertThat(out.get(0).getNameKh()).isEqualTo("អ៊ីហ្សេទិក");
+	}
 }

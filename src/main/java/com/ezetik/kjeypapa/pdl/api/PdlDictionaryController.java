@@ -51,6 +51,11 @@ public class PdlDictionaryController {
 	/** @param name OCCUPATION | MARITAL_STATUS | NATIONALITY | COUNTRY | ID_TYPE | ID_ISSUER | BUSINESS_ACTIVITY */
 	@GetMapping("/list")
 	public ResponseEntity<Message<List<PdlCodeList>>> list(@RequestParam String name) {
+		// EMPLOYER is Sambat's approved-employer CLIENT list, not public master
+		// data like the rest — this endpoint is unauthenticated for the signup
+		// pickers, so that one list is served by the admin controller only.
+		if ("EMPLOYER".equalsIgnoreCase(name == null ? "" : name.trim()))
+			return ResponseEntity.ok(new Message<>("SUCCESS", "OK", List.of()));
 		return service.list(name);
 	}
 

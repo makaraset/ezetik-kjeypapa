@@ -73,6 +73,10 @@ public class LosSubmitConfig {
 	@Value("${los.const.payment-channel:}")
 	private String paymentChannel;
 
+	/** Payment-channel sheet row id (bank). "Use only #12" for now — Sambat, 2026-08-31. */
+	@Value("${los.const.payment-channel-name:}")
+	private String paymentChannelName;
+
 	/** Ordered so the operator sees them in the shape of the questions to ask. */
 	private Map<String, String> settings() {
 		Map<String, String> m = new LinkedHashMap<>();
@@ -86,6 +90,7 @@ public class LosSubmitConfig {
 		m.put("los.const.employment-contract-type", employmentContractType);
 		m.put("los.const.id-issued-by", idIssuedBy);
 		m.put("los.const.payment-channel", paymentChannel);
+		m.put("los.const.payment-channel-name", paymentChannelName);
 		return m;
 	}
 
