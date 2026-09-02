@@ -236,3 +236,16 @@ specified, and `LosSubmitConfig.missingSettings()` is empty for the first time.
 - Per-customer bank → payment-channel-name mapping (sheet 3), once Sambat moves
   off "only #12".
 - Amounts-as-strings coercion question stands.
+
+---
+
+## First real submit attempted — SBF-side failure (2026-09-02)
+
+With the gate fully satisfied, the first two live submissions (loan 19,
+customer CIF 70, $9.93/15d) failed on Sambat's side: attempt 1 → HTTP 500
+after ~90 s; attempt 2 → no response within our 120 s timeout. Same
+host/token served the dictionary endpoints fine minutes before, payload ≈1 MB
+and format-identical to their reference. Full evidence for Sambat in
+`docs/LOS_Submit_Incident_2026-09-02.md`. Loan 19 remains Draft — resubmit is
+one tap once they confirm a fix. Open question for them: does the 500 come
+from the custId 70 lookup or the unknown `doneBy`/user context?
