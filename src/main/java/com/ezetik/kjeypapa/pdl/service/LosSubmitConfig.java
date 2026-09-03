@@ -33,7 +33,13 @@ public class LosSubmitConfig {
 	@Value("${los.hid-current-user-id:}")
 	private String hidCurrentUserId;
 
-	/** "Mobile App ID" per Appendix 2. Vendor sample sends 0. */
+	/**
+	 * The envelope {@code appId} — Sambat's LOS AppId (confirmed 2026-09-03).
+	 * This is only the value for a NEW application: {@code 0} asks them to
+	 * create one. A loan that already holds an AppId sends that instead, so a
+	 * retry updates the existing application rather than filing a duplicate
+	 * (see {@link LosApplicationMapper}).
+	 */
 	@Value("${los.app-id:0}")
 	private long appId;
 

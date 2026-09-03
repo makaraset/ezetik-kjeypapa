@@ -91,7 +91,12 @@ public class LosApplicationMapper {
 		PdlBankInfo bi = first(bankRepo.findByUser(uid));
 
 		NewApplicationParam param = new NewApplicationParam();
-		param.setAppId(config.getAppId());
+		// The envelope appId IS Sambat's LOS AppId (confirmed 2026-09-03): 0
+		// asks them to create an application, an existing id updates that one.
+		// Submitting is retryable, so once we hold an AppId we must send it
+		// back — otherwise a retry files a SECOND credit application for the
+		// same loan, with its own CBC enquiry, under the customer's name.
+		param.setAppId(loan.getLosAppId() != null ? loan.getLosAppId() : config.getAppId());
 		// custId is the SBF CIF, or 0 for a customer they have never seen.
 		param.setCustId(cif(loan));
 		// A constant, NEVER the customer's username: their LOS dies with a slow

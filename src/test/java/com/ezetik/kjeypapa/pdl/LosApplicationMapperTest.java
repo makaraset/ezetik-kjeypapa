@@ -324,4 +324,18 @@ class LosApplicationMapperTest {
 		assertThat(rows.get(0).getExpenseAmount()).isZero();
 		assertThat(rows.get(0).getCurrency()).isEqualTo("USD");
 	}
+
+	@Test
+	@DisplayName("a resubmit sends the AppId we already hold, so it updates instead of duplicating")
+	void resubmitReusesTheirAppId() {
+		// The envelope appId IS their LOS AppId (Sambat, 2026-09-03): 0 creates.
+		// Submitting is retryable, so sending 0 again after a partial failure
+		// would file a second credit application — and a second CBC enquiry —
+		// for the same loan.
+		when(config.getAppId()).thenReturn(0L);
+		assertThat(mapper.toParam(loan).getAppId()).isZero();
+
+		loan.setLosAppId(8281L);
+		assertThat(mapper.toParam(loan).getAppId()).isEqualTo(8281L);
+	}
 }

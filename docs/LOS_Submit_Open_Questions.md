@@ -395,3 +395,29 @@ far: 8277/257839, 8278/257843, 8279/257852, 8280/257857, 8281/257861 (KHR).
 **Please confirm:** which field name will the webhook payload carry the AppId
 in? We match defensively on both columns today, but if you send it as
 something other than `losApplicationNo` we should map it explicitly.
+
+---
+
+## The envelope `appId` IS the LOS AppId — retries were duplicating (2026-09-03)
+
+Sambat: the request envelope's `"appId": 0` is their **LOS AppId**. So `0`
+means "create an application", and sending an existing AppId updates that one.
+
+We were sending `0` on **every** submit, including retries — so a loan that
+already had an AppId (loan 23 held 8281) would, on resubmit, have filed a
+SECOND credit application for the same loan, with its own CBC enquiry, under
+the customer's name. Fixed: the mapper now sends the loan's stored
+`losAppId` when it has one, and only falls back to `los.app-id=0` for a first
+submit. Verified live — loan 23's envelope now carries `appId: 8281`.
+
+### Please check for orphaned applications on your side
+Two of our earlier attempts **timed out at 120 s with no response**, so we
+cannot know whether your LOS created an application before we gave up:
+
+- 2026-09-03 ~15:05, customer CIF 70 (loan 21 flow, KHR then USD control)
+- the 12:07 attempt on the same customer (loan 19 flow)
+
+Our records hold exactly five AppIds for CIF 70: **8277, 8278, 8279, 8280,
+8281**. If your console shows any others for that customer, they are orphans
+created by those timed-out requests and should be cancelled — please confirm
+the full list so we can reconcile.
