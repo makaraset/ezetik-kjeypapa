@@ -137,8 +137,19 @@ public class SbfGatewayClient {
 	 * whether it worked; and when the status really is non-200 the body
 	 * usually explains why, so it is worth keeping.
 	 */
+	/** Sambat's gateway limit for a loan application (2026-09-03): 50 MB total. */
+	private static final long LOS_MAX_REQUEST_BYTES = 50L * 1024 * 1024;
+
 	public JsonNode newLoanApplication(Object param) throws Exception {
 		String body = mapper.writeValueAsString(param);
+		// Refuse locally rather than push an oversized request they will reject
+		// opaquely — five phone-camera documents can grow past this once
+		// base64-encoded, and the customer deserves a message they can act on.
+		long bytes = body.getBytes(StandardCharsets.UTF_8).length;
+		if (bytes > LOS_MAX_REQUEST_BYTES)
+			throw new LosSubmitException("LOS_REQUEST_TOO_LARGE",
+					"The application documents are too large to send (" + (bytes / (1024 * 1024))
+							+ " MB, limit 50 MB). Please retake the photos.");
 		HttpRequest req = HttpRequest.newBuilder().uri(new URI(losUrlApi + "/new-loan-application"))
 				.header("Content-Type", "application/json")
 				.header("Authorization", "Bearer " + token())

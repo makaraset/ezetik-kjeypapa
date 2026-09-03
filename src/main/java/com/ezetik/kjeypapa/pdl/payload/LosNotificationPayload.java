@@ -19,6 +19,13 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class LosNotificationPayload {
 
+	/**
+	 * Sambat's LOS AppId — the id they identify an application by, and the
+	 * field name they confirmed their callbacks use (2026-09-03). Preferred
+	 * over {@code losApplicationNo} (their AppRefId) when both are present.
+	 */
+	private Long appId;
+
 	private String losApplicationNo;
 	private String statusCode; // R-LPO / R-AO / RW-LPO / RW-AO
 	private String message; // user-facing reason / comment

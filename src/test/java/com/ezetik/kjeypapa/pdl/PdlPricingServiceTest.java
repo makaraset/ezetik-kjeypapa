@@ -65,11 +65,11 @@ class PdlPricingServiceTest {
 	void quote_khrUsesKhrTiersAndConvertedFees() {
 		PdlQuoteResponse q = pricing.quote(PdlLoanTypeEnum.PAYDAY, "KHR", 200000.0);
 
-		// principal = 200000 / 1.0075 = 198511.166… → whole riel; fees = (3+1) × 4100
-		assertThat(q.getLoanAmount()).isEqualTo(198511.0);
+		// principal = 200000 / 1.0075 = 198511.166… → nearest 100 riel
+		assertThat(q.getLoanAmount()).isEqualTo(198500.0);
 		assertThat(q.getProcessingFee()).isEqualTo(12300.0);
 		assertThat(q.getCbcEnquiryFee()).isEqualTo(4100.0);
-		assertThat(q.getNetDisbursedAmount()).isEqualTo(182111.0);
+		assertThat(q.getNetDisbursedAmount()).isEqualTo(182100.0);
 	}
 
 	@Test
@@ -83,13 +83,13 @@ class PdlPricingServiceTest {
 
 	@Test
 	void quote_khrIsWholeRielAndTheBreakdownReconciles() {
-		// Riel has no circulating subunit, so a KHR quote must not emit
-		// fractions (we filed 39,702.23 KHR at Sambat before this was fixed).
+		// 100 KHR is the smallest practical note, so every figure a customer
+		// sees must be payable in cash (we filed 39,702.23 KHR before this).
 		for (double tier : new double[] { 40000, 80000, 120000, 160000, 200000 }) {
 			PdlQuoteResponse q = pricing.quote(PdlLoanTypeEnum.PAYDAY, "KHR", tier);
-			assertThat(q.getLoanAmount()).isEqualTo(Math.rint(q.getLoanAmount()));
-			assertThat(q.getInterestAmount()).isEqualTo(Math.rint(q.getInterestAmount()));
-			assertThat(q.getNetDisbursedAmount()).isEqualTo(Math.rint(q.getNetDisbursedAmount()));
+			assertThat(q.getLoanAmount() % 100).isZero();
+			assertThat(q.getInterestAmount() % 100).isZero();
+			assertThat(q.getNetDisbursedAmount() % 100).isZero();
 			// The figures on screen must add up exactly, after rounding.
 			assertThat(q.getLoanAmount() + q.getInterestAmount()).isEqualTo(tier);
 			assertThat(q.getNetDisbursedAmount() + q.getProcessingFee() + q.getCbcEnquiryFee())

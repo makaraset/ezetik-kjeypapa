@@ -81,6 +81,9 @@ class LosApplicationMapperTest {
 		// match null.
 		when(docs.build(nullable(String.class), any(), anyInt()))
 				.thenReturn(LosDocumentAssembler.Doc.EMPTY);
+		// Sambat wants both ID sides merged, so the mapper calls mergedNid now.
+		when(docs.mergedNid(nullable(String.class), nullable(String.class), anyInt()))
+				.thenReturn(LosDocumentAssembler.Doc.EMPTY);
 		when(codeRepo.findFirstByListNameAndNameEnIgnoreCase(eq("MARITAL_STATUS"), eq("Married")))
 				.thenReturn(new PdlCodeList("MARITAL_STATUS", "M", "Married", ""));
 

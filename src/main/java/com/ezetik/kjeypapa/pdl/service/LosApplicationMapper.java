@@ -255,10 +255,9 @@ public class LosApplicationMapper {
 		// ----- documents -----
 		int id = loan.getId() == null ? 0 : loan.getId();
 		if (pi != null) {
-			// LOS has ONE NID slot and we hold two sides; the front carries the
-			// printed fields, so it is the one that goes. Sending the back
-			// instead of, or merged with, the front is a question for Sambat.
-			put(r, docs.build(pi.getNidFrontFileRef(), "NID", id), "NID");
+			// LOS has ONE NID slot and a Cambodian ID has two sides. Sambat
+			// asked for the two MERGED into one image (2026-09-03).
+			put(r, docs.mergedNid(pi.getNidFrontFileRef(), pi.getNidBackFileRef(), id), "NID");
 			put(r, docs.build(pi.getProfilePhotoFileRef(), "ProfilePhoto", id), "ProfilePhoto");
 		}
 		if (ei != null)

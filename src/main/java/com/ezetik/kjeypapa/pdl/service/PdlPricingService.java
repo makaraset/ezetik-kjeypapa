@@ -127,13 +127,17 @@ public class PdlPricingService {
 	/**
 	 * Money rounding for the quote currency.
 	 *
-	 * <p>Riel has no circulating subunit — there is no such thing as 0.23 KHR —
-	 * so a KHR quote is rounded to whole riel. Dollars keep two decimals.
-	 * Everything the customer sees and everything sent to Sambat goes through
-	 * here, so the figures stay internally consistent.
+	 * <p>KHR is rounded to the nearest <b>100 riel</b> (Makara, 2026-09-03):
+	 * riel has no circulating subunit and 100 KHR is the smallest practical
+	 * note, so a quote to the riel would still not be payable in cash.
+	 * Dollars keep two decimals. Everything the customer sees and everything
+	 * sent to Sambat goes through here, so the figures stay consistent.
+	 *
+	 * <p>A negative scale is what rounds to hundreds; {@code setScale(-2)} on
+	 * 39,702.23 gives 39,700.
 	 */
 	private static double roundMoney(String currency, double v) {
-		int scale = "KHR".equalsIgnoreCase(currency) ? 0 : 2;
+		int scale = "KHR".equalsIgnoreCase(currency) ? -2 : 2;
 		return BigDecimal.valueOf(v).setScale(scale, RoundingMode.HALF_UP).doubleValue();
 	}
 }

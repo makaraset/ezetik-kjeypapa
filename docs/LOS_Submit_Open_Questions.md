@@ -424,3 +424,42 @@ Our records hold exactly five AppIds for CIF 70: **8277, 8278, 8279, 8280,
 8281**. If your console shows any others for that customer, they are orphans
 created by those timed-out requests and should be cancelled — please confirm
 the full list so we can reconcile.
+
+---
+
+## Sambat answered the full open list — implemented (2026-09-03)
+
+| # | Their answer | What changed |
+|---|---|---|
+| A1 | `doneBy="KjeyPapa"`, `hidCurrentUserId=575` **for production** | Comments updated; values already live |
+| A2 | The webhook field is **`appId`** | `appId` added to all four callback payloads and preferred when resolving the loan |
+| A3 | Send the stored AppId on retry; they will restrict duplicates LOS-side | Already implemented |
+| A4 | Leave the timed-out orphans on UAT | No action |
+| A5 | Zero-amount `MonthlyExpenses` is fine long term — "micro loan doesn't need too much info" | Kept; comment no longer calls it provisional |
+| A6 | The utilization row IS the loan purpose: 23 = General consumption, unit 1, price = loan | Confirmed as built |
+| A7 | `CustP_ChildNo` / `LR_TotalBudget*` stay optional | No action |
+| A8 | Consent **must be in Khmer**; compliance sign-off later | Consent form now renders in Khmer |
+| A9 | Send **both ID sides merged into one image** | `LosDocumentAssembler.mergedNid` stacks front+back |
+| A10 | Max request size **50 MB** | Guard refuses locally above 50 MB with an actionable message |
+| A11/A18 | Multiple open applications allowed for now | No block added |
+| A12 | Payment channel is **#31 CAMBODIAN PUBLIC BANK PLC**, not #12 | `los.const.payment-channel-name=31` |
+| A13 | Numbers (not strings) accepted | Closed |
+| A14 | They will fix the 500/timeout-on-bad-input behaviour | Closed our side |
+| A19 | Round KHR to **100 riel** (Makara) | Quote rounds to the nearest 100 |
+
+Verified live after the changes: **AppId 8286 / AppRefId 257912** (USD) and
+**AppId 8287 / AppRefId 257916** (KHR 39,700) — both carrying the merged NID,
+the Khmer consent form and channel 31.
+
+### Note on their UAT stability
+Between 22:54 and 23:04 their LOS returned 500s and 120 s timeouts for **both**
+currencies, then recovered and filed in 9 s with no change on our side — the
+third such window today. Any test against their UAT needs a same-window
+control before a conclusion is drawn.
+
+### Still open
+- **A8 compliance sign-off** on the Khmer consent form, and the final EN+KM
+  legal text (A15) — our Khmer wording is an interim translation pending
+  native review.
+- A16 tiers / rejection codes, A17 real bank-app contract + webhook auth
+  credentials, A20 UAT server setup.

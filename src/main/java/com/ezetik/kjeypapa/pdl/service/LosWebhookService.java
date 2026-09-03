@@ -208,9 +208,9 @@ public class LosWebhookService {
 	@Transactional
 	public ResponseEntity<Message<String>> handleDisbursement(LosDisbursementPayload p) {
 		try {
-			PaydayLoan loan = findLoan(p.getLosApplicationNo(), p.getLoanRefNo());
+			PaydayLoan loan = findLoan(reference(p), p.getLoanRefNo());
 			if (loan == null)
-				return notFoundRef(p.getLosApplicationNo(), p.getLoanRefNo());
+				return notFoundRef(reference(p), p.getLoanRefNo());
 
 			if ("DISBURSED".equalsIgnoreCase(p.getDisbursementStatus())) {
 				loan.setDisbursementTxnId(p.getDisbursementTxnId());
@@ -249,9 +249,9 @@ public class LosWebhookService {
 			if (!bankVerificationEnabled)
 				return ok("Ignored — bank-verification hand-off not enabled (pending Sambat contract, Q4)");
 
-			PaydayLoan loan = findLoan(p.getLosApplicationNo(), p.getLoanRefNo());
+			PaydayLoan loan = findLoan(reference(p), p.getLoanRefNo());
 			if (loan == null)
-				return notFoundRef(p.getLosApplicationNo(), p.getLoanRefNo());
+				return notFoundRef(reference(p), p.getLoanRefNo());
 
 			String status = p.getVerificationStatus();
 			if ("SUCCESS".equalsIgnoreCase(status)) {
@@ -290,9 +290,9 @@ public class LosWebhookService {
 	@Transactional
 	public ResponseEntity<Message<String>> handleLoanUpdate(LosLoanUpdatePayload p) {
 		try {
-			PaydayLoan loan = findLoan(p.getLosApplicationNo(), p.getLoanRefNo());
+			PaydayLoan loan = findLoan(reference(p), p.getLoanRefNo());
 			if (loan == null)
-				return notFoundRef(p.getLosApplicationNo(), p.getLoanRefNo());
+				return notFoundRef(reference(p), p.getLoanRefNo());
 
 			if (p.getOutstandingAmount() != null)
 				loan.setOutstandingAmount(p.getOutstandingAmount());
@@ -363,7 +363,32 @@ public class LosWebhookService {
 	// --- helpers ---
 
 	private PaydayLoan find(LosNotificationPayload p) {
-		return p == null ? null : findLoan(p.getLosApplicationNo(), p.getLoanRefNo());
+		return p == null ? null : findLoan(reference(p), p.getLoanRefNo());
+	}
+
+	/**
+	 * Their callbacks carry the AppId in a field named {@code appId}
+	 * (confirmed 2026-09-03); {@code losApplicationNo} stays supported for the
+	 * sample bank app and anything already sending an AppRefId.
+	 */
+	private static String reference(LosNotificationPayload p) {
+		return ref(p.getAppId(), p.getLosApplicationNo());
+	}
+
+	private static String reference(LosDisbursementPayload p) {
+		return ref(p.getAppId(), p.getLosApplicationNo());
+	}
+
+	private static String reference(LosBankVerificationPayload p) {
+		return ref(p.getAppId(), p.getLosApplicationNo());
+	}
+
+	private static String reference(LosLoanUpdatePayload p) {
+		return ref(p.getAppId(), p.getLosApplicationNo());
+	}
+
+	private static String ref(Long appId, String losApplicationNo) {
+		return appId != null ? String.valueOf(appId) : losApplicationNo;
 	}
 
 	/**

@@ -19,6 +19,13 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class LosBankVerificationPayload {
 
+	/**
+	 * Sambat's LOS AppId — the id they identify an application by, and the
+	 * field name their callbacks use (confirmed 2026-09-03). Preferred over
+	 * {@code losApplicationNo} (their AppRefId) when both are present.
+	 */
+	private Long appId;
+
 	private String loanRefNo;
 	private String losApplicationNo;
 	private String eventId;
