@@ -331,9 +331,12 @@ intended payday rule, one of us must enforce it — ask Sambat which side owns i
 > KHR (257861) both filed. Always pair a currency test with a same-window
 > control before concluding anything about their LOS.
 >
-> Still ours to decide: the KHR quote emits **fractional riel** (39,702.23).
-> Their LOS accepts it, so this is purely our own correctness question — riel
-> has no circulating subunit and the amount should be rounded.
+> ~~Still ours to decide: the KHR quote emits fractional riel~~ **DONE
+> (2026-09-03): KHR is now quoted in whole riel.** 40,000 KHR → loan 39,702 +
+> interest 298, net 23,302; every tier reconciles exactly (principal +
+> interest = tier, net + fees = principal). USD keeps cents. Note for
+> reconciliation: application **257861 was filed before this fix** and carries
+> 39,702.23 KHR.
 
 ### Original report (kept for the record)
 

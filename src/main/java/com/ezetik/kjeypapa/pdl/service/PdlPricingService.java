@@ -69,10 +69,12 @@ public class PdlPricingService {
 
 		// interest factor for the period: monthlyRate × days/30 (pro-rated, QC1.3)
 		double factor = (monthlyInterestPercent / 100.0) * periodDays / 30.0;
-		double principal = round2(repaymentAmount / (1 + factor));
-		double interest = round2(repaymentAmount - principal);
+		double principal = roundMoney(cur, repaymentAmount / (1 + factor));
+		// Derived from the ROUNDED principal, never rounded independently, so
+		// principal + interest is exactly the repayment tier the customer sees.
+		double interest = roundMoney(cur, repaymentAmount - principal);
 		double fees = feesFor(cur);
-		double net = round2(principal - fees);
+		double net = roundMoney(cur, principal - fees);
 
 		Instant now = Instant.now();
 		Instant disburse = now.plus(disbursementOffsetDays, ChronoUnit.DAYS);
@@ -114,7 +116,7 @@ public class PdlPricingService {
 
 	private double feeComponent(String currency, double usdFee) {
 		if ("KHR".equalsIgnoreCase(normalizeCurrency(currency)))
-			return round2(usdFee * khrPerUsd);
+			return roundMoney("KHR", usdFee * khrPerUsd);
 		return usdFee;
 	}
 
@@ -122,7 +124,16 @@ public class PdlPricingService {
 		return (c == null || c.isBlank()) ? "USD" : c.trim().toUpperCase();
 	}
 
-	private static double round2(double v) {
-		return BigDecimal.valueOf(v).setScale(2, RoundingMode.HALF_UP).doubleValue();
+	/**
+	 * Money rounding for the quote currency.
+	 *
+	 * <p>Riel has no circulating subunit — there is no such thing as 0.23 KHR —
+	 * so a KHR quote is rounded to whole riel. Dollars keep two decimals.
+	 * Everything the customer sees and everything sent to Sambat goes through
+	 * here, so the figures stay internally consistent.
+	 */
+	private static double roundMoney(String currency, double v) {
+		int scale = "KHR".equalsIgnoreCase(currency) ? 0 : 2;
+		return BigDecimal.valueOf(v).setScale(scale, RoundingMode.HALF_UP).doubleValue();
 	}
 }

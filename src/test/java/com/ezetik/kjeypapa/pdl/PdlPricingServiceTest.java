@@ -65,11 +65,11 @@ class PdlPricingServiceTest {
 	void quote_khrUsesKhrTiersAndConvertedFees() {
 		PdlQuoteResponse q = pricing.quote(PdlLoanTypeEnum.PAYDAY, "KHR", 200000.0);
 
-		// principal = 200000 / 1.0075 = 198511.17; fees = (3+1) × 4100 = 16400
-		assertThat(q.getLoanAmount()).isEqualTo(198511.17);
+		// principal = 200000 / 1.0075 = 198511.166… → whole riel; fees = (3+1) × 4100
+		assertThat(q.getLoanAmount()).isEqualTo(198511.0);
 		assertThat(q.getProcessingFee()).isEqualTo(12300.0);
 		assertThat(q.getCbcEnquiryFee()).isEqualTo(4100.0);
-		assertThat(q.getNetDisbursedAmount()).isEqualTo(182111.17);
+		assertThat(q.getNetDisbursedAmount()).isEqualTo(182111.0);
 	}
 
 	@Test
@@ -79,5 +79,29 @@ class PdlPricingServiceTest {
 		assertThat(pricing.withinProductCap(PdlLoanTypeEnum.MICRO, "USD", 10.0)).isFalse();
 		assertThat(pricing.withinProductCap(PdlLoanTypeEnum.PAYDAY, "KHR", 200000.0)).isTrue();
 		assertThat(pricing.withinProductCap(PdlLoanTypeEnum.PAYDAY, "KHR", 200001.0)).isFalse();
+	}
+
+	@Test
+	void quote_khrIsWholeRielAndTheBreakdownReconciles() {
+		// Riel has no circulating subunit, so a KHR quote must not emit
+		// fractions (we filed 39,702.23 KHR at Sambat before this was fixed).
+		for (double tier : new double[] { 40000, 80000, 120000, 160000, 200000 }) {
+			PdlQuoteResponse q = pricing.quote(PdlLoanTypeEnum.PAYDAY, "KHR", tier);
+			assertThat(q.getLoanAmount()).isEqualTo(Math.rint(q.getLoanAmount()));
+			assertThat(q.getInterestAmount()).isEqualTo(Math.rint(q.getInterestAmount()));
+			assertThat(q.getNetDisbursedAmount()).isEqualTo(Math.rint(q.getNetDisbursedAmount()));
+			// The figures on screen must add up exactly, after rounding.
+			assertThat(q.getLoanAmount() + q.getInterestAmount()).isEqualTo(tier);
+			assertThat(q.getNetDisbursedAmount() + q.getProcessingFee() + q.getCbcEnquiryFee())
+					.isEqualTo(q.getLoanAmount());
+		}
+	}
+
+	@Test
+	void quote_usdKeepsCents() {
+		PdlQuoteResponse q = pricing.quote(PdlLoanTypeEnum.PAYDAY, "USD", 20.0);
+		assertThat(q.getLoanAmount()).isEqualTo(19.85);
+		assertThat(q.getInterestAmount()).isEqualTo(0.15);
+		assertThat(q.getNetDisbursedAmount()).isEqualTo(15.85);
 	}
 }
