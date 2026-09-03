@@ -26,6 +26,12 @@ public interface PaydayLoanRepository extends JpaRepository<PaydayLoan, Integer>
 
 	Optional<PaydayLoan> findByLosApplicationNo(String losApplicationNo);
 
+	/**
+	 * By Sambat's {@code AppId} — the id they actually identify an application
+	 * by (confirmed 2026-09-03); their AppRefId is not generally used.
+	 */
+	Optional<PaydayLoan> findByLosAppId(Long losAppId);
+
 	Optional<PaydayLoan> findByLoanRefNo(String loanRefNo);
 
 	@Query("select new com.ezetik.kjeypapa.pdl.payload.PdlTransaction(p) from PaydayLoan p where p.user.id = :userId order by p.id desc")

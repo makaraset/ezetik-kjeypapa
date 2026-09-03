@@ -363,17 +363,33 @@ public class LosWebhookService {
 	// --- helpers ---
 
 	private PaydayLoan find(LosNotificationPayload p) {
-		if (p == null || p.getLosApplicationNo() == null)
-			return null;
-		return repo.findByLosApplicationNo(p.getLosApplicationNo()).orElse(null);
+		return p == null ? null : findLoan(p.getLosApplicationNo(), p.getLoanRefNo());
 	}
 
-	/** Resolve a loan by LOS application no, falling back to the loan ref no. */
-	private PaydayLoan findLoan(String losApplicationNo, String loanRefNo) {
-		if (losApplicationNo != null) {
-			PaydayLoan l = repo.findByLosApplicationNo(losApplicationNo).orElse(null);
+	/**
+	 * Resolve a loan from whichever identifier Sambat sends.
+	 *
+	 * <p>Their submit response returns BOTH an {@code AppId} (4-digit, e.g.
+	 * 8281) and an {@code AppRefId} (6-digit, e.g. 257861), and Sambat
+	 * confirmed (2026-09-03) that <b>AppId is the id they identify an
+	 * application by</b> — AppRefId is not generally used. The inbound payload
+	 * carries one generic reference field, so a webhook keyed on AppId would
+	 * never have matched the AppRefId we store as losApplicationNo, and every
+	 * status update would have 404'd silently. Try both columns, then the loan
+	 * ref no.
+	 */
+	private PaydayLoan findLoan(String reference, String loanRefNo) {
+		if (reference != null && !reference.isBlank()) {
+			PaydayLoan l = repo.findByLosApplicationNo(reference).orElse(null);
 			if (l != null)
 				return l;
+			try {
+				l = repo.findByLosAppId(Long.valueOf(reference.trim())).orElse(null);
+				if (l != null)
+					return l;
+			} catch (NumberFormatException ignored) {
+				// Not an AppId-shaped value; fall through to the loan ref no.
+			}
 		}
 		if (loanRefNo != null)
 			return repo.findByLoanRefNo(loanRefNo).orElse(null);

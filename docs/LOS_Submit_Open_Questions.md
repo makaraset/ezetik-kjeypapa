@@ -371,3 +371,27 @@ arguably to 100 KHR, the smallest practical note. Not the cause of the failure
 (whole riel failed too), but wrong regardless. Meanwhile a customer choosing
 KHR waits ~2 minutes and gets "Could not reach Sambat's loan system";
 consider hiding the KHR option until Sambat confirms support.
+
+---
+
+## AppId is Sambat's identifier, not AppRefId (2026-09-03)
+
+Sambat: **they identify a LOS application by `AppId`** (4-digit, e.g. 8281);
+`AppRefId` (6-digit, e.g. 257861) is not used in general. We had it backwards —
+`AppRefId` was what `submitApplication` returned, what we stored as
+`losApplicationNo`, what every inbound webhook matched on, and what the app
+displayed.
+
+**Latent bug this exposed:** all six webhook handlers resolved the loan via
+`losApplicationNo` / `loanRefNo` only. A status update keyed on AppId — which
+is how Sambat refers to applications — would have matched nothing and returned
+NOT_FOUND silently, so approvals, rejections and disbursements would never have
+landed. Fixed: the resolver now tries `losApplicationNo`, then `losAppId`, then
+`loanRefNo`, so whichever id they send resolves. Regression test added.
+
+Both ids are stored per loan (`los_app_id`, `los_application_no`) — filed so
+far: 8277/257839, 8278/257843, 8279/257852, 8280/257857, 8281/257861 (KHR).
+
+**Please confirm:** which field name will the webhook payload carry the AppId
+in? We match defensively on both columns today, but if you send it as
+something other than `losApplicationNo` we should map it explicitly.

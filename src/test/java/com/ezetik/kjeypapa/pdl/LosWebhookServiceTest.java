@@ -104,6 +104,27 @@ class LosWebhookServiceTest {
 	}
 
 	@Test
+	void handle_resolvesALoanByTheirAppId() {
+		// Sambat (2026-09-03): AppId (4-digit, e.g. 8281) is the id they
+		// identify an application by; AppRefId is not generally used. We store
+		// AppRefId as losApplicationNo, so a webhook keyed on AppId used to
+		// match nothing and every status update 404'd silently.
+		PaydayLoan loan = new PaydayLoan();
+		loan.setId(1);
+		loan.setLosApplicationNo("257861");
+		loan.setLosAppId(8281L);
+		loan.setStatus(PdlStatusEnum.Submitted);
+		when(repo.findByLosApplicationNo("8281")).thenReturn(Optional.empty());
+		when(repo.findByLosAppId(8281L)).thenReturn(Optional.of(loan));
+		when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+		ResponseEntity<Message<String>> r = service.handleReject(payload("8281", "R-AO", "raw"));
+
+		assertThat(r.getBody().getType()).isEqualTo("SUCCESS");
+		assertThat(loan.getStatus()).isEqualTo(PdlStatusEnum.Rejected);
+	}
+
+	@Test
 	void handle_returnsNotFoundForUnknownLosApplicationNo() {
 		when(repo.findByLosApplicationNo("NOPE")).thenReturn(Optional.empty());
 
