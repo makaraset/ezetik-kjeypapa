@@ -308,3 +308,11 @@ Getting there peeled their validator one MissingData at a time (each earlier
 - Confirm the rendered e-CBC consent PNG satisfies compliance (it reproduces
   the exact in-app consent; no wet signature exists in the V8 flow).
 - Provision/nominate the production `doneBy` + `hidCurrentUserId` pair.
+
+### Second application, pure UI path (2026-09-03)
+Loan 20 ($19.85) ran the whole journey ON-DEVICE — wizard, statement, CBC,
+confirm, the app's own Submit — and filed cleanly: **AppRefId 257843**, LOS
+AppId 8278, ~12 s. Observation for both sides' product rules: our backend and
+their LOS both allowed a SECOND open application for the same customer
+(CIF 70, while 257839 is pending). If one-open-application-per-customer is the
+intended payday rule, one of us must enforce it — ask Sambat which side owns it.
