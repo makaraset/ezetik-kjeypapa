@@ -1,5 +1,14 @@
 # LOS submit incident — first real UAT submission attempts (2026-09-02)
 
+> **RESOLVED 2026-09-03 — root cause was `doneBy`.** Resending the *identical*
+> application with only `doneBy` changed from our app username `010849001` to a
+> known LOS user (`manith.khut`) turned the 90 s hang / 500 into a clean
+> **6.6 s** response carrying a proper `MissingData` list. So the crash was
+> Sambat's LOS choking on a `doneBy` its user table does not know — **`custId`
+> 70 was fine**. See "Resolution" at the bottom. The remaining ask for Sambat
+> is which `doneBy` our integration should send (provision our own LOS user, or
+> nominate one), plus the newly-revealed mandatory fields.
+
 For Sambat/Tricube: our first two live calls to `POST /api/new-loan-application`
 failed **server-side**. Please check your UAT logs around these times
 (Asia/Phnom_Penh):
@@ -30,6 +39,46 @@ your side may want to check first:
 
 Our loan stayed safely in Draft on both failures (no consent stamped, no state
 advanced); we can resubmit the same application on request.
+
+## Resolution — the `doneBy` was the cause (2026-09-03)
+
+We resubmitted the **same** loan 19 (same `custId` 70, same everything) with a
+single change: `doneBy` set to `manith.khut` instead of our app username
+`010849001`.
+
+| submit | `doneBy` | result |
+|---|---|---|
+| 1–2 (2026-09-02) | `010849001` | 500 after ~90 s, then a >120 s hang |
+| 3 (2026-09-03 ~08:53 ICT) | `manith.khut` | **HTTP 200 in 6.6 s**, `MissingData` returned normally |
+
+So the LOS was choking on a `doneBy` its user table does not recognise —
+returning it as a slow 500/timeout rather than a clean error. `custId` 70 (our
+real mobile-gateway CIF) was never the problem.
+
+**What Sambat's `MissingData` then told us** (the payday application's real
+mandatory set — everything else we send is accepted):
+
+```
+business activity, occupation, Doc_ECBCConsentForm, Doc_ECBCConsentForm_FileName
+```
+
+i.e. `CustP_BusinessActivity`, `CustP_Occupation`, and the e-CBC consent form
+document. These were on our "optional / capture later" list; the LOS confirms
+they are required. The loan again stayed in Draft (a `MissingData` response
+files nothing), so no consent was stamped.
+
+### What we now need from Sambat
+1. **`doneBy`** — which LOS username should our mobile integration send? Either
+   provision a LOS user for us, or nominate an existing one. (Our own customer
+   usernames are not LOS users, so they cannot be used.)
+2. **`CustP_Occupation`** — the code list. We hold the occupation *label*
+   ("IT Staff"); we need to drive the signup dropdown from your `/occupation`
+   dictionary and send its id.
+3. **`CustP_BusinessActivity`** — where do the 8-digit business-activity codes
+   come from? We do not collect this at all today.
+4. **`Doc_ECBCConsentForm`** — we hold a consent *record* (date + version +
+   generated ref), not a rendered file. What artefact do you expect here — a
+   generated PDF of the consent text, or is a reference acceptable?
 
 ## Exact payload sent (documents abbreviated to their byte counts)
 

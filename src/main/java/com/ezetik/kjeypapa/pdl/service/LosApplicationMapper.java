@@ -92,7 +92,10 @@ public class LosApplicationMapper {
 		param.setAppId(config.getAppId());
 		// custId is the SBF CIF, or 0 for a customer they have never seen.
 		param.setCustId(cif(loan));
-		param.setDoneBy(str(loan.getUser().getUsername()));
+		// Normally the customer's username; a diagnostic override lets us test
+		// whether the LOS 500 is a doneBy the vendor's user table rejects.
+		String doneBy = config.getDoneByOverride();
+		param.setDoneBy((doneBy == null || doneBy.isBlank()) ? str(loan.getUser().getUsername()) : doneBy.trim());
 		param.setNewAppRequest(request(loan, pi, ei, bi));
 		return param;
 	}

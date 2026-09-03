@@ -77,6 +77,17 @@ public class LosSubmitConfig {
 	@Value("${los.const.payment-channel-name:}")
 	private String paymentChannelName;
 
+	/**
+	 * Diagnostic ONLY: when set, replaces the envelope {@code doneBy} (normally
+	 * the customer's username) for every submit. Empty in normal operation.
+	 * Added 2026-09-03 to test whether the first-submit 500 is caused by a
+	 * {@code doneBy} the LOS user table does not know — Sambat's reference uses
+	 * "manith.khut", ours used "010849001". Not part of {@link #settings()}, so
+	 * it never affects the gate.
+	 */
+	@Value("${los.done-by-override:}")
+	private String doneByOverride;
+
 	/** Ordered so the operator sees them in the shape of the questions to ask. */
 	private Map<String, String> settings() {
 		Map<String, String> m = new LinkedHashMap<>();

@@ -249,3 +249,27 @@ and format-identical to their reference. Full evidence for Sambat in
 `docs/LOS_Submit_Incident_2026-09-02.md`. Loan 19 remains Draft — resubmit is
 one tap once they confirm a fix. Open question for them: does the 500 come
 from the custId 70 lookup or the unknown `doneBy`/user context?
+
+---
+
+## Incident RESOLVED — `doneBy` was the cause (2026-09-03)
+
+Resent loan 19 unchanged except `doneBy` → `manith.khut` (a known LOS user)
+instead of our app username `010849001`. The 90 s hang / 500 became a clean
+**6.6 s** response with a proper `MissingData` list. So the LOS rejects an
+unknown `doneBy` as a slow 500/timeout; `custId` 70 was never the issue.
+
+`MissingData` for a payday application is now known (their authoritative
+mandatory set beyond what we already send):
+`CustP_BusinessActivity`, `CustP_Occupation`, `Doc_ECBCConsentForm`
+(+ `_FileName`).
+
+New asks for Sambat (in `docs/LOS_Submit_Incident_2026-09-02.md`): (1) which
+LOS `doneBy` our integration should send; (2) `/occupation` code to drive the
+dropdown; (3) source of the 8-digit business-activity codes; (4) what artefact
+`Doc_ECBCConsentForm` expects (we hold a consent record, not a file).
+
+Diagnostic lever left in code: `los.done-by-override` (empty by default, NOT in
+the config gate) — set it to replay a submit under a chosen `doneBy`. Never
+default it to a real name: it would file every customer's application under
+that user.
