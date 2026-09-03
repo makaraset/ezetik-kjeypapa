@@ -301,8 +301,9 @@ Getting there peeled their validator one MissingData at a time (each earlier
    (accepted): we do not capture expenses and will not invent a figure.
 
 ### Remaining asks for Sambat
-- Confirm what utilization category `23` means and whether it is the right
-  payday constant (and share the category list).
+- ~~Confirm what utilization category `23` means~~ **ANSWERED (2026-09-03):
+  23 = "General consumption purposes", fixed for payday. Adopted; nothing to
+  change — the config already sends it.**
 - Confirm the zero-amount expense row is acceptable long-term, or tell us to
   capture expenses at signup.
 - Confirm the rendered e-CBC consent PNG satisfies compliance (it reproduces

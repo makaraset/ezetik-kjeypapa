@@ -79,11 +79,9 @@ public class LosSubmitConfig {
 
 	/**
 	 * {@code UltilizationCategory} for the single payday utilization row.
-	 * Their PDL reference sends "23"; no dictionary endpoint serves the
-	 * category list, so this is adopted from that reference the same way the
-	 * other payday codes were — pending their confirmation of what 23 means.
-	 * Mandatory: their MissingData insists on LoanUtilizationProject
-	 * (2026-09-03), overriding the earlier "keep optional" answer.
+	 * CONFIRMED by Sambat (2026-09-03): 23 = "General consumption purposes",
+	 * fixed for payday. Mandatory: their MissingData insists on
+	 * LoanUtilizationProject, overriding the earlier "keep optional" answer.
 	 */
 	@Value("${los.const.utilization-category:}")
 	private String utilizationCategory;
