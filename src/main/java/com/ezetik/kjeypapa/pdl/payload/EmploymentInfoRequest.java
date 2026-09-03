@@ -21,6 +21,9 @@ public class EmploymentInfoRequest {
 	private String employerName;
 	private String businessActivities;
 	private String occupation;
+	/** Sambat's /occupation id and 8-digit business-activity bizCode. */
+	private String occupationCode;
+	private String businessActivityCode;
 	private Instant employmentStartDate;
 	private String employmentStatus;
 	private Double monthlyIncome;

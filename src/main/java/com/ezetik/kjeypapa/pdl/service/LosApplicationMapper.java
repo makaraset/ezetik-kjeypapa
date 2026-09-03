@@ -57,6 +57,8 @@ public class LosApplicationMapper {
 	@Autowired
 	private LosDocumentAssembler docs;
 	@Autowired
+	private CbcConsentFormRenderer consentForm;
+	@Autowired
 	private LosSubmitConfig config;
 	@Autowired
 	private PdlCodeListRepository codeRepo;
@@ -92,10 +94,9 @@ public class LosApplicationMapper {
 		param.setAppId(config.getAppId());
 		// custId is the SBF CIF, or 0 for a customer they have never seen.
 		param.setCustId(cif(loan));
-		// Normally the customer's username; a diagnostic override lets us test
-		// whether the LOS 500 is a doneBy the vendor's user table rejects.
-		String doneBy = config.getDoneByOverride();
-		param.setDoneBy((doneBy == null || doneBy.isBlank()) ? str(loan.getUser().getUsername()) : doneBy.trim());
+		// A constant, NEVER the customer's username: their LOS dies with a slow
+		// 500/timeout on a doneBy it cannot resolve (root-caused 2026-09-03).
+		param.setDoneBy(str(config.getDoneBy()));
 		param.setNewAppRequest(request(loan, pi, ei, bi));
 		return param;
 	}
@@ -169,6 +170,10 @@ public class LosApplicationMapper {
 		// ----- employment -----
 		if (ei != null) {
 			r.setCustP_EmployerName(str(ei.getEmployerName()));
+			// Their /occupation id and 8-digit business-activity bizCode —
+			// both in their MissingData mandatory set (2026-09-03).
+			r.setCustP_Occupation(str(ei.getOccupationCode()));
+			r.setCustP_BusinessActivity(str(ei.getBusinessActivityCode()));
 			r.setCustP_JobBusinessStartDate(losDate(ei.getEmploymentStartDate()));
 			r.setCustP_EmpAddNo("");
 			r.setCustP_EmpAddCBCountry(KHM);
@@ -208,6 +213,30 @@ public class LosApplicationMapper {
 		r.setLR_LoanTerm(intOf(config.getLoanTerm()));
 		r.setAgreedFirstDueDate(losDate(loan.getRepaymentDate()));
 
+		// LoanUtilizationProject is mandatory (their MissingData, 2026-09-03).
+		// A payday loan has exactly one "project": the cash need itself — one
+		// unit priced at the requested amount, fully financed by Sambat.
+		double amount = loan.getRequestAmount() == null ? 0 : loan.getRequestAmount();
+		com.ezetik.kjeypapa.pdl.payload.los.LoanUtilizationProjectItem util =
+				new com.ezetik.kjeypapa.pdl.payload.los.LoanUtilizationProjectItem();
+		util.setUltilizationCategory(str(config.getUtilizationCategory()));
+		util.setTotalUnit(1);
+		util.setUnitPrice(amount);
+		util.setSambatLoan(amount);
+		r.setLoanUtilizationProject(List.of(util));
+
+		// MonthlyExpenses is also mandatory (their MissingData, 2026-09-03).
+		// The app does not capture expenses, so the row declares zero — the
+		// honest value for "not captured" — with the type code their reference
+		// uses. If their validator insists on a positive amount, that is a
+		// signup-capture question for Sambat, not a value to invent here.
+		com.ezetik.kjeypapa.pdl.payload.los.MonthlyExpenseItem expense =
+				new com.ezetik.kjeypapa.pdl.payload.los.MonthlyExpenseItem();
+		expense.setExpenseType("S");
+		expense.setExpenseAmount(0);
+		expense.setCurrency(str(loan.getCurrency()));
+		r.setMonthlyExpenses(List.of(expense));
+
 		// ----- disbursement account -----
 		// Channel and channel-name are config constants (BANK / sheet row 12),
 		// not bank-row data, so they do not depend on the bank row existing.
@@ -231,8 +260,16 @@ public class LosApplicationMapper {
 			put(r, docs.build(ei.getEmploymentCardFileRef(), "EmploymentCard", id), "EmploymentCard");
 		if (bi != null)
 			put(r, docs.build(bi.getBankStatementFileRef(), "BankStatement", id), "BankStatement");
-		// Doc_ECBCConsentForm: we hold a consent RECORD, not a file. Left empty
-		// until Sambat says what artefact they expect.
+		// Doc_ECBCConsentForm: rendered at submit time from the consent the
+		// customer actually gave in-app (the CBC page checkbox) — text, name,
+		// NID, ref, timestamp. In their MissingData mandatory set (2026-09-03);
+		// their own reference reuses an arbitrary file here, so a rendered
+		// record of the real consent is well within what the slot accepts.
+		if (pi != null) {
+			byte[] png = consentForm.render(loan, pi);
+			r.setDoc_ECBCConsentForm(java.util.Base64.getEncoder().encodeToString(png));
+			r.setDoc_ECBCConsentForm_FileName("ECBCConsentForm-" + id + ".png");
+		}
 
 		return r;
 	}

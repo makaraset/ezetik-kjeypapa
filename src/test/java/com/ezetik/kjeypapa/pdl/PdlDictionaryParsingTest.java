@@ -161,4 +161,17 @@ class PdlDictionaryParsingTest {
 		assertThat(out.get(0).getNameEn()).isEqualTo("EZETIK CO., LTD.");
 		assertThat(out.get(0).getNameKh()).isEqualTo("អ៊ីហ្សេទិក");
 	}
+
+	@Test
+	@DisplayName("business-activity rows use the 8-digit bizCode, not the row id")
+	void businessActivityBizCode() throws Exception {
+		JsonNode arr = om.readTree("""
+				[{"id":1120,"bizCode":21802005,"description":"Computer programming activities","khDescription":""}]
+				""");
+		List<PdlCodeList> out = new ArrayList<>();
+		PdlDictionaryService.collectList(arr, "BUSINESS_ACTIVITY", out);
+		assertThat(out).hasSize(1);
+		assertThat(out.get(0).getCode()).isEqualTo("21802005");
+		assertThat(out.get(0).getNameEn()).isEqualTo("Computer programming activities");
+	}
 }

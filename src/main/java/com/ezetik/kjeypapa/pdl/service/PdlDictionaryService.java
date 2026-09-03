@@ -231,7 +231,10 @@ public class PdlDictionaryService {
 				continue;
 			// Prefer an explicit code member; fall back to the numeric id, which
 			// Sambat confirmed is the code for occupation.
-			String code = firstNonBlank(n, "cbcCode", "code", "idCode", "id");
+			// bizCode before id: /business-activity rows carry both, and the
+			// loan payload wants the 8-digit bizCode (their reference sends
+			// 21802005), not the small row id. Other lists have no bizCode.
+			String code = firstNonBlank(n, "cbcCode", "code", "idCode", "bizCode", "id");
 			if (code.isEmpty())
 				continue;
 			String nameEn = firstNonBlank(n, "description", "regDescription", "valueEn");

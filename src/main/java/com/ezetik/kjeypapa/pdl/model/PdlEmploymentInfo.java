@@ -52,6 +52,18 @@ public class PdlEmploymentInfo extends UserDateAudit {
 	private String employerCode;
 	private String businessActivities;
 	private String occupation;
+
+	/**
+	 * Sambat's dictionary codes for the two labels above — what the loan
+	 * application sends as CustP_Occupation (their /occupation id) and
+	 * CustP_BusinessActivity (their 8-digit bizCode). Confirmed mandatory by
+	 * their MissingData on 2026-09-03. Labels stay beside them as the captured
+	 * audit text.
+	 */
+	@Column(length = 8)
+	private String occupationCode;
+	@Column(length = 16)
+	private String businessActivityCode;
 	private Instant employmentStartDate;
 	private String employmentStatus; // Confirmed, Probation, ...
 	private Double monthlyIncome;

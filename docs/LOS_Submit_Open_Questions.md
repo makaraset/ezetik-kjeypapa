@@ -273,3 +273,38 @@ Diagnostic lever left in code: `los.done-by-override` (empty by default, NOT in
 the config gate) — set it to replay a submit under a chosen `doneBy`. Never
 default it to a real name: it would file every customer's application under
 that user.
+
+---
+
+## FIRST APPLICATION FILED ON THEIR UAT LOS 🎉 (2026-09-03)
+
+Loan 19 (010849001 / CIF 70, $9.93 payday) submitted successfully:
+`IsSuccess:"Success"`, **AppRefId 257839**, LOS AppId 8277, ~15 s round trip.
+Loan is Submitted, consent stamped (CBC-19-v1-2026-08). The whole chain —
+app data → mapper → real POST → their LOS — is proven end-to-end.
+
+Getting there peeled their validator one MissingData at a time (each earlier
+"optional" answer overridden by the validator itself):
+1. `doneBy` — any *resolvable-shape* string; our numeric usernames 500 their
+   server. Constant `los.done-by=KjeyPapa` (their instruction), verified.
+2. occupation + business activity — now dictionary-driven: occupation =
+   `/occupation` id; business activity = the **8-digit `bizCode`** (their
+   reference's 21802005), NOT the row id — the mirror now stores bizCode.
+   App captures both through searchable pickers backed by the mirror.
+3. `Doc_ECBCConsentForm` — our system-rendered consent PNG (text, name, NID,
+   ref, timestamp) was ACCEPTED. Their own reference reuses an arbitrary
+   file here, so the rendered record stands until they say otherwise.
+4. `LoanUtilizationProject` — MANDATORY. One row: category `23` (adopted from
+   their PDL reference — no dictionary endpoint serves this list), unit 1,
+   our amounts. `los.const.utilization-category`.
+5. `MonthlyExpenses` — MANDATORY. One row, ExpenseType `S`, **amount 0**
+   (accepted): we do not capture expenses and will not invent a figure.
+
+### Remaining asks for Sambat
+- Confirm what utilization category `23` means and whether it is the right
+  payday constant (and share the category list).
+- Confirm the zero-amount expense row is acceptable long-term, or tell us to
+  capture expenses at signup.
+- Confirm the rendered e-CBC consent PNG satisfies compliance (it reproduces
+  the exact in-app consent; no wet signature exists in the V8 flow).
+- Provision/nominate the production `doneBy` + `hidCurrentUserId` pair.

@@ -554,6 +554,8 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 			e.setEmployerName(req.getEmployerName());
 			e.setBusinessActivities(req.getBusinessActivities());
 			e.setOccupation(req.getOccupation());
+			e.setOccupationCode(req.getOccupationCode());
+			e.setBusinessActivityCode(req.getBusinessActivityCode());
 			e.setEmploymentStartDate(req.getEmploymentStartDate());
 			e.setEmploymentStatus(req.getEmploymentStatus());
 			e.setMonthlyIncome(req.getMonthlyIncome());

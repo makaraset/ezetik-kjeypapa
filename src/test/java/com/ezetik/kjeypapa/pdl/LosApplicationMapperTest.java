@@ -47,6 +47,7 @@ class LosApplicationMapperTest {
 	@Mock PdlCodeListRepository codeRepo;
 	@Mock LosDocumentAssembler docs;
 	@Mock LosSubmitConfig config;
+	@Mock com.ezetik.kjeypapa.pdl.service.CbcConsentFormRenderer consentForm;
 
 	@InjectMocks LosApplicationMapper mapper;
 
@@ -91,6 +92,9 @@ class LosApplicationMapperTest {
 		// satisfied so the mapping itself is what is under test.
 		when(config.getHidCurrentUserId()).thenReturn("541");
 		when(config.getLoanTerm()).thenReturn("1");
+		when(config.getDoneBy()).thenReturn("KjeyPapa");
+		when(config.getUtilizationCategory()).thenReturn("23");
+		when(consentForm.render(any(), any())).thenReturn(new byte[] { 1, 2, 3 });
 	}
 
 	private NewApplicationRequest map() {
@@ -262,5 +266,62 @@ class LosApplicationMapperTest {
 	void paymentChannelName() {
 		when(config.getPaymentChannelName()).thenReturn("12");
 		assertThat(map().getPC_PaymentChannelName()).isEqualTo("12");
+	}
+
+	@Test
+	@DisplayName("doneBy is the constant, never the customer's username")
+	void doneByConstant() {
+		// Their LOS dies (slow 500/timeout) on a doneBy it cannot resolve —
+		// root-caused 2026-09-03 with the same payload succeeding under a
+		// resolvable name. Any leak of the username here regresses that outage.
+		assertThat(mapper.toParam(loan).getDoneBy()).isEqualTo("KjeyPapa");
+	}
+
+	@Test
+	@DisplayName("occupation and business activity go out as their dictionary codes")
+	void occupationAndBusinessActivityCodes() {
+		var ei = new com.ezetik.kjeypapa.pdl.model.PdlEmploymentInfo();
+		ei.setOccupation("IT Officer");
+		ei.setOccupationCode("62");
+		ei.setBusinessActivityCode("21802005");
+		when(employmentRepo.findByUser(1)).thenReturn(java.util.List.of(ei));
+		NewApplicationRequest r = map();
+		assertThat(r.getCustP_Occupation()).isEqualTo("62");
+		assertThat(r.getCustP_BusinessActivity()).isEqualTo("21802005");
+	}
+
+	@Test
+	@DisplayName("the e-CBC consent form is rendered and attached at submit")
+	void consentFormAttached() {
+		NewApplicationRequest r = map();
+		assertThat(r.getDoc_ECBCConsentForm()).isNotEmpty();
+		assertThat(r.getDoc_ECBCConsentForm_FileName()).isEqualTo("ECBCConsentForm-1.png");
+	}
+
+	@Test
+	@DisplayName("one utilization row: their category, unit 1, our amounts")
+	void utilizationRow() {
+		// Mandatory per their MissingData (2026-09-03), despite the earlier
+		// "keep optional" answer. The payday "project" is the cash need itself.
+		loan.setRequestAmount(9.93);
+		var rows = map().getLoanUtilizationProject();
+		assertThat(rows).hasSize(1);
+		assertThat(rows.get(0).getUltilizationCategory()).isEqualTo("23");
+		assertThat(rows.get(0).getTotalUnit()).isEqualTo(1);
+		assertThat(rows.get(0).getUnitPrice()).isEqualTo(9.93);
+		assertThat(rows.get(0).getSambatLoan()).isEqualTo(9.93);
+	}
+
+	@Test
+	@DisplayName("one expense row declaring zero — expenses are not captured")
+	void expenseRowZero() {
+		// Also mandatory per their MissingData. Zero is the honest value for
+		// "not captured"; inventing a figure would fabricate financial data.
+		loan.setCurrency("USD");
+		var rows = map().getMonthlyExpenses();
+		assertThat(rows).hasSize(1);
+		assertThat(rows.get(0).getExpenseType()).isEqualTo("S");
+		assertThat(rows.get(0).getExpenseAmount()).isZero();
+		assertThat(rows.get(0).getCurrency()).isEqualTo("USD");
 	}
 }

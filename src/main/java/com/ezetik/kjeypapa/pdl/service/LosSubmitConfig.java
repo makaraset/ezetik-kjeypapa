@@ -78,20 +78,30 @@ public class LosSubmitConfig {
 	private String paymentChannelName;
 
 	/**
-	 * Diagnostic ONLY: when set, replaces the envelope {@code doneBy} (normally
-	 * the customer's username) for every submit. Empty in normal operation.
-	 * Added 2026-09-03 to test whether the first-submit 500 is caused by a
-	 * {@code doneBy} the LOS user table does not know — Sambat's reference uses
-	 * "manith.khut", ours used "010849001". Not part of {@link #settings()}, so
-	 * it never affects the gate.
+	 * {@code UltilizationCategory} for the single payday utilization row.
+	 * Their PDL reference sends "23"; no dictionary endpoint serves the
+	 * category list, so this is adopted from that reference the same way the
+	 * other payday codes were — pending their confirmation of what 23 means.
+	 * Mandatory: their MissingData insists on LoanUtilizationProject
+	 * (2026-09-03), overriding the earlier "keep optional" answer.
 	 */
-	@Value("${los.done-by-override:}")
-	private String doneByOverride;
+	@Value("${los.const.utilization-category:}")
+	private String utilizationCategory;
+
+	/**
+	 * The envelope {@code doneBy}. Sambat (2026-09-03): any string passes
+	 * validation — but empirically their LOS dies (slow 500/timeout) on our
+	 * numeric app usernames, so this is a CONSTANT, never the customer's
+	 * username. "KjeyPapa" per their instruction; verified live same day.
+	 */
+	@Value("${los.done-by:}")
+	private String doneBy;
 
 	/** Ordered so the operator sees them in the shape of the questions to ask. */
 	private Map<String, String> settings() {
 		Map<String, String> m = new LinkedHashMap<>();
 		m.put("los.hid-current-user-id", hidCurrentUserId);
+		m.put("los.done-by", doneBy);
 		m.put("los.const.product-type", productType);
 		m.put("los.const.loan-category", loanCategory);
 		m.put("los.const.repayment-method", repaymentMethod);
@@ -102,6 +112,7 @@ public class LosSubmitConfig {
 		m.put("los.const.id-issued-by", idIssuedBy);
 		m.put("los.const.payment-channel", paymentChannel);
 		m.put("los.const.payment-channel-name", paymentChannelName);
+		m.put("los.const.utilization-category", utilizationCategory);
 		return m;
 	}
 
