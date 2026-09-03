@@ -317,3 +317,42 @@ AppId 8278, ~12 s. Observation for both sides' product rules: our backend and
 their LOS both allowed a SECOND open application for the same customer
 (CIF 70, while 257839 is pending). If one-open-application-per-customer is the
 intended payday rule, one of us must enforce it — ask Sambat which side owns it.
+
+---
+
+## KHR submissions FAIL on their LOS — USD succeeds (2026-09-03)
+
+Third on-device run chose **KHR** (never sent live before). It failed
+reproducibly, and a same-loan control proved it is the currency, not an outage:
+
+| attempt | currency / amount | result |
+|---|---|---|
+| 1 | KHR 39,702.23 | **HTTP 500** after ~60 s |
+| 2 | KHR 39,702.23 | **HTTP 500** |
+| 3 | KHR 39,702 (whole riel — rules out decimals) | **no response in 120 s** |
+| 4 (control) | **USD 19.85, same loan, minutes later** | **filed in 9 s — AppRefId 257852** |
+
+The failure signature (slow 500 / hang, no clean validation error) is the same
+one their LOS gave for an unresolvable `doneBy`. The payload diff between the
+filed USD application and the failing KHR one is only:
+`LR_CBCurrency` USD→KHR, `LR_LoanRequestAmount`, the utilization row's amounts,
+and the expense row's currency. Everything else is byte-identical.
+
+**Questions for Sambat**
+1. Is **KHR supported for the PDL product** on the LOS at all? If it needs
+   enabling per product/currency, please enable it on UAT.
+2. If KHR is supported, does a **mixed-currency application** break it? Ours
+   sends `MonthlyIncomes` in USD (the customer's salary currency) while the
+   loan and expense rows are KHR. If income and loan must share a currency,
+   say so and we will convert.
+3. Please make the LOS return a validation error rather than a 500/timeout for
+   an unsupported currency — a 2-minute hang is indistinguishable from an
+   outage on our side.
+
+**Our own follow-up (product decision, not yet changed):** the KHR quote
+produces **fractional riel** (39,702.23 KHR). Riel has no subunit in
+circulation, so KHR amounts should be rounded — to whole riel at minimum, and
+arguably to 100 KHR, the smallest practical note. Not the cause of the failure
+(whole riel failed too), but wrong regardless. Meanwhile a customer choosing
+KHR waits ~2 minutes and gets "Could not reach Sambat's loan system";
+consider hiding the KHR option until Sambat confirms support.

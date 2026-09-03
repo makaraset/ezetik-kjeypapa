@@ -214,6 +214,13 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 			String losNo = losProvider.submitApplication(loan);
 			loan.setLosApplicationNo(losNo);
 			loan.setStatus(PdlStatusEnum.Submitted);
+			// Clear any failure recorded by an earlier attempt. Submitting is
+			// retryable, so fail-then-succeed is a normal path — and these two
+			// fields drive the customer-facing message, which otherwise still
+			// reads "Could not reach Sambat's loan system" on an application
+			// that is now filed and pending decision.
+			loan.setLosStatusCode(null);
+			loan.setLosMessage(null);
 
 			// Stamp the CBC consent record (QC4.2) only once the application is
 			// actually filed — viewable via GET /pdl/{id}/cbc-consent. Stamping

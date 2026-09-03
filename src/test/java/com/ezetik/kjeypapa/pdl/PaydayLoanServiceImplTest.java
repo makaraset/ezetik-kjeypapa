@@ -187,6 +187,25 @@ class PaydayLoanServiceImplTest {
 	}
 
 	@Test
+	void submit_clearsAnEarlierFailureOnceItSucceeds() {
+		// Submitting is retryable, so fail-then-succeed is a normal path. These
+		// two fields drive the customer-facing message: leaving them set showed
+		// "Could not reach Sambat's loan system" on an application that was in
+		// fact filed and awaiting a decision (seen live on loan 21, UAT).
+		PaydayLoan loan = submittableLoan();
+		loan.setLosStatusCode("LOS_UNAVAILABLE");
+		loan.setLosMessage("Could not reach Sambat's loan system.");
+		when(losProvider.submitApplication(loan)).thenReturn("257852");
+
+		PaydayLoan out = service.submit(1).getBody().getData();
+
+		assertThat(out.getStatus()).isEqualTo(PdlStatusEnum.Submitted);
+		assertThat(out.getLosApplicationNo()).isEqualTo("257852");
+		assertThat(out.getLosStatusCode()).isNull();
+		assertThat(out.getLosMessage()).isNull();
+	}
+
+	@Test
 	void submit_surfacesTheFieldsLosSaysAreMissing() {
 		PaydayLoan loan = submittableLoan();
 		when(losProvider.submitApplication(loan)).thenThrow(new LosSubmitException("R-MISSINGDATA",
