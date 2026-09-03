@@ -320,7 +320,22 @@ intended payday rule, one of us must enforce it — ask Sambat which side owns i
 
 ---
 
-## KHR submissions FAIL on their LOS — USD succeeds (2026-09-03)
+## KHR submissions FAIL on their LOS — USD succeeds (2026-09-03) — **FIXED by Sambat, verified same day**
+
+> **RESOLVED.** Sambat fixed it and asked us to retry; **KHR filed successfully
+> — AppRefId 257861, 10 s** (loan 23, 39,702.23 KHR). Mixed currency is fine
+> too: that application carried `MonthlyIncomes` in USD alongside a KHR loan.
+> The retry needed care — our first two attempts after their fix still failed,
+> but a same-minute **USD control also timed out**, proving a transient outage
+> on their side rather than a KHR fault; minutes later USD (257857) and then
+> KHR (257861) both filed. Always pair a currency test with a same-window
+> control before concluding anything about their LOS.
+>
+> Still ours to decide: the KHR quote emits **fractional riel** (39,702.23).
+> Their LOS accepts it, so this is purely our own correctness question — riel
+> has no circulating subunit and the amount should be rounded.
+
+### Original report (kept for the record)
 
 Third on-device run chose **KHR** (never sent live before). It failed
 reproducibly, and a same-loan control proved it is the currency, not an outage:
