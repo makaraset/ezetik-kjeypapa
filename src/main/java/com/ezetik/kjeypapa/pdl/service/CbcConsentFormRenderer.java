@@ -9,6 +9,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -49,9 +50,20 @@ public class CbcConsentFormRenderer {
 	private static final int MARGIN = 70;
 	private static final ZoneId KH = ZoneId.of("Asia/Phnom_Penh");
 
-	/** Khmer consent wording — the same text the app shows on the CBC page. */
-	@Value("${pdl.cbc.consent-text-km:ស្របតាមប្រកាសស្តីពីរបាយការណ៍ឥណទាន ខ្ញុំសូមផ្តល់ការយល់ព្រមឲ្យ សម្បត្តិ ហ្វាយនែន ម.ក ទទួល ពិនិត្យ និងប្រើប្រាស់ព័ត៌មានឥណទានរបស់ខ្ញុំពី ក្រុមហ៊ុន ក្រេឌីត ប្យួរ៉ូ (ខេមបូឌា) (CBC) សម្រាប់គោលបំណងវាយតម្លៃពាក្យសុំកម្ចីនេះ និងបញ្ជូនព័ត៌មានឥណទានរបស់ខ្ញុំទៅ CBC តាមតម្រូវការនៃរបាយការណ៍ឥណទាន។ ខ្ញុំយល់ថាមានកម្រៃស៊ើបអង្កេត CBC ហើយការយល់ព្រមនេះត្រូវបានកត់ត្រាជាមួយពាក្យសុំរបស់ខ្ញុំ។}")
-	private String consentTextKm;
+	/**
+	 * Sambat's FINAL Khmer consent wording (received 2026-09-04), held as a
+	 * resource rather than a property: it is three long paragraphs, and a
+	 * legal text belongs in a file where it can be diffed, not escaped across
+	 * continuation lines in application.properties. The property still wins if
+	 * set, so an environment can override without a rebuild.
+	 */
+	@Value("${pdl.cbc.consent-text-km:}")
+	private String consentTextKmOverride;
+
+	@Value("${pdl.cbc.consent-text-km-file:cbc/consent-km.txt}")
+	private String consentTextKmFile;
+
+	private volatile String consentTextKmCached;
 
 	/** English wording, kept beneath the Khmer for Sambat's own reviewers. */
 	@Value("${pdl.cbc.consent-text:I consent to Sambat Finance conducting a credit enquiry with the Credit Bureau of Cambodia (CBC) for the purpose of assessing this loan application, in accordance with the Prakas on Credit Reporting.}")
@@ -67,7 +79,23 @@ public class CbcConsentFormRenderer {
 	 * empty string, which proves nothing.
 	 */
 	public String consentTextKm() {
-		return consentTextKm;
+		if (consentTextKmOverride != null && !consentTextKmOverride.isBlank())
+			return consentTextKmOverride;
+		String cached = consentTextKmCached;
+		if (cached != null)
+			return cached;
+		synchronized (this) {
+			if (consentTextKmCached == null) {
+				try (InputStream in = new ClassPathResource(consentTextKmFile).getInputStream()) {
+					consentTextKmCached = new String(in.readAllBytes(), StandardCharsets.UTF_8).trim();
+				} catch (IOException e) {
+					// Never render a consent form with no consent on it.
+					throw new LosSubmitException("LOS_CONSENT_TEXT_MISSING",
+							"The consent wording could not be read.");
+				}
+			}
+			return consentTextKmCached;
+		}
 	}
 
 	/** Loaded once: creating a Font from bytes on every submit is wasteful. */
@@ -112,17 +140,17 @@ public class CbcConsentFormRenderer {
 		Font km = khmer();
 		Font title = km.deriveFont(Font.BOLD, 34f);
 		Font label = km.deriveFont(Font.BOLD, 22f);
-		Font body = km.deriveFont(Font.PLAIN, 24f);
+		Font body = km.deriveFont(Font.PLAIN, 21f);
 		Font small = km.deriveFont(Font.PLAIN, 18f);
 		Font smallEn = new Font(Font.SANS_SERIF, Font.PLAIN, 17);
 
 		BufferedImage probe = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
 		Graphics2D pg = probe.createGraphics();
-		List<String> kmLines = wrap(consentTextKm, pg, body, WIDTH - 2 * MARGIN);
+		List<String> kmLines = wrapParagraphs(consentTextKm(), pg, body, WIDTH - 2 * MARGIN);
 		List<String> enLines = wrap(consentTextEn, pg, smallEn, WIDTH - 2 * MARGIN);
 		pg.dispose();
 
-		int height = 400 + kmLines.size() * 38 + enLines.size() * 24 + 150;
+		int height = 400 + kmLines.size() * 32 + enLines.size() * 24 + 150;
 		BufferedImage img = new BufferedImage(WIDTH, height, BufferedImage.TYPE_INT_RGB);
 		Graphics2D g = img.createGraphics();
 		g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
@@ -151,7 +179,7 @@ public class CbcConsentFormRenderer {
 
 		for (String line : kmLines) {
 			drawMixed(g, line, MARGIN, y, body);
-			y += 38;
+			y += 32;
 		}
 
 		y += 26;
@@ -270,6 +298,22 @@ public class CbcConsentFormRenderer {
 	 * so a space-only split would overflow the page; when a "word" is itself
 	 * wider than the line it is broken by character.
 	 */
+	/**
+	 * Wraps a multi-paragraph text, keeping the blank line between paragraphs.
+	 * The final wording is three paragraphs; running them together would make
+	 * a wall of Khmer that nobody reads.
+	 */
+	private static List<String> wrapParagraphs(String text, Graphics2D g, Font font, int maxWidth) {
+		List<String> out = new ArrayList<>();
+		String[] paragraphs = text.trim().split("\\n\\s*\\n");
+		for (int i = 0; i < paragraphs.length; i++) {
+			out.addAll(wrap(paragraphs[i], g, font, maxWidth));
+			if (i < paragraphs.length - 1)
+				out.add("");
+		}
+		return out;
+	}
+
 	private static List<String> wrap(String text, Graphics2D g, Font font, int maxWidth) {
 		List<String> lines = new ArrayList<>();
 		StringBuilder line = new StringBuilder();

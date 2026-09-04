@@ -535,3 +535,40 @@ Two details worth knowing:
 - Re-rendering the consent now uses the **stamped** consent time rather than
   the current time, so a customer opening it months later sees the moment they
   consented, not the moment they looked.
+
+---
+
+## Final CBC consent wording adopted (2026-09-04)
+
+Sambat sent `CBC Consent for Mobile App _ KH_Final.docx`. Now live in both
+places: the app's CBC page and the PDF filed as `Doc_ECBCConsentForm`, from one
+source — `src/main/resources/cbc/consent-km.txt` — so the two cannot drift.
+
+`pdl.cbc.text-version` bumped **v1-2026-08 → v2-2026-09**. Consents filed
+before today keep pointing at v1 and its hash, which is exactly why the record
+carries both a version and a hash.
+
+### ⚠️ Their final document contains a corrupted fragment
+
+Paragraph 2, inside the sentence giving CBC's and Sambat's registered
+addresses, reads:
+
+> …រាជធានីភ្នំពេញ **នអាសយដ្ឋាននៅផ្ទះលេខ 228ជេធ. visit the r is not reachable
+> via phone call,** ទទួលខុសត្រូវលើការប្រមូល…
+
+It is in the .docx itself — not a tracked change, not a comment, and not an
+extraction artefact (checked all three). It looks like text pasted in by
+accident during editing.
+
+We have shipped the wording **exactly as supplied**, because silently editing
+a legal consent is not ours to do. **Please ask Sambat for a corrected file.**
+The moment it arrives it is a one-file replacement plus a version bump; the
+fragment is currently visible to customers on the consent page and printed on
+every consent PDF filed with them.
+
+### Still open
+- The **English** wording is still our interim text — their file is Khmer only.
+  A customer using the app in English currently sees interim English while the
+  filed PDF and the consent record are the final Khmer. Do they want an
+  English final, or should the legal text always display in Khmer regardless of
+  app language?

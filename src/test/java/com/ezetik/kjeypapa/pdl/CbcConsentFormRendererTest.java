@@ -33,7 +33,7 @@ class CbcConsentFormRendererTest {
 
 	private CbcConsentFormRenderer renderer() {
 		CbcConsentFormRenderer r = new CbcConsentFormRenderer();
-		ReflectionTestUtils.setField(r, "consentTextKm", KM_TEXT);
+		ReflectionTestUtils.setField(r, "consentTextKmOverride", KM_TEXT);
 		ReflectionTestUtils.setField(r, "consentTextEn", "I consent to a CBC credit enquiry.");
 		ReflectionTestUtils.setField(r, "textVersion", "v1-test");
 		return r;
@@ -128,5 +128,22 @@ class CbcConsentFormRendererTest {
 			java.nio.file.Files.createDirectories(java.nio.file.Path.of(dir));
 			java.nio.file.Files.write(java.nio.file.Path.of(dir, "consent-form.pdf"), pdf);
 		}
+	}
+
+	@Test
+	@DisplayName("the bundled final wording loads and is the text that gets hashed")
+	void bundledWordingLoads() {
+		// Sambat's final Khmer text ships as a resource; if it ever fails to
+		// load we must not silently render a consent form with no consent on
+		// it, and the record's hash must cover this exact text.
+		CbcConsentFormRenderer r = new CbcConsentFormRenderer();
+		ReflectionTestUtils.setField(r, "consentTextKmOverride", "");
+		ReflectionTestUtils.setField(r, "consentTextKmFile", "cbc/consent-km.txt");
+
+		String text = r.consentTextKm();
+
+		assertThat(text).isNotBlank();
+		assertThat(text.length()).isGreaterThan(1500);
+		assertThat(text.split("\\n\\s*\\n")).hasSize(3); // three paragraphs
 	}
 }
