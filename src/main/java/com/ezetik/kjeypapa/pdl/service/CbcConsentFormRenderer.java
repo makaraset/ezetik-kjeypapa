@@ -15,6 +15,8 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import javax.imageio.ImageIO;
 
@@ -26,62 +28,57 @@ import com.ezetik.kjeypapa.pdl.model.PaydayLoan;
 import com.ezetik.kjeypapa.pdl.model.PdlPersonalInfo;
 
 /**
- * Renders the {@code Doc_ECBCConsentForm} document from the consent the
- * customer actually gave in-app (the CBC page checkbox, V8 screen 15) — the
- * consent text, their identity, the deterministic consent reference and a
- * timestamp.
+ * Renders Sambat's CBC consent form — the document filed as
+ * {@code Doc_ECBCConsentForm} and shown back to the customer.
  *
- * <p><b>In Khmer</b>, per Sambat (2026-09-03): this is a consent a Cambodian
- * customer is held to, so it is rendered in the language they agreed in. Java
- * cannot shape Khmer with the JVM's default fonts, so Noto Sans Khmer is
- * bundled at {@code resources/fonts} (SIL Open Font License 1.1, which permits
- * redistribution); JDK 9+ shapes complex scripts with HarfBuzz, so the coeng
- * stacking and vowel placement come out correctly.
+ * <p>Laid out to their own template (CBCConsentforMobileApp_KH_Final,
+ * 2026-09-04): A4, <b>Khmer OS Content</b>, 11pt justified body, bold
+ * underlined heading, the borrower block, and their form reference in the
+ * footer. Their page geometry is followed exactly — 0.59in side margins,
+ * 0.30in top, 0.49in bottom.
  *
- * <p>The Khmer wording is our interim translation. Sambat is sending final
- * EN+KM legal text; when it lands, replace {@code pdl.cbc.consent-text-km} and
- * bump {@code pdl.cbc.text-version} so filed consents stay attributable to the
- * exact wording each customer saw.
+ * <p>Khmer OS Content carries Khmer and digits but <b>no Latin letters</b>, so
+ * text is drawn run by run against what the font can actually display rather
+ * than by Unicode range: a name in Latin script would otherwise print as empty
+ * boxes, which is exactly how an earlier version of this form printed the
+ * customer's ID number.
+ *
+ * <p>The wording used is the version the application was filed under, so a
+ * document shown back to a customer always matches the record and the hash
+ * filed against it.
  */
 @Component
 public class CbcConsentFormRenderer {
 
-	private static final int WIDTH = 1000;
-	private static final int MARGIN = 70;
+	/** A4 in points, with their margins from the template. */
+	private static final float PAGE_W_PT = 595.28f;
+	private static final float PAGE_H_PT = 841.89f;
+	private static final float MARGIN_X_PT = 42.5f; // 851 twips
+	private static final float MARGIN_TOP_PT = 21.3f; // 426 twips
+	private static final float MARGIN_BOTTOM_PT = 35.5f; // 709 twips
+
+	/** Rendered at 150dpi so the Khmer stays crisp in print. */
+	private static final float DPI = 150f / 72f;
+
 	private static final ZoneId KH = ZoneId.of("Asia/Phnom_Penh");
 
-	/**
-	 * Sambat's FINAL Khmer consent wording (received 2026-09-04), held as a
-	 * resource rather than a property: it is three long paragraphs, and a
-	 * legal text belongs in a file where it can be diffed, not escaped across
-	 * continuation lines in application.properties. The property still wins if
-	 * set, so an environment can override without a rebuild.
-	 */
 	@Value("${pdl.cbc.consent-text-km:}")
 	private String consentTextKmOverride;
 
 	@Value("${pdl.cbc.consent-text-km-file:cbc/consent-km.txt}")
 	private String consentTextKmFile;
 
-	private final java.util.Map<String, String> textCache = new java.util.concurrent.ConcurrentHashMap<>();
-
-	/** English wording, kept beneath the Khmer for Sambat's own reviewers. */
-	@Value("${pdl.cbc.consent-text:I consent to Sambat Finance conducting a credit enquiry with the Credit Bureau of Cambodia (CBC) for the purpose of assessing this loan application, in accordance with the Prakas on Credit Reporting.}")
-	private String consentTextEn;
-
 	@Value("${pdl.cbc.text-version:v1}")
 	private String textVersion;
 
-	/** Sambat's own form reference, printed as the footer of their form. */
+	/** Sambat's own reference for this form, printed as its footer. */
 	@Value("${pdl.cbc.form-reference:}")
 	private String formReference;
 
-	/**
-	 * The exact Khmer wording rendered into the form. The consent record hashes
-	 * THIS string, so the hash and the document can never describe different
-	 * text — reading the property in two places once produced a hash of the
-	 * empty string, which proves nothing.
-	 */
+	private final Map<String, String> textCache = new ConcurrentHashMap<>();
+	private volatile Font khmerRegular;
+	private volatile Font khmerBold;
+
 	public String consentTextKm() {
 		return consentTextKm(null);
 	}
@@ -93,8 +90,8 @@ public class CbcConsentFormRenderer {
 	 * saw it, not as today's wording — otherwise the document we show back
 	 * silently disagrees with the hash recorded against it. Versions live
 	 * beside the current text as {@code cbc/consent-km-<version>.txt}; an
-	 * unknown version falls back to the current wording, which is the best we
-	 * can do for anything filed before the files were versioned.
+	 * unknown version falls back to the current wording, the best we can do for
+	 * anything filed before the files were versioned.
 	 */
 	public String consentTextKm(String version) {
 		if (consentTextKmOverride != null && !consentTextKmOverride.isBlank())
@@ -115,21 +112,7 @@ public class CbcConsentFormRenderer {
 		return text;
 	}
 
-	private static String read(String classpathFile) {
-		try (InputStream in = new ClassPathResource(classpathFile).getInputStream()) {
-			return new String(in.readAllBytes(), StandardCharsets.UTF_8).trim();
-		} catch (IOException e) {
-			return null;
-		}
-	}
-
-	/** Loaded once: creating a Font from bytes on every submit is wasteful. */
-	private volatile Font khmerBase;
-
-	/**
-	 * The consent as a PDF — what Sambat asked for (2026-09-04); they take the
-	 * structured record alongside it.
-	 */
+	/** The consent as a PDF — the format Sambat file. */
 	public byte[] renderPdf(PaydayLoan loan, PdlPersonalInfo pi) {
 		try {
 			return SimplePdfWriter.singleImagePage(renderImage(loan, pi));
@@ -138,7 +121,7 @@ public class CbcConsentFormRenderer {
 		}
 	}
 
-	/** The same document as a PNG (kept for previews and tests). */
+	/** The same document as a PNG, for viewing in the app. */
 	public byte[] render(PaydayLoan loan, PdlPersonalInfo pi) {
 		try {
 			ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -151,138 +134,131 @@ public class CbcConsentFormRenderer {
 
 	private BufferedImage renderImage(PaydayLoan loan, PdlPersonalInfo pi) {
 		int loanId = loan.getId() == null ? 0 : loan.getId();
-		String customer = (s(pi.getLatinFamilyName()) + " " + s(pi.getLatinFirstName())).trim();
-		String khmerName = (s(pi.getKhmerFamilyName()) + " " + s(pi.getKhmerFirstName())).trim();
-		// The stored reference and version, not today's config: this document
+		// The stored version and reference, not today's config: this document
 		// must match the record filed against it.
-		String version = loan.getCbcConsentTextVersion() != null && !loan.getCbcConsentTextVersion().isBlank()
-				? loan.getCbcConsentTextVersion()
-				: textVersion;
-		String ref = loan.getCbcConsentRef() != null && !loan.getCbcConsentRef().isBlank()
-				? loan.getCbcConsentRef()
-				: "CBC-" + loanId + "-" + version;
-		// The stamped consent time, not "now": a customer re-opening the form
-		// months later must see the moment they consented, and the document
-		// they view must be the document we filed.
-		ZonedDateTime at = loan.getCbcConsentDate() != null
-				? loan.getCbcConsentDate().atZone(KH)
+		String version = notBlank(loan.getCbcConsentTextVersion()) ? loan.getCbcConsentTextVersion() : textVersion;
+		String ref = notBlank(loan.getCbcConsentRef()) ? loan.getCbcConsentRef() : "CBC-" + loanId + "-" + version;
+		ZonedDateTime at = loan.getCbcConsentDate() != null ? loan.getCbcConsentDate().atZone(KH)
 				: ZonedDateTime.now(KH);
-		String when = at.format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm"));
 
-		Font km = khmer();
-		Font title = km.deriveFont(Font.BOLD, 34f);
-		Font label = km.deriveFont(Font.BOLD, 22f);
-		Font body = km.deriveFont(Font.PLAIN, 21f);
-		Font small = km.deriveFont(Font.PLAIN, 18f);
-		Font smallEn = new Font(Font.SANS_SERIF, Font.PLAIN, 17);
+		int width = Math.round(PAGE_W_PT * DPI);
+		int height = Math.round(PAGE_H_PT * DPI);
+		int marginX = Math.round(MARGIN_X_PT * DPI);
+		int contentW = width - 2 * marginX;
 
-		BufferedImage probe = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
-		Graphics2D pg = probe.createGraphics();
-		List<String> kmLines = wrapParagraphs(consentTextKm(version), pg, body, WIDTH - 2 * MARGIN);
-		pg.dispose();
+		Font heading = khmer(true).deriveFont(12f * DPI);
+		Font label = khmer(false).deriveFont(11f * DPI);
+		Font body = khmer(false).deriveFont(11f * DPI);
+		Font footer = khmer(false).deriveFont(7.5f * DPI);
 
-		int height = 400 + kmLines.size() * 32 + 170;
-		BufferedImage img = new BufferedImage(WIDTH, height, BufferedImage.TYPE_INT_RGB);
+		BufferedImage img = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
 		Graphics2D g = img.createGraphics();
 		g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 		g.setColor(Color.WHITE);
-		g.fillRect(0, 0, WIDTH, height);
-		g.setColor(new Color(0x1A, 0x35, 0x7A));
-		g.fillRect(0, 0, WIDTH, 8);
-
-		int y = 90;
+		g.fillRect(0, 0, width, height);
 		g.setColor(Color.BLACK);
-		drawMixed(g, "ការយល់ព្រមឲ្យធ្វើការស៊ើបអង្កេតឥណទាន (CBC)", MARGIN, y, title);
-		y += 42;
-		g.setColor(Color.DARK_GRAY);
-		drawMixed(g, "Kjey PAPA · សម្បត្តិ ហ្វាយនែន ម.ក — ឥណទានបើកប្រាក់ខែ", MARGIN, y, small);
-		y += 52;
 
-		g.setColor(Color.BLACK);
-		y = kv(g, label, body, "ឈ្មោះអតិថិជន", khmerName.isEmpty() ? customer : khmerName, y);
-		if (!khmerName.isEmpty() && !customer.isEmpty())
-			y = kv(g, label, body, "ជាអក្សរឡាតាំង", customer, y);
-		y = kv(g, label, body, "លេខអត្តសញ្ញាណប័ណ្ណ", s(pi.getIdNo()), y);
-		y = kv(g, label, body, "លេខពាក្យសុំ", "#" + loanId, y);
-		y = kv(g, label, body, "លេខយោង", ref, y);
-		y = kv(g, label, body, "កាលបរិច្ឆេទ", when, y);
-		y += 28;
+		int lineH = Math.round(11f * 1.55f * DPI);
+		int y = Math.round(MARGIN_TOP_PT * DPI) + Math.round(20f * DPI);
 
-		for (String line : kmLines) {
-			drawMixed(g, line, MARGIN, y, body);
-			y += 32;
+		// Heading — bold and underlined, as on their form.
+		String title = "ការយល់ព្រមរបស់អ្នកស្នើសុំខ្ចីប្រាក់៖";
+		draw(g, title, marginX, y, heading);
+		g.fillRect(marginX, y + Math.round(4f * DPI), widthOf(g, title, heading),
+				Math.max(1, Math.round(1.1f * DPI)));
+		y += Math.round(lineH * 1.9f);
+
+		// Borrower block — their labels, in their order.
+		int valueX = marginX + Math.round(150f * DPI);
+		String khmerName = (s(pi.getKhmerFamilyName()) + " " + s(pi.getKhmerFirstName())).trim();
+		String latinName = (s(pi.getLatinFamilyName()) + " " + s(pi.getLatinFirstName())).trim();
+		y = row(g, label, marginX, valueX, y, lineH, "ឈ្មោះអតិថិជន", khmerName.isEmpty() ? latinName : khmerName);
+		y = row(g, label, marginX, valueX, y, lineH, "ជាអក្សរឡាតាំង", latinName);
+		y = row(g, label, marginX, valueX, y, lineH, "លេខអត្តសញ្ញាណប័ណ្ណ", s(pi.getIdNo()));
+		y = row(g, label, marginX, valueX, y, lineH, "លេខសំណើ", String.valueOf(loanId));
+		y = row(g, label, marginX, valueX, y, lineH, "លេខយោង", ref);
+		y = row(g, label, marginX, valueX, y, lineH, "កាលបរិច្ឆេទ",
+				at.format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm")));
+		y += Math.round(lineH * 1.1f);
+
+		// Body — justified, blank line between paragraphs, as in their template.
+		for (String paragraph : consentTextKm(version).trim().split("\\n\\s*\\n")) {
+			List<String> lines = wrap(g, paragraph.trim(), body, contentW);
+			for (int i = 0; i < lines.size(); i++) {
+				// Their template justifies every line but a paragraph's last.
+				drawLine(g, lines.get(i), marginX, y, body, contentW, i < lines.size() - 1);
+				y += lineH;
+			}
+			y += Math.round(lineH * 0.6f);
 		}
 
-		y += 30;
-		g.setColor(Color.DARK_GRAY);
-		drawMixed(g, "បានយល់ព្រមតាមប្រព័ន្ធអេឡិចត្រូនិកក្នុងកម្មវិធី Kjey PAPA (កំណែអត្ថបទ " + version + ")។",
-				MARGIN, y, small);
-		if (formReference != null && !formReference.isBlank()) {
-			y += 28;
-			g.setFont(smallEn);
-			g.setColor(Color.GRAY);
-			g.drawString(formReference, MARGIN, y);
+		// Footer — their form reference, bottom right.
+		if (notBlank(formReference)) {
+			int fy = height - Math.round(MARGIN_BOTTOM_PT * DPI);
+			draw(g, formReference, width - marginX - widthOf(g, formReference, footer), fy, footer);
 		}
+
 		g.dispose();
 		return img;
 	}
 
+	private int row(Graphics2D g, Font f, int labelX, int valueX, int y, int lineH, String label, String value) {
+		draw(g, label, labelX, y, f);
+		draw(g, value, valueX, y, f);
+		return y + lineH;
+	}
+
+	// ----- text drawing -----
+
 	/**
-	 * Noto Sans Khmer from the classpath. Falls back to the platform sans only
-	 * if the bundled font cannot be read — that renders Khmer as empty boxes,
-	 * so it is a last resort to keep a submit alive rather than an acceptable
-	 * output.
+	 * Draws one line, optionally justified to {@code width} by stretching the
+	 * gaps between space-separated runs. Khmer is not written with a space
+	 * between every word, so a line without spaces is left as it is rather than
+	 * letter-spaced into something unreadable.
 	 */
-	private Font khmer() {
-		Font f = khmerBase;
-		if (f != null)
-			return f;
-		synchronized (this) {
-			if (khmerBase == null) {
-				try (InputStream in = new ClassPathResource("fonts/NotoSansKhmer-Regular.ttf").getInputStream()) {
-					khmerBase = Font.createFont(Font.TRUETYPE_FONT, in);
-				} catch (IOException | FontFormatException e) {
-					khmerBase = new Font(Font.SANS_SERIF, Font.PLAIN, 24);
-				}
-			}
-			return khmerBase;
+	private void drawLine(Graphics2D g, String line, int x, int y, Font font, int width, boolean justify) {
+		String[] parts = line.split(" ");
+		if (!justify || parts.length < 2) {
+			draw(g, line, x, y, font);
+			return;
+		}
+		int natural = 0;
+		for (String p : parts)
+			natural += widthOf(g, p, font);
+		int gap = (width - natural) / (parts.length - 1);
+		// Khmer puts spaces at phrase boundaries, not between every word, so a
+		// line can have two or three gaps to absorb the whole slack. Stretching
+		// those tears holes in the paragraph; past a few spaces' worth it reads
+		// better ragged, which is what Word's Khmer justification avoids by
+		// also stretching between characters.
+		int spaceW = g.getFontMetrics(font).stringWidth(" ");
+		if (gap <= 0 || gap > spaceW * 4) {
+			draw(g, line, x, y, font);
+			return;
+		}
+		int cx = x;
+		for (String part : parts) {
+			draw(g, part, cx, y, font);
+			cx += widthOf(g, part, font) + gap;
 		}
 	}
 
-	private static int kv(Graphics2D g, Font label, Font body, String k, String v, int y) {
-		drawMixed(g, k, MARGIN, y, label);
-		drawMixed(g, v, MARGIN + 320, y, body);
-		return y + 40;
-	}
-
-	private static boolean isKhmer(char c) {
-		return (c >= 0x1780 && c <= 0x17FF) || (c >= 0x19E0 && c <= 0x19FF);
-	}
-
-	/** Spaces and punctuation belong to whichever run they sit in. */
-	private static boolean isNeutral(char c) {
-		return c == ' ' || c == '\t';
-	}
-
 	/**
-	 * Draws a mixed Khmer/Latin string run by run.
-	 *
-	 * <p>Noto Sans Khmer contains Khmer only — no Latin letters and, critically,
-	 * <b>no digits</b>. Drawing the whole line with it turned the customer's ID
-	 * number, the consent reference and the date into empty boxes (caught by
-	 * eye on the first render). Each run is therefore drawn with the face that
-	 * actually has its glyphs: the bundled Khmer font, or the JVM's own sans
-	 * for everything else.
+	 * Draws text run by run, switching to a fallback face for any character the
+	 * Khmer font cannot show. Khmer OS Content has no Latin letters, so without
+	 * this the customer's name and the form reference print as empty boxes.
 	 */
-	private static void drawMixed(Graphics2D g, String text, int x, int y, Font khmerFont) {
-		Font latinFont = new Font(Font.SANS_SERIF, khmerFont.getStyle(), khmerFont.getSize());
+	private void draw(Graphics2D g, String text, int x, int y, Font font) {
 		int cx = x;
 		int i = 0;
 		while (i < text.length()) {
-			boolean km = runIsKhmer(text, i);
-			int j = runEnd(text, i, km);
+			boolean ok = font.canDisplay(text.charAt(i));
+			int j = i;
+			while (j < text.length() && font.canDisplay(text.charAt(j)) == ok)
+				j++;
 			String run = text.substring(i, j);
-			Font f = km ? khmerFont : latinFont;
+			Font f = ok ? font : fallback(font);
 			g.setFont(f);
 			g.drawString(run, cx, y);
 			cx += g.getFontMetrics(f).stringWidth(run);
@@ -290,65 +266,32 @@ public class CbcConsentFormRenderer {
 		}
 	}
 
-	/** Rendered width of a mixed string under the same per-run rule. */
-	private static int widthMixed(Graphics2D g, String text, Font khmerFont) {
-		Font latinFont = new Font(Font.SANS_SERIF, khmerFont.getStyle(), khmerFont.getSize());
+	/** Measured exactly the way {@link #draw} paints it. */
+	private int widthOf(Graphics2D g, String text, Font font) {
 		int w = 0;
 		int i = 0;
 		while (i < text.length()) {
-			boolean km = runIsKhmer(text, i);
-			int j = runEnd(text, i, km);
-			w += g.getFontMetrics(km ? khmerFont : latinFont).stringWidth(text.substring(i, j));
+			boolean ok = font.canDisplay(text.charAt(i));
+			int j = i;
+			while (j < text.length() && font.canDisplay(text.charAt(j)) == ok)
+				j++;
+			w += g.getFontMetrics(ok ? font : fallback(font)).stringWidth(text.substring(i, j));
 			i = j;
 		}
 		return w;
 	}
 
-	private static boolean runIsKhmer(String text, int from) {
-		for (int k = from; k < text.length(); k++)
-			if (!isNeutral(text.charAt(k)))
-				return isKhmer(text.charAt(k));
-		return false;
+	private static Font fallback(Font like) {
+		return new Font(Font.SANS_SERIF, like.getStyle(), like.getSize());
 	}
 
-	private static int runEnd(String text, int from, boolean khmerRun) {
-		int j = from;
-		while (j < text.length()) {
-			char c = text.charAt(j);
-			if (!isNeutral(c) && isKhmer(c) != khmerRun)
-				break;
-			j++;
-		}
-		return j;
-	}
-
-	/**
-	 * Greedy wrap by rendered width. Khmer does not use spaces between words,
-	 * so a space-only split would overflow the page; when a "word" is itself
-	 * wider than the line it is broken by character.
-	 */
-	/**
-	 * Wraps a multi-paragraph text, keeping the blank line between paragraphs.
-	 * The final wording is three paragraphs; running them together would make
-	 * a wall of Khmer that nobody reads.
-	 */
-	private static List<String> wrapParagraphs(String text, Graphics2D g, Font font, int maxWidth) {
-		List<String> out = new ArrayList<>();
-		String[] paragraphs = text.trim().split("\\n\\s*\\n");
-		for (int i = 0; i < paragraphs.length; i++) {
-			out.addAll(wrap(paragraphs[i], g, font, maxWidth));
-			if (i < paragraphs.length - 1)
-				out.add("");
-		}
-		return out;
-	}
-
-	private static List<String> wrap(String text, Graphics2D g, Font font, int maxWidth) {
+	/** Greedy wrap, measured the same way it is drawn. */
+	private List<String> wrap(Graphics2D g, String text, Font font, int maxWidth) {
 		List<String> lines = new ArrayList<>();
 		StringBuilder line = new StringBuilder();
 		for (String word : text.trim().split("\\s+")) {
 			String candidate = line.isEmpty() ? word : line + " " + word;
-			if (widthMixed(g, candidate, font) <= maxWidth) {
+			if (widthOf(g, candidate, font) <= maxWidth) {
 				line = new StringBuilder(candidate);
 				continue;
 			}
@@ -356,12 +299,14 @@ public class CbcConsentFormRenderer {
 				lines.add(line.toString());
 				line = new StringBuilder();
 			}
-			if (widthMixed(g, word, font) <= maxWidth) {
+			if (widthOf(g, word, font) <= maxWidth) {
 				line = new StringBuilder(word);
 			} else {
+				// A single Khmer run can be longer than the measure; break it by
+				// character rather than let it run off the page.
 				StringBuilder chunk = new StringBuilder();
 				for (char c : word.toCharArray()) {
-					if (chunk.length() > 0 && widthMixed(g, chunk.toString() + c, font) > maxWidth) {
+					if (chunk.length() > 0 && widthOf(g, chunk.toString() + c, font) > maxWidth) {
 						lines.add(chunk.toString());
 						chunk = new StringBuilder();
 					}
@@ -373,6 +318,42 @@ public class CbcConsentFormRenderer {
 		if (!line.isEmpty())
 			lines.add(line.toString());
 		return lines;
+	}
+
+	// ----- resources -----
+
+	private Font khmer(boolean bold) {
+		Font cached = bold ? khmerBold : khmerRegular;
+		if (cached != null)
+			return cached;
+		synchronized (this) {
+			String file = bold ? "fonts/KhmerOSContent-Bold.ttf" : "fonts/KhmerOSContent-Regular.ttf";
+			Font f;
+			try (InputStream in = new ClassPathResource(file).getInputStream()) {
+				f = Font.createFont(Font.TRUETYPE_FONT, in);
+			} catch (IOException | FontFormatException e) {
+				// Losing the Khmer face prints Khmer as boxes: a last resort to
+				// keep a submit alive, never an acceptable result.
+				f = new Font(Font.SANS_SERIF, bold ? Font.BOLD : Font.PLAIN, 12);
+			}
+			if (bold)
+				khmerBold = f;
+			else
+				khmerRegular = f;
+			return f;
+		}
+	}
+
+	private static String read(String classpathFile) {
+		try (InputStream in = new ClassPathResource(classpathFile).getInputStream()) {
+			return new String(in.readAllBytes(), StandardCharsets.UTF_8).trim();
+		} catch (IOException e) {
+			return null;
+		}
+	}
+
+	private static boolean notBlank(String v) {
+		return v != null && !v.isBlank();
 	}
 
 	private static String s(String v) {

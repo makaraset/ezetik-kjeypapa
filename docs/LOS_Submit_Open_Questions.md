@@ -583,3 +583,25 @@ fragment is currently visible to customers on the consent page and printed on
 every consent PDF filed with them.
 
 </details>
+
+---
+
+## Consent form follows Sambat's own template (2026-09-04)
+
+Rebuilt to `CBCConsentforMobileApp_KH_Final`: A4, **Khmer OS Content**, their
+page geometry read from the .docx (0.59in sides, 0.30in top, 0.49in bottom),
+12pt bold underlined heading, 11pt justified body, the borrower block in their
+label order, and their form reference bottom-right at 7.5pt.
+
+Two things worth knowing about the result:
+
+- **Khmer OS Content has no Latin letters** (it does have digits). Text is
+  therefore drawn run by run against `canDisplay`, falling back for Latin —
+  otherwise the customer's Latin name and the form reference print as empty
+  boxes, which is how an earlier draft printed the ID number.
+- **Justification is capped.** Khmer puts spaces at phrase boundaries rather
+  than between every word, so a line may have only two or three gaps to absorb
+  the slack; stretching them tore holes in the paragraph. Lines needing more
+  than about four spaces' worth are left ragged. Word achieves an even
+  justification by also stretching between characters, which Java2D will not do
+  for us — if Sambat need exact justification, that is the gap to close.

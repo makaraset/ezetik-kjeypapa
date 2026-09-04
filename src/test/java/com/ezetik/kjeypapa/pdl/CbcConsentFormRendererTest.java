@@ -34,7 +34,6 @@ class CbcConsentFormRendererTest {
 	private CbcConsentFormRenderer renderer() {
 		CbcConsentFormRenderer r = new CbcConsentFormRenderer();
 		ReflectionTestUtils.setField(r, "consentTextKmOverride", KM_TEXT);
-		ReflectionTestUtils.setField(r, "consentTextEn", "I consent to a CBC credit enquiry.");
 		ReflectionTestUtils.setField(r, "textVersion", "v1-test");
 		return r;
 	}
@@ -62,10 +61,10 @@ class CbcConsentFormRendererTest {
 
 		BufferedImage img = ImageIO.read(new ByteArrayInputStream(png));
 		assertThat(img).isNotNull();
-		assertThat(img.getWidth()).isEqualTo(1000);
-		// Tall enough to hold the header, the identity block and the wrapped
-		// consent — a collapsed layout would still "render" without this.
-		assertThat(img.getHeight()).isGreaterThan(500);
+		// A4 at 150dpi, to Sambat's template — a fixed page, not a canvas that
+		// grows with the text.
+		assertThat(img.getWidth()).isEqualTo(1240);
+		assertThat(img.getHeight()).isEqualTo(1754);
 
 		String dir = System.getProperty("pdl.dump.dir");
 		if (dir != null) {
@@ -75,14 +74,18 @@ class CbcConsentFormRendererTest {
 	}
 
 	@Test
-	@DisplayName("the bundled Khmer font is present and actually shapes Khmer")
+	@DisplayName("Sambat's font is bundled, covers Khmer, and lacks Latin")
 	void khmerFontIsUsable() throws Exception {
-		// Without a Khmer-capable font the JVM draws .notdef boxes: it does not
-		// throw, so the only signal is that the glyphs are missing.
+		// Their template specifies Khmer OS Content. It has Khmer and digits
+		// but NO Latin letters, which is why the renderer draws per-run against
+		// canDisplay rather than by Unicode range — the first version of this
+		// form printed the customer's ID number as empty boxes.
 		var font = java.awt.Font.createFont(java.awt.Font.TRUETYPE_FONT,
-				new File("src/main/resources/fonts/NotoSansKhmer-Regular.ttf"));
-		assertThat(font.getFontName()).contains("Khmer");
-		assertThat(font.canDisplayUpTo(KM_TEXT)).isEqualTo(-1); // every glyph present
+				new File("src/main/resources/fonts/KhmerOSContent-Regular.ttf"));
+		assertThat(font.getFontName()).isEqualTo("Khmer OS Content");
+		assertThat(font.canDisplayUpTo(KM_TEXT)).isEqualTo(-1);
+		assertThat(font.canDisplay('A')).isFalse();
+		assertThat(font.canDisplay('7')).isTrue(); // digits it does have
 	}
 
 	@Test
