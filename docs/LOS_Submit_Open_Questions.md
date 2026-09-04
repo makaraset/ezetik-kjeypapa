@@ -463,3 +463,31 @@ control before a conclusion is drawn.
   native review.
 - A16 tiers / rejection codes, A17 real bank-app contract + webhook auth
   credentials, A20 UAT server setup.
+
+---
+
+## Acceptance relay implemented — and a live-mode crash fixed (2026-09-04)
+
+`LosProvider.sendDecision` **threw `UnsupportedOperationException` whenever
+`los.mock.enabled=false`**. Since submitting is now live, an approved customer
+tapping Accept would have hit that: the acceptance never reached Sambat, so the
+application would sit approved and never disburse. Implemented via
+`POST /customer-accepted`, keyed by their **AppId** (their swagger types the
+field `appId`, int32 — the same identifier as everywhere else).
+
+The interface now takes the loan rather than a reference string, because the
+AppRefId we previously passed is not what that endpoint accepts.
+
+### Questions this raises for Sambat
+1. **`smsText` and `trnCode`** on `/customer-accepted` — your swagger types
+   both as strings and documents neither. We send them **empty** rather than
+   invent content, because `smsText` looks like it may be sent to the customer
+   and we will not put invented wording in front of a real person. What belongs
+   in each?
+2. **No decline endpoint.** Your API has `/customer-accepted` and nothing for
+   "the customer declined" or "the offer expired at cut-off". Today those close
+   on our side only and your LOS is never told. Is there an endpoint we have
+   missed, or should the application simply lapse on your side?
+3. **`/payday-disbursement`** — is that ours to call after disbursement, or
+   yours to call us? We currently receive disbursement on our own webhook
+   (`/pdl/los/disbursement`) and do not call theirs.

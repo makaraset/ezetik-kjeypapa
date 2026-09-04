@@ -91,6 +91,33 @@ public class SbfGatewayClient {
 	}
 
 	/**
+	 * {@code POST /customer-accepted} — tell Sambat the customer accepted their
+	 * approved offer, which is what lets the application move to disbursement.
+	 * Keyed by their {@code AppId} (their swagger types it int32), like the
+	 * rest of their application API.
+	 */
+	public String customerAccepted(long appId, String doneBy, String smsText, String trnCode) throws Exception {
+		var node = mapper.createObjectNode();
+		node.put("appId", appId);
+		node.put("doneBy", doneBy == null ? "" : doneBy);
+		node.put("smsText", smsText == null ? "" : smsText);
+		node.put("trnCode", trnCode == null ? "" : trnCode);
+		HttpRequest req = HttpRequest.newBuilder().uri(new URI(losUrlApi + "/customer-accepted"))
+				.header("Content-Type", "application/json")
+				.header("Authorization", "Bearer " + token())
+				.timeout(Duration.ofSeconds(submitTimeoutSeconds))
+				.POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(node))).build();
+		HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+		if (resp.statusCode() != 200 && resp.statusCode() != 201) {
+			String detail = resp.body() == null ? ""
+					: resp.body().substring(0, Math.min(512, resp.body().length()));
+			throw new IllegalStateException(
+					"SBF /customer-accepted returned " + resp.statusCode() + ": " + detail);
+		}
+		return resp.body();
+	}
+
+	/**
 	 * {@code GET /customer-balance?accountNo=} — one saving/settlement account
 	 * with its live core-banking balance. Null when SBF has no such account.
 	 */

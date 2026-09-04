@@ -343,14 +343,14 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 				loan.setAcceptedDate(new Date(System.currentTimeMillis()));
 				loan.setSignedContractRef(decision.getSignedContractRef());
 				loan.setStatus(PdlStatusEnum.Accepted);
-				losProvider.sendDecision(loan.getLosApplicationNo(), "Y", decision.getSignedContractRef());
+				losProvider.sendDecision(loan, "Y", decision.getSignedContractRef());
 
 				return resp("SUCCESS", "Loan accepted", repo.save(loan), HttpStatus.OK);
 
 			} else {
 				loan.setStatus(PdlStatusEnum.Rejected);
 				loan.setLosMessage("Loan Application is rejected by you");
-				losProvider.sendDecision(loan.getLosApplicationNo(), "N", null);
+				losProvider.sendDecision(loan, "N", null);
 
 				return resp("SUCCESS", "Loan rejected by customer", repo.save(loan), HttpStatus.OK);
 			}

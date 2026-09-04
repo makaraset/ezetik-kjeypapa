@@ -15,8 +15,12 @@ public interface LosProvider {
 	/** BRS 2.3 — submit a new application; returns the LOS application number. */
 	String submitApplication(PaydayLoan loan);
 
-	/** BRS 2.7 — relay the customer's accept ("Y" + signed contract) / reject ("N"). */
-	void sendDecision(String losApplicationNo, String decision, String signedContractRef);
+	/**
+	 * BRS 2.7 — relay the customer's accept ("Y" + signed contract) / reject
+	 * ("N"). Takes the loan rather than a reference because Sambat's
+	 * {@code /customer-accepted} is keyed by their AppId.
+	 */
+	void sendDecision(PaydayLoan loan, String decision, String signedContractRef);
 
 	/** BRS 2.2 — receive a product-config push from LOS. */
 	void onProductSync(LosProductSyncPayload payload);

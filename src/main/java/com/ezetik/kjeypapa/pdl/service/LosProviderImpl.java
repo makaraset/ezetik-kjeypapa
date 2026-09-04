@@ -28,7 +28,9 @@ import lombok.extern.slf4j.Slf4j;
  *
  * <p>Real mode refuses to start until {@link LosSubmitConfig} is fully
  * populated, because their master-list codes cannot be guessed safely.
- * {@code sendDecision} is still mock-only.
+ * {@link #sendDecision} relays a customer's acceptance through
+ * {@code POST /customer-accepted} — the step that lets Sambat move an approved
+ * application to disbursement.
  */
 @Slf4j
 @Service
@@ -44,8 +46,23 @@ public class LosProviderImpl implements LosProvider {
 	private ObjectMapper om;
 
 
+	@Autowired
+	private LosSubmitConfig submitConfig;
+
 	@Value("${los.mock.enabled:true}")
 	private boolean mockEnabled;
+
+	/**
+	 * Optional extras on {@code /customer-accepted}. Their swagger types both
+	 * as plain strings and documents neither; sending our own guess could put
+	 * invented wording into an SMS to a real customer, so both default to
+	 * empty until Sambat says what belongs in them.
+	 */
+	@Value("${los.accept.sms-text:}")
+	private String acceptSmsText;
+
+	@Value("${los.accept.trn-code:}")
+	private String acceptTrnCode;
 
 	@Override
 	public String submitApplication(PaydayLoan loan) {
@@ -96,14 +113,39 @@ public class LosProviderImpl implements LosProvider {
 	}
 
 	@Override
-	public void sendDecision(String losApplicationNo, String decision, String signedContractRef) {
+	public void sendDecision(PaydayLoan loan, String decision, String signedContractRef) {
 		if (mockEnabled) {
-			System.out.println("[LOS mock] decision " + decision + " for " + losApplicationNo
-					+ (signedContractRef != null ? " (contract " + signedContractRef + ")" : ""));
+			log.info("[LOS mock] decision {} for {}{}", decision, loan.getLosApplicationNo(),
+					signedContractRef != null ? " (contract " + signedContractRef + ")" : "");
 			return;
 		}
-		throw new UnsupportedOperationException(
-				"Real LOS accept/reject is TBD — see plans/PDL_IMPLEMENTATION.md (BRS Appendix 6).");
+
+		// Sambat exposes NO decline endpoint — their API has /customer-accepted
+		// and nothing for "the customer said no" or an expired offer. Those
+		// close on our side only; raised with them. Logged so the gap is
+		// visible in the record rather than silently dropped.
+		if (!"Y".equalsIgnoreCase(decision)) {
+			log.info("Loan {} declined/expired — Sambat has no decline endpoint, nothing relayed",
+					loan.getId());
+			return;
+		}
+
+		// Their /customer-accepted is keyed by AppId, so a loan filed before we
+		// stored one cannot be relayed. Fail loudly: silently skipping would
+		// leave an accepted loan that Sambat never disburses.
+		if (loan.getLosAppId() == null)
+			throw new LosSubmitException("LOS_NO_APP_ID",
+					"This application has no Sambat application id, so the acceptance cannot be sent.");
+
+		try {
+			sbf.customerAccepted(loan.getLosAppId(), submitConfig.getDoneBy(), acceptSmsText, acceptTrnCode);
+		} catch (LosSubmitException e) {
+			throw e;
+		} catch (Exception e) {
+			log.warn("Acceptance relay failed for loan {}: {}", loan.getId(), e.toString());
+			throw new LosSubmitException("LOS_ACCEPT_FAILED",
+					"Could not confirm your acceptance with Sambat. Please try again.");
+		}
 	}
 
 	@Override

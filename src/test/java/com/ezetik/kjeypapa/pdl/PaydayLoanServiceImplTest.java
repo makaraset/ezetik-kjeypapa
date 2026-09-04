@@ -288,7 +288,7 @@ class PaydayLoanServiceImplTest {
 		assertThat(out.getStatus()).isEqualTo(PdlStatusEnum.Accepted);
 		assertThat(out.isAccepted()).isTrue();
 		assertThat(out.getSignedContractRef()).isEqualTo("SIGNED-1");
-		verify(losProvider).sendDecision("LOS-MOCK-1", "Y", "SIGNED-1");
+		verify(losProvider).sendDecision(loan, "Y", "SIGNED-1");
 	}
 
 	@Test
@@ -493,5 +493,40 @@ class PaydayLoanServiceImplTest {
 
 		assertThat(body.getType()).isEqualTo("NOT_FOUND");
 		assertThat(body.getData()).isNull();
+	}
+
+	@Test
+	void accept_relaysTheAcceptanceToSambat() {
+		// Sambat only moves an approved application to disbursement once they
+		// are told the customer accepted. Before this was implemented, a live
+		// accept threw UnsupportedOperationException and the customer's
+		// acceptance went nowhere.
+		PaydayLoan loan = loanOwnedBy(CURRENT_ID, PdlStatusEnum.Approved);
+		loan.setLosAppId(8287L);
+		var decision = new com.ezetik.kjeypapa.pdl.payload.PdlAcceptDecision();
+		decision.setDecision("Y");
+		decision.setSignedContractRef("contract.pdf");
+
+		service.accept(1, decision);
+
+		verify(losProvider).sendDecision(loan, "Y", "contract.pdf");
+		assertThat(loan.getStatus()).isEqualTo(PdlStatusEnum.Accepted);
+	}
+
+	@Test
+	void accept_failsLoudlyWhenTheRelayFails() {
+		// If Sambat never learns of the acceptance the loan will not disburse,
+		// so a relay failure must not be reported to the customer as success.
+		PaydayLoan loan = loanOwnedBy(CURRENT_ID, PdlStatusEnum.Approved);
+		loan.setLosAppId(8287L);
+		var decision = new com.ezetik.kjeypapa.pdl.payload.PdlAcceptDecision();
+		decision.setDecision("Y");
+		decision.setSignedContractRef("contract.pdf");
+		org.mockito.Mockito.doThrow(new LosSubmitException("LOS_ACCEPT_FAILED", "Could not confirm"))
+				.when(losProvider).sendDecision(any(), eq("Y"), any());
+
+		var body = service.accept(1, decision).getBody();
+
+		assertThat(body.getType()).isNotEqualTo("SUCCESS");
 	}
 }

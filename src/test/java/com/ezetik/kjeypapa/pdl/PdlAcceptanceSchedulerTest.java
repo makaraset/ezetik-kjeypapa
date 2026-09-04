@@ -61,7 +61,7 @@ class PdlAcceptanceSchedulerTest {
 
 		assertThat(l.getStatus()).isEqualTo(PdlStatusEnum.Rejected);
 		assertThat(l.getLosMessage()).contains("cut-off");
-		verify(losProvider).sendDecision("LOS-1", "N", null);
+		verify(losProvider).sendDecision(l, "N", null);
 	}
 
 	@Test
@@ -104,6 +104,6 @@ class PdlAcceptanceSchedulerTest {
 
 		org.assertj.core.api.Assertions.assertThat(loan.getStatus())
 				.isEqualTo(com.ezetik.kjeypapa.pdl.model.PdlStatusEnum.Rejected);
-		org.mockito.Mockito.verify(losProvider).sendDecision("LOS-9", "N", null);
+		org.mockito.Mockito.verify(losProvider).sendDecision(loan, "N", null);
 	}
 }

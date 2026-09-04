@@ -78,7 +78,7 @@ public class PdlAcceptanceScheduler {
 			repo.save(loan);
 
 			try {
-				losProvider.sendDecision(loan.getLosApplicationNo(), "N", null);
+				losProvider.sendDecision(loan, "N", null);
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
