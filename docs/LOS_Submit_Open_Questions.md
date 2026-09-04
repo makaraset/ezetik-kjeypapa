@@ -509,3 +509,29 @@ Note for when other banks are added: our stored bank names (e.g. "Campu Bank")
 are NOT their canonical spellings, so they cannot be sent as-is. The mapping
 will come from the same payment-channel sheet, which carries the canonical
 names — `docs/payment_channel_codes.csv`.
+
+---
+
+## Customer can view what we filed; App ID is the LOS one (2026-09-04)
+
+Sambat, against V8 screen 18: **"App ID is from LOS"**, and **"we allow customer
+to view all the documents that we post to LOS"**.
+
+- The submitted screen's **App ID** now shows Sambat's LOS AppId (e.g. 8293).
+  It only exists once the application is filed, so before submission the screen
+  still shows our own application number.
+- **Attachment → View** now lists every document filed, not just the bank
+  statement: ID card (both sides, merged as sent), photo, employment card, bank
+  statement, and the e-CBC consent form.
+
+New endpoints: `GET /pdl/{id}/los-documents` (the slots) and
+`GET /pdl/{id}/los-document/{slot}` (one document), both ownership-checked.
+Each is produced by the **same assembler the submission uses**, so what the
+customer sees is what was sent, by construction rather than by duplication.
+
+Two details worth knowing:
+- The consent is served as an image while the wire format is PDF — identical
+  content, and it displays without a PDF reader in the app.
+- Re-rendering the consent now uses the **stamped** consent time rather than
+  the current time, so a customer opening it months later sees the moment they
+  consented, not the moment they looked.

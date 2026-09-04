@@ -101,7 +101,13 @@ public class CbcConsentFormRenderer {
 		String customer = (s(pi.getLatinFamilyName()) + " " + s(pi.getLatinFirstName())).trim();
 		String khmerName = (s(pi.getKhmerFamilyName()) + " " + s(pi.getKhmerFirstName())).trim();
 		String ref = "CBC-" + loanId + "-" + textVersion;
-		String when = ZonedDateTime.now(KH).format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm"));
+		// The stamped consent time, not "now": a customer re-opening the form
+		// months later must see the moment they consented, and the document
+		// they view must be the document we filed.
+		ZonedDateTime at = loan.getCbcConsentDate() != null
+				? loan.getCbcConsentDate().atZone(KH)
+				: ZonedDateTime.now(KH);
+		String when = at.format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm"));
 
 		Font km = khmer();
 		Font title = km.deriveFont(Font.BOLD, 34f);

@@ -45,6 +45,9 @@ public interface PaydayLoanService {
 
 	ResponseEntity<Message<PdlCbcConsentResponse>> getCbcConsent(int id);
 
+	/** One document as filed with Sambat, rendered for the customer to view. */
+	ResponseEntity<byte[]> getLosDocument(int id, String slot);
+
 	ResponseEntity<Message<PdlSettlementAccountResponse>> getSettlementAccount();
 
 	// --- profile capture (signup / My Profile) ---

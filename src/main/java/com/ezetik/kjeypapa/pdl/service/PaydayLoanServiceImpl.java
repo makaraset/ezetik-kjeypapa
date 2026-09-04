@@ -89,6 +89,17 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 	@Autowired
 	private CbcConsentFormRenderer consentForm;
 
+	@Autowired
+	private LosDocumentAssembler losDocs;
+
+	/**
+	 * The document slots we send Sambat, in the order the customer sees them.
+	 * Sambat asked (2026-09-04) that the customer be able to view everything we
+	 * post on their behalf.
+	 */
+	public static final List<String> LOS_DOCUMENT_SLOTS =
+			List.of("NID", "PROFILE_PHOTO", "EMPLOYMENT_CARD", "BANK_STATEMENT", "ECBC_CONSENT");
+
 	private static boolean blank(String s) {
 		return s == null || s.isBlank();
 	}
@@ -549,6 +560,82 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 	}
 
 	/** The generated CBC-consent record (QC4.2) — ownership-checked like the loan itself. */
+	/**
+	 * One of the documents filed with Sambat, rendered for viewing.
+	 *
+	 * <p>Built through the same assembler the submission uses, so what the
+	 * customer sees IS what we sent — the NID is the merged pair, the consent
+	 * is the same rendering. The consent is served as an image rather than the
+	 * PDF that goes on the wire: identical content, and it displays in the app
+	 * without a PDF reader.
+	 */
+	@Override
+	public ResponseEntity<byte[]> getLosDocument(int id, String slot) {
+		PaydayLoan loan = ownedLoanOrNull(id);
+		if (loan == null)
+			return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+		PdlPersonalInfo pi = first(personalRepo.findByUser(loan.getUser().getId()));
+		PdlEmploymentInfo ei = first(employmentRepo.findByUser(loan.getUser().getId()));
+		PdlBankInfo bi = first(bankRepo.findByUser(loan.getUser().getId()));
+		int loanId = loan.getId() == null ? 0 : loan.getId();
+
+		try {
+			byte[] body;
+			String type;
+			switch (slot == null ? "" : slot.toUpperCase()) {
+			case "NID" -> {
+				if (pi == null)
+					return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+				body = decode(losDocs.mergedNid(pi.getNidFrontFileRef(), pi.getNidBackFileRef(), loanId));
+				type = "image/jpeg";
+			}
+			case "PROFILE_PHOTO" -> {
+				if (pi == null)
+					return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+				body = decode(losDocs.build(pi.getProfilePhotoFileRef(), "ProfilePhoto", loanId));
+				type = "image/jpeg";
+			}
+			case "EMPLOYMENT_CARD" -> {
+				if (ei == null)
+					return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+				body = decode(losDocs.build(ei.getEmploymentCardFileRef(), "EmploymentCard", loanId));
+				type = "image/jpeg";
+			}
+			case "BANK_STATEMENT" -> {
+				if (bi == null)
+					return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+				body = decode(losDocs.build(bi.getBankStatementFileRef(), "BankStatement", loanId));
+				type = "image/jpeg";
+			}
+			case "ECBC_CONSENT" -> {
+				if (pi == null)
+					return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+				body = consentForm.render(loan, pi);
+				type = "image/png";
+			}
+			default -> {
+				return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+			}
+			}
+			if (body == null || body.length == 0)
+				return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+			return ResponseEntity.ok().header("Content-Type", type).body(body);
+		} catch (Exception e) {
+			log.warn("Could not render LOS document {} for loan {}: {}", slot, id, e.toString());
+			return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+		}
+	}
+
+	/** The single current row per user, or null. */
+	private static <T> T first(List<T> rows) {
+		return rows == null || rows.isEmpty() ? null : rows.get(0);
+	}
+
+	private static byte[] decode(LosDocumentAssembler.Doc doc) {
+		return doc == null || doc.base64() == null || doc.base64().isEmpty() ? null
+				: java.util.Base64.getDecoder().decode(doc.base64());
+	}
+
 	@Override
 	public ResponseEntity<Message<PdlCbcConsentResponse>> getCbcConsent(int id) {
 		try {

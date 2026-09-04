@@ -99,6 +99,26 @@ public class PaydayLoanController {
 	}
 
 	/** The generated CBC-consent record for a submitted application (QC4.2). */
+	/**
+	 * The documents filed with Sambat for this application. Sambat asked
+	 * (2026-09-04) that the customer be able to see everything we post on
+	 * their behalf; this lists the slots, and {@code /los-document/{slot}}
+	 * serves each one.
+	 */
+	@GetMapping("/{id}/los-documents")
+	@PreAuthorize("hasRole('CUSTOMER')")
+	public ResponseEntity<Message<java.util.List<String>>> losDocuments(@PathVariable("id") int id) {
+		return ResponseEntity.ok(new Message<>("SUCCESS", "OK",
+				com.ezetik.kjeypapa.pdl.service.PaydayLoanServiceImpl.LOS_DOCUMENT_SLOTS));
+	}
+
+	/** One filed document, as an image the app can display. */
+	@GetMapping("/{id}/los-document/{slot}")
+	@PreAuthorize("hasRole('CUSTOMER')")
+	public ResponseEntity<byte[]> losDocument(@PathVariable("id") int id, @PathVariable("slot") String slot) {
+		return service.getLosDocument(id, slot);
+	}
+
 	@GetMapping("/{id}/cbc-consent")
 	@PreAuthorize("hasRole('CUSTOMER')")
 	public ResponseEntity<Message<PdlCbcConsentResponse>> cbcConsent(@PathVariable("id") int id) {
