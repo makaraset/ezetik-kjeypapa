@@ -548,7 +548,23 @@ source — `src/main/resources/cbc/consent-km.txt` — so the two cannot drift.
 before today keep pointing at v1 and its hash, which is exactly why the record
 carries both a version and a hash.
 
-### ⚠️ Their final document contains a corrupted fragment
+### ~~⚠️ Their final document contains a corrupted fragment~~ CORRECTED same day
+
+Sambat sent clean text; the stray fragment is gone and the wording now in use
+is theirs verbatim. Their form footer — `Form _ CBC 01 _ CBC Consent Form For
+Borrowers _ V2 _ 09122025` — is printed on the rendered form and shown on the
+app's consent page. Confirmed there is **no English version**: the consent is
+Khmer only, so the English block has been removed from the form and the app
+shows the Khmer legal text in both locales (a customer must agree to the real
+text, never to an English paraphrase of ours while we file the Khmer one).
+
+Consents now re-render at the **version they were filed under** —
+`cbc/consent-km-<version>.txt` — with the stored reference, so a document shown
+back to a customer matches the record and hash filed against it. Verified: loan
+29 re-renders as v1-2026-08 with its old wording, loan 30 (filed after the
+change, AppId 8300) as v2-2026-09 with the corrected text.
+
+<details><summary>The original problem, for the record</summary>
 
 Paragraph 2, inside the sentence giving CBC's and Sambat's registered
 addresses, reads:
@@ -566,9 +582,4 @@ The moment it arrives it is a one-file replacement plus a version bump; the
 fragment is currently visible to customers on the consent page and printed on
 every consent PDF filed with them.
 
-### Still open
-- The **English** wording is still our interim text — their file is Khmer only.
-  A customer using the app in English currently sees interim English while the
-  filed PDF and the consent record are the final Khmer. Do they want an
-  English final, or should the legal text always display in Khmer regardless of
-  app language?
+</details>

@@ -63,7 +63,7 @@ public class CbcConsentFormRenderer {
 	@Value("${pdl.cbc.consent-text-km-file:cbc/consent-km.txt}")
 	private String consentTextKmFile;
 
-	private volatile String consentTextKmCached;
+	private final java.util.Map<String, String> textCache = new java.util.concurrent.ConcurrentHashMap<>();
 
 	/** English wording, kept beneath the Khmer for Sambat's own reviewers. */
 	@Value("${pdl.cbc.consent-text:I consent to Sambat Finance conducting a credit enquiry with the Credit Bureau of Cambodia (CBC) for the purpose of assessing this loan application, in accordance with the Prakas on Credit Reporting.}")
@@ -72,6 +72,10 @@ public class CbcConsentFormRenderer {
 	@Value("${pdl.cbc.text-version:v1}")
 	private String textVersion;
 
+	/** Sambat's own form reference, printed as the footer of their form. */
+	@Value("${pdl.cbc.form-reference:}")
+	private String formReference;
+
 	/**
 	 * The exact Khmer wording rendered into the form. The consent record hashes
 	 * THIS string, so the hash and the document can never describe different
@@ -79,22 +83,43 @@ public class CbcConsentFormRenderer {
 	 * empty string, which proves nothing.
 	 */
 	public String consentTextKm() {
+		return consentTextKm(null);
+	}
+
+	/**
+	 * The wording for a given text version.
+	 *
+	 * <p>A consent filed under an older version must re-render as the customer
+	 * saw it, not as today's wording — otherwise the document we show back
+	 * silently disagrees with the hash recorded against it. Versions live
+	 * beside the current text as {@code cbc/consent-km-<version>.txt}; an
+	 * unknown version falls back to the current wording, which is the best we
+	 * can do for anything filed before the files were versioned.
+	 */
+	public String consentTextKm(String version) {
 		if (consentTextKmOverride != null && !consentTextKmOverride.isBlank())
 			return consentTextKmOverride;
-		String cached = consentTextKmCached;
-		if (cached != null)
-			return cached;
-		synchronized (this) {
-			if (consentTextKmCached == null) {
-				try (InputStream in = new ClassPathResource(consentTextKmFile).getInputStream()) {
-					consentTextKmCached = new String(in.readAllBytes(), StandardCharsets.UTF_8).trim();
-				} catch (IOException e) {
-					// Never render a consent form with no consent on it.
-					throw new LosSubmitException("LOS_CONSENT_TEXT_MISSING",
-							"The consent wording could not be read.");
-				}
-			}
-			return consentTextKmCached;
+		String key = version == null || version.isBlank() ? consentTextKmFile
+				: "cbc/consent-km-" + version.trim() + ".txt";
+		String hit = textCache.get(key);
+		if (hit != null)
+			return hit;
+		String text = read(key);
+		if (text == null && !key.equals(consentTextKmFile))
+			text = read(consentTextKmFile);
+		if (text == null)
+			// Never render a consent form with no consent on it.
+			throw new LosSubmitException("LOS_CONSENT_TEXT_MISSING",
+					"The consent wording could not be read.");
+		textCache.put(key, text);
+		return text;
+	}
+
+	private static String read(String classpathFile) {
+		try (InputStream in = new ClassPathResource(classpathFile).getInputStream()) {
+			return new String(in.readAllBytes(), StandardCharsets.UTF_8).trim();
+		} catch (IOException e) {
+			return null;
 		}
 	}
 
@@ -128,7 +153,14 @@ public class CbcConsentFormRenderer {
 		int loanId = loan.getId() == null ? 0 : loan.getId();
 		String customer = (s(pi.getLatinFamilyName()) + " " + s(pi.getLatinFirstName())).trim();
 		String khmerName = (s(pi.getKhmerFamilyName()) + " " + s(pi.getKhmerFirstName())).trim();
-		String ref = "CBC-" + loanId + "-" + textVersion;
+		// The stored reference and version, not today's config: this document
+		// must match the record filed against it.
+		String version = loan.getCbcConsentTextVersion() != null && !loan.getCbcConsentTextVersion().isBlank()
+				? loan.getCbcConsentTextVersion()
+				: textVersion;
+		String ref = loan.getCbcConsentRef() != null && !loan.getCbcConsentRef().isBlank()
+				? loan.getCbcConsentRef()
+				: "CBC-" + loanId + "-" + version;
 		// The stamped consent time, not "now": a customer re-opening the form
 		// months later must see the moment they consented, and the document
 		// they view must be the document we filed.
@@ -146,11 +178,10 @@ public class CbcConsentFormRenderer {
 
 		BufferedImage probe = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
 		Graphics2D pg = probe.createGraphics();
-		List<String> kmLines = wrapParagraphs(consentTextKm(), pg, body, WIDTH - 2 * MARGIN);
-		List<String> enLines = wrap(consentTextEn, pg, smallEn, WIDTH - 2 * MARGIN);
+		List<String> kmLines = wrapParagraphs(consentTextKm(version), pg, body, WIDTH - 2 * MARGIN);
 		pg.dispose();
 
-		int height = 400 + kmLines.size() * 32 + enLines.size() * 24 + 150;
+		int height = 400 + kmLines.size() * 32 + 170;
 		BufferedImage img = new BufferedImage(WIDTH, height, BufferedImage.TYPE_INT_RGB);
 		Graphics2D g = img.createGraphics();
 		g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
@@ -182,18 +213,16 @@ public class CbcConsentFormRenderer {
 			y += 32;
 		}
 
-		y += 26;
-		g.setFont(smallEn);
-		g.setColor(Color.GRAY);
-		for (String line : enLines) {
-			g.drawString(line, MARGIN, y);
-			y += 24;
-		}
-
 		y += 30;
 		g.setColor(Color.DARK_GRAY);
-		drawMixed(g, "បានយល់ព្រមតាមប្រព័ន្ធអេឡិចត្រូនិកក្នុងកម្មវិធី Kjey PAPA (កំណែអត្ថបទ " + textVersion + ")។",
+		drawMixed(g, "បានយល់ព្រមតាមប្រព័ន្ធអេឡិចត្រូនិកក្នុងកម្មវិធី Kjey PAPA (កំណែអត្ថបទ " + version + ")។",
 				MARGIN, y, small);
+		if (formReference != null && !formReference.isBlank()) {
+			y += 28;
+			g.setFont(smallEn);
+			g.setColor(Color.GRAY);
+			g.drawString(formReference, MARGIN, y);
+		}
 		g.dispose();
 		return img;
 	}
