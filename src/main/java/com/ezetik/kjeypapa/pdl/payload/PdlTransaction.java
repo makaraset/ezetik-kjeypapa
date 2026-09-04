@@ -20,6 +20,12 @@ public class PdlTransaction {
 
 	private Integer id;
 	private String losApplicationNo;
+
+	/**
+	 * Sambat's LOS App ID — the number they identify an application by
+	 * (2026-09-04), and so the one the application cards show a customer.
+	 */
+	private Long losAppId;
 	private Double requestAmount;
 	private Instant applicationDate;
 	private PdlStatusEnum status;
@@ -41,6 +47,7 @@ public class PdlTransaction {
 	public PdlTransaction(PaydayLoan p) {
 		this.id = p.getId();
 		this.losApplicationNo = p.getLosApplicationNo();
+		this.losAppId = p.getLosAppId();
 		this.requestAmount = p.getRequestAmount();
 		this.applicationDate = p.getApplicationDate();
 		this.status = p.getStatus();
