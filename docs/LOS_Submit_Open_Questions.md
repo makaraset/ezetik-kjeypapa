@@ -595,10 +595,16 @@ label order, and their form reference bottom-right at 7.5pt.
 
 Two things worth knowing about the result:
 
-- **Khmer OS Content has no Latin letters** (it does have digits). Text is
-  therefore drawn run by run against `canDisplay`, falling back for Latin —
-  otherwise the customer's Latin name and the form reference print as empty
-  boxes, which is how an earlier draft printed the ID number.
+- **Not every build of Khmer OS Content works.** The font ships in several
+  builds and they are not equivalent. The "v6.00 2010" one **renders Khmer
+  incorrectly under Java** — subscripts stop stacking, vowels move — and it
+  fails *silently*, which is how a first attempt shipped mis-shaped Khmer. The
+  **2007 v1.10** build shapes correctly and is the one bundled. Its bold
+  counterpart is broken the same way, so bold is synthesised from the regular.
+  A test now asserts shaping actually happens (a coeng cluster must collapse to
+  fewer glyphs than characters) rather than merely checking the file name.
+- Coverage also varies by build — the 2010 one has no Latin letters at all — so
+  text is drawn run by run against `canDisplay` with a fallback face.
 - **Justification is capped.** Khmer puts spaces at phrase boundaries rather
   than between every word, so a line may have only two or three gaps to absorb
   the slack; stretching them tore holes in the paragraph. Lines needing more

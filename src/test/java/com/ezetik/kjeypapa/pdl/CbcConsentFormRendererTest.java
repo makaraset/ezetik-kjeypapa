@@ -74,20 +74,29 @@ class CbcConsentFormRendererTest {
 	}
 
 	@Test
-	@DisplayName("Sambat's font is bundled, covers Khmer, and lacks Latin")
+	@DisplayName("the bundled font is Khmer OS Content AND actually shapes Khmer")
 	void khmerFontIsUsable() throws Exception {
-		// Their template specifies Khmer OS Content. It has Khmer and digits
-		// but NO Latin letters, which is why the renderer draws per-run against
-		// canDisplay rather than by Unicode range — the first version of this
-		// form printed the customer's ID number as empty boxes.
+		// Their template specifies Khmer OS Content. Two traps, both silent:
+		//  1. coverage varies by build — the 2010 one has no Latin at all, so
+		//     the renderer draws per-run against canDisplay and falls back;
+		//     that build printed the customer's ID as empty boxes;
+		//  2. the later "v6.00 2010" build of the SAME family does not shape
+		//     under Java — subscripts stop stacking and vowels move — and
+		//     nothing throws. Shaping is therefore asserted, not assumed: a
+		//     coeng cluster must collapse to fewer glyphs than characters.
 		var font = java.awt.Font.createFont(java.awt.Font.TRUETYPE_FONT,
-				new File("src/main/resources/fonts/KhmerOSContent-Regular.ttf"));
+				new File("src/main/resources/fonts/KhmerOSContent.ttf"));
 		assertThat(font.getFontName()).isEqualTo("Khmer OS Content");
 		assertThat(font.canDisplayUpTo(KM_TEXT)).isEqualTo(-1);
-		assertThat(font.canDisplay('A')).isFalse();
-		assertThat(font.canDisplay('7')).isTrue(); // digits it does have
-	}
+		assertThat(font.canDisplay('A')).isTrue(); // this build does cover Latin
+		assertThat(font.canDisplay('7')).isTrue();
 
+		String coeng = "ខ្ញុំ";
+		var gv = font.deriveFont(24f).layoutGlyphVector(
+				new java.awt.font.FontRenderContext(null, true, true),
+				coeng.toCharArray(), 0, coeng.length(), java.awt.Font.LAYOUT_LEFT_TO_RIGHT);
+		assertThat(gv.getNumGlyphs()).isLessThan(coeng.length());
+	}
 	@Test
 	@DisplayName("a customer with no Khmer name still gets a form")
 	void latinOnlyCustomer() throws Exception {

@@ -37,11 +37,11 @@ import com.ezetik.kjeypapa.pdl.model.PdlPersonalInfo;
  * footer. Their page geometry is followed exactly — 0.59in side margins,
  * 0.30in top, 0.49in bottom.
  *
- * <p>Khmer OS Content carries Khmer and digits but <b>no Latin letters</b>, so
- * text is drawn run by run against what the font can actually display rather
- * than by Unicode range: a name in Latin script would otherwise print as empty
- * boxes, which is exactly how an earlier version of this form printed the
- * customer's ID number.
+ * <p>Text is drawn run by run against what the font can actually display,
+ * rather than by Unicode range, because Khmer OS Content's coverage varies by
+ * build: the 2010 release carries no Latin letters at all, and drawing a whole
+ * line in it printed the customer's ID number as empty boxes. The fallback
+ * costs nothing when the font does cover the character.
  *
  * <p>The wording used is the version the application was filed under, so a
  * document shown back to a customer always matches the record and the hash
@@ -322,25 +322,38 @@ public class CbcConsentFormRenderer {
 
 	// ----- resources -----
 
+	/**
+	 * Khmer OS Content — Sambat's own font, and specifically the 2007 v1.10
+	 * build.
+	 *
+	 * <p>The later "v6.00 2010" build of the same family <b>renders Khmer
+	 * wrongly under Java</b>: subscripts stop stacking and vowels land in the
+	 * wrong place, silently, because Java's shaper does not drive its OpenType
+	 * tables. The separately-shipped Content-Bold file has the same fault, so
+	 * bold is synthesised from the regular instead — verified to shape
+	 * correctly. If this font is ever replaced, render a page and read it
+	 * before trusting it: nothing throws when the shaping is wrong.
+	 */
 	private Font khmer(boolean bold) {
 		Font cached = bold ? khmerBold : khmerRegular;
 		if (cached != null)
 			return cached;
 		synchronized (this) {
-			String file = bold ? "fonts/KhmerOSContent-Bold.ttf" : "fonts/KhmerOSContent-Regular.ttf";
-			Font f;
-			try (InputStream in = new ClassPathResource(file).getInputStream()) {
-				f = Font.createFont(Font.TRUETYPE_FONT, in);
-			} catch (IOException | FontFormatException e) {
-				// Losing the Khmer face prints Khmer as boxes: a last resort to
-				// keep a submit alive, never an acceptable result.
-				f = new Font(Font.SANS_SERIF, bold ? Font.BOLD : Font.PLAIN, 12);
+			Font base = khmerRegular;
+			if (base == null) {
+				try (InputStream in = new ClassPathResource("fonts/KhmerOSContent.ttf").getInputStream()) {
+					base = Font.createFont(Font.TRUETYPE_FONT, in);
+				} catch (IOException | FontFormatException e) {
+					// Losing the Khmer face prints Khmer as boxes: a last resort
+					// to keep a submit alive, never an acceptable result.
+					base = new Font(Font.SANS_SERIF, Font.PLAIN, 12);
+				}
+				khmerRegular = base;
 			}
-			if (bold)
-				khmerBold = f;
-			else
-				khmerRegular = f;
-			return f;
+			if (!bold)
+				return base;
+			khmerBold = base.deriveFont(Font.BOLD);
+			return khmerBold;
 		}
 	}
 
