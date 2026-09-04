@@ -79,7 +79,11 @@ public class LosSubmitConfig {
 	@Value("${los.const.payment-channel:}")
 	private String paymentChannel;
 
-	/** Payment-channel sheet row id (bank). "Use only #12" for now — Sambat, 2026-08-31. */
+	/**
+	 * The disbursement bank's NAME, spelled as in Sambat's payment-channel
+	 * sheet — they take the name here, not the row id (2026-09-04), despite
+	 * their reference payload sending "31".
+	 */
 	@Value("${los.const.payment-channel-name:}")
 	private String paymentChannelName;
 

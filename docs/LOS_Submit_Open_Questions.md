@@ -442,7 +442,7 @@ the full list so we can reconcile.
 | A9 | Send **both ID sides merged into one image** | `LosDocumentAssembler.mergedNid` stacks front+back |
 | A10 | Max request size **50 MB** | Guard refuses locally above 50 MB with an actionable message |
 | A11/A18 | Multiple open applications allowed for now | No block added |
-| A12 | Payment channel is **#31 CAMBODIAN PUBLIC BANK PLC**, not #12 | `los.const.payment-channel-name=31` |
+| A12 | Payment channel is **#31 CAMBODIAN PUBLIC BANK PLC**, not #12 | `los.const.payment-channel-name` — and see below: it takes the NAME, not the id |
 | A13 | Numbers (not strings) accepted | Closed |
 | A14 | They will fix the 500/timeout-on-bad-input behaviour | Closed our side |
 | A19 | Round KHR to **100 riel** (Makara) | Quote rounds to the nearest 100 |
@@ -491,3 +491,21 @@ AppRefId we previously passed is not what that endpoint accepts.
 3. **`/payday-disbursement`** — is that ours to call after disbursement, or
    yours to call us? We currently receive disbursement on our own webhook
    (`/pdl/los/disbursement`) and do not call theirs.
+
+---
+
+## `PC_PaymentChannelName` takes the bank NAME (2026-09-04)
+
+Sambat: "submit only name", e.g. `CAMBODIAN PUBLIC BANK PLC`. We had been
+sending the sheet row id (`31`). Changed and filed live — AppId 8290 /
+AppRefId 257937.
+
+Worth recording because **their own PDL reference payload sends `"31"`**, so
+the reference now contradicts the instruction on this field. Anyone diffing
+against it later will be tempted to put the number back; the config comment and
+a test both say otherwise.
+
+Note for when other banks are added: our stored bank names (e.g. "Campu Bank")
+are NOT their canonical spellings, so they cannot be sent as-is. The mapping
+will come from the same payment-channel sheet, which carries the canonical
+names — `docs/payment_channel_codes.csv`.

@@ -266,10 +266,13 @@ class LosApplicationMapperTest {
 	}
 
 	@Test
-	@DisplayName("payment channel name comes from config — sheet row 12 for now")
+	@DisplayName("the payment channel carries the bank NAME, not the sheet id")
 	void paymentChannelName() {
-		when(config.getPaymentChannelName()).thenReturn("12");
-		assertThat(map().getPC_PaymentChannelName()).isEqualTo("12");
+		// Sambat (2026-09-04): "submit only name". Their own reference sends
+		// "31", so a future reader comparing against it may be tempted to send
+		// the id — this pins the name.
+		when(config.getPaymentChannelName()).thenReturn("CAMBODIAN PUBLIC BANK PLC");
+		assertThat(map().getPC_PaymentChannelName()).isEqualTo("CAMBODIAN PUBLIC BANK PLC");
 	}
 
 	@Test
