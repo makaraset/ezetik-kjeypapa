@@ -97,7 +97,8 @@ class LosApplicationMapperTest {
 		when(config.getLoanTerm()).thenReturn("1");
 		when(config.getDoneBy()).thenReturn("KjeyPapa");
 		when(config.getUtilizationCategory()).thenReturn("23");
-		when(consentForm.render(any(), any())).thenReturn(new byte[] { 1, 2, 3 });
+		// Sambat wants the consent as a PDF now, so the mapper calls renderPdf.
+		when(consentForm.renderPdf(any(), any())).thenReturn(new byte[] { 1, 2, 3 });
 	}
 
 	private NewApplicationRequest map() {
@@ -298,7 +299,7 @@ class LosApplicationMapperTest {
 	void consentFormAttached() {
 		NewApplicationRequest r = map();
 		assertThat(r.getDoc_ECBCConsentForm()).isNotEmpty();
-		assertThat(r.getDoc_ECBCConsentForm_FileName()).isEqualTo("ECBCConsentForm-1.png");
+		assertThat(r.getDoc_ECBCConsentForm_FileName()).isEqualTo("ECBCConsentForm-1.pdf");
 	}
 
 	@Test

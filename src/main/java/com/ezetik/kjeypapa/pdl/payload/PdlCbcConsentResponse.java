@@ -25,4 +25,15 @@ public class PdlCbcConsentResponse {
 	private Instant consentDate;
 	private String textVersion;
 	private String text;
+
+	/**
+	 * The consent RECORD as Sambat asked to receive it (2026-09-04), alongside
+	 * the PDF. Field-for-field the structure proposed in
+	 * docs/CBC_Consent_Record_Spec.md.
+	 */
+	private Long appId;
+	private Boolean consentGiven;
+	private String textHash;
+	private String language;
+	private String channel;
 }

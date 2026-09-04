@@ -85,8 +85,27 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 	@Value("${pdl.cbc.text-version:v1-2026-08}")
 	private String cbcTextVersion;
 
+	/** Owns the consent wording; we hash exactly what it renders. */
+	@Autowired
+	private CbcConsentFormRenderer consentForm;
+
 	private static boolean blank(String s) {
 		return s == null || s.isBlank();
+	}
+
+	/** Lower-case hex SHA-256, the form the consent record quotes. Public so the
+	 *  hashing rule can be pinned by tests. */
+	public static String sha256(String text) {
+		try {
+			byte[] d = java.security.MessageDigest.getInstance("SHA-256")
+					.digest((text == null ? "" : text).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+			StringBuilder sb = new StringBuilder(64);
+			for (byte b : d)
+				sb.append(String.format("%02x", b));
+			return sb.toString();
+		} catch (java.security.NoSuchAlgorithmException e) {
+			throw new IllegalStateException("SHA-256 unavailable", e);
+		}
 	}
 
 	@Override
@@ -230,6 +249,11 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 			loan.setCbcConsentTextVersion(cbcTextVersion);
 			// Server-authoritative: overwrite any client-sent placeholder ref.
 			loan.setCbcConsentRef("CBC-" + loan.getId() + "-" + cbcTextVersion);
+			// The rest of the evidence Sambat's record needs (2026-09-04): the
+			// wording is proven by hash, not just named by version.
+			loan.setCbcConsentTextHash(sha256(consentForm.consentTextKm()));
+			loan.setCbcConsentLanguage("km");
+			loan.setCbcConsentChannel("MOBILE_APP");
 
 			return resp("SUCCESS", "Application submitted to LOS", repo.save(loan), HttpStatus.OK);
 
@@ -538,7 +562,9 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 						HttpStatus.EXPECTATION_FAILED);
 			PdlCbcConsentResponse r = new PdlCbcConsentResponse(loan.getId(), loan.getLoanRefNo(),
 					loan.getLosApplicationNo(), loan.getCustomerName(), loan.getCbcConsentRef(),
-					loan.getCbcConsentDate(), loan.getCbcConsentTextVersion(), cbcConsentText);
+					loan.getCbcConsentDate(), loan.getCbcConsentTextVersion(), cbcConsentText,
+					loan.getLosAppId(), true, loan.getCbcConsentTextHash(),
+					loan.getCbcConsentLanguage(), loan.getCbcConsentChannel());
 			return new ResponseEntity<>(new Message<>("SUCCESS", "Get data success", r), HttpStatus.OK);
 		} catch (Exception e) {
 			e.printStackTrace();

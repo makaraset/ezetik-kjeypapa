@@ -60,10 +60,43 @@ public class CbcConsentFormRenderer {
 	@Value("${pdl.cbc.text-version:v1}")
 	private String textVersion;
 
+	/**
+	 * The exact Khmer wording rendered into the form. The consent record hashes
+	 * THIS string, so the hash and the document can never describe different
+	 * text — reading the property in two places once produced a hash of the
+	 * empty string, which proves nothing.
+	 */
+	public String consentTextKm() {
+		return consentTextKm;
+	}
+
 	/** Loaded once: creating a Font from bytes on every submit is wasteful. */
 	private volatile Font khmerBase;
 
+	/**
+	 * The consent as a PDF — what Sambat asked for (2026-09-04); they take the
+	 * structured record alongside it.
+	 */
+	public byte[] renderPdf(PaydayLoan loan, PdlPersonalInfo pi) {
+		try {
+			return SimplePdfWriter.singleImagePage(renderImage(loan, pi));
+		} catch (IOException e) {
+			throw new LosSubmitException("LOS_CONSENT_RENDER", "Could not render the CBC consent form");
+		}
+	}
+
+	/** The same document as a PNG (kept for previews and tests). */
 	public byte[] render(PaydayLoan loan, PdlPersonalInfo pi) {
+		try {
+			ByteArrayOutputStream out = new ByteArrayOutputStream();
+			ImageIO.write(renderImage(loan, pi), "png", out);
+			return out.toByteArray();
+		} catch (IOException e) {
+			throw new LosSubmitException("LOS_CONSENT_RENDER", "Could not render the CBC consent form");
+		}
+	}
+
+	private BufferedImage renderImage(PaydayLoan loan, PdlPersonalInfo pi) {
 		int loanId = loan.getId() == null ? 0 : loan.getId();
 		String customer = (s(pi.getLatinFamilyName()) + " " + s(pi.getLatinFirstName())).trim();
 		String khmerName = (s(pi.getKhmerFamilyName()) + " " + s(pi.getKhmerFirstName())).trim();
@@ -128,14 +161,7 @@ public class CbcConsentFormRenderer {
 		drawMixed(g, "បានយល់ព្រមតាមប្រព័ន្ធអេឡិចត្រូនិកក្នុងកម្មវិធី Kjey PAPA (កំណែអត្ថបទ " + textVersion + ")។",
 				MARGIN, y, small);
 		g.dispose();
-
-		try {
-			ByteArrayOutputStream out = new ByteArrayOutputStream();
-			ImageIO.write(img, "png", out);
-			return out.toByteArray();
-		} catch (IOException e) {
-			throw new LosSubmitException("LOS_CONSENT_RENDER", "Could not render the CBC consent form");
-		}
+		return img;
 	}
 
 	/**

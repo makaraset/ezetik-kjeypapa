@@ -96,4 +96,37 @@ class CbcConsentFormRendererTest {
 
 		assertThat(ImageIO.read(new ByteArrayInputStream(png))).isNotNull();
 	}
+
+	@Test
+	@DisplayName("renders a valid single-page PDF — what Sambat asked for")
+	void rendersAPdf() throws Exception {
+		byte[] pdf = renderer().renderPdf(loan(), person());
+
+		String head = new String(pdf, 0, 9, java.nio.charset.StandardCharsets.US_ASCII);
+		assertThat(head).startsWith("%PDF-1.");
+		String body = new String(pdf, java.nio.charset.StandardCharsets.ISO_8859_1);
+		assertThat(body).endsWith("%%EOF\n");
+		assertThat(body).contains("/Type /Catalog").contains("/Type /Page").contains("/DCTDecode");
+		// A4 at 72dpi: the page must be a page, not the raw pixel size.
+		assertThat(body).contains("/MediaBox [0 0 595 842]");
+
+		// The xref offsets must actually point at their objects, or readers
+		// reject the file. Hand-built PDFs get this wrong silently.
+		int xrefAt = body.lastIndexOf("startxref");
+		int xrefOffset = Integer.parseInt(body.substring(xrefAt).split("\\n")[1].trim());
+		assertThat(body.startsWith("xref", xrefOffset)).isTrue();
+		for (String line : body.substring(xrefOffset).split("\\n")) {
+			if (line.matches("\\d{10} 00000 n ?")) {
+				int off = Integer.parseInt(line.substring(0, 10));
+				assertThat(body.charAt(off)).isBetween('1', '5'); // "N 0 obj"
+				assertThat(body.startsWith(" 0 obj", off + 1)).isTrue();
+			}
+		}
+
+		String dir = System.getProperty("pdl.dump.dir");
+		if (dir != null) {
+			java.nio.file.Files.createDirectories(java.nio.file.Path.of(dir));
+			java.nio.file.Files.write(java.nio.file.Path.of(dir, "consent-form.pdf"), pdf);
+		}
+	}
 }

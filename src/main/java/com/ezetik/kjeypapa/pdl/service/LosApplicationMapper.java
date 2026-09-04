@@ -270,9 +270,9 @@ public class LosApplicationMapper {
 		// their own reference reuses an arbitrary file here, so a rendered
 		// record of the real consent is well within what the slot accepts.
 		if (pi != null) {
-			byte[] png = consentForm.render(loan, pi);
-			r.setDoc_ECBCConsentForm(java.util.Base64.getEncoder().encodeToString(png));
-			r.setDoc_ECBCConsentForm_FileName("ECBCConsentForm-" + id + ".png");
+			byte[] pdf = consentForm.renderPdf(loan, pi);
+			r.setDoc_ECBCConsentForm(java.util.Base64.getEncoder().encodeToString(pdf));
+			r.setDoc_ECBCConsentForm_FileName("ECBCConsentForm-" + id + ".pdf");
 		}
 
 		return r;

@@ -63,6 +63,7 @@ class PaydayLoanServiceImplTest {
 	@Mock UserService userService;
 	@Mock LosProvider losProvider;
 	@Mock PdlPricingService pricingService;
+	@Mock com.ezetik.kjeypapa.pdl.service.CbcConsentFormRenderer consentForm;
 	@Mock com.ezetik.kjeypapa.pdl.service.SbfGatewayClient sbfGateway;
 	@Mock com.ezetik.kjeypapa.security.repository.UserRepository userRepository;
 
@@ -528,5 +529,38 @@ class PaydayLoanServiceImplTest {
 		var body = service.accept(1, decision).getBody();
 
 		assertThat(body.getType()).isNotEqualTo("SUCCESS");
+	}
+
+	@Test
+	void submit_stampsTheFullConsentRecordSambatAsksFor() {
+		// The record must stand alone as evidence: version NAMES the wording,
+		// the hash PROVES it (a label can be reused, a stored text edited).
+		PaydayLoan loan = submittableLoan();
+		when(consentForm.consentTextKm()).thenReturn("ការយល់ព្រម");
+		when(losProvider.submitApplication(loan)).thenReturn("257916");
+
+		PaydayLoan out = service.submit(1).getBody().getData();
+
+		assertThat(out.getCbcConsentDate()).isNotNull();
+		assertThat(out.getCbcConsentRef()).startsWith("CBC-");
+		assertThat(out.getCbcConsentLanguage()).isEqualTo("km");
+		assertThat(out.getCbcConsentChannel()).isEqualTo("MOBILE_APP");
+		// Hash of the exact wording shown, lower-case hex.
+		assertThat(out.getCbcConsentTextHash())
+				.hasSize(64)
+				.isEqualTo(PaydayLoanServiceImpl.sha256("ការយល់ព្រម"))
+				.matches("[0-9a-f]{64}")
+				// e3b0c442… is SHA-256 of "" — a hash that proves nothing.
+				.isNotEqualTo(PaydayLoanServiceImpl.sha256(""));
+	}
+
+	@Test
+	void sha256_isStableAndUtf8() {
+		// Khmer must hash by its UTF-8 bytes; a platform-default encoding would
+		// give a different hash on another machine and break verification.
+		assertThat(PaydayLoanServiceImpl.sha256("abc"))
+				.isEqualTo("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+		assertThat(PaydayLoanServiceImpl.sha256("ការយល់ព្រម"))
+				.isEqualTo(PaydayLoanServiceImpl.sha256("ការយល់ព្រម"));
 	}
 }

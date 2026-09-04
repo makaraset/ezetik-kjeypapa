@@ -86,6 +86,22 @@ public class PaydayLoan extends UserDateAudit {
 	private Instant cbcConsentDate;
 	private String cbcConsentTextVersion;
 
+	/**
+	 * SHA-256 of the exact consent wording the customer accepted. The version
+	 * label says WHICH text; the hash PROVES it, and keeps proving it if a
+	 * label is ever reused or the stored wording edited.
+	 */
+	@Column(length = 64)
+	private String cbcConsentTextHash;
+
+	/** Language the consent was displayed and agreed in ("km" / "en"). */
+	@Column(length = 8)
+	private String cbcConsentLanguage;
+
+	/** How consent was captured — "MOBILE_APP" for the in-app tick box. */
+	@Column(length = 32)
+	private String cbcConsentChannel;
+
 	@Column(columnDefinition = "bool default false")
 	private boolean bankConsent;
 
