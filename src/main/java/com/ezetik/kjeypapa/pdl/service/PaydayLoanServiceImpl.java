@@ -1,6 +1,5 @@
 package com.ezetik.kjeypapa.pdl.service;
 
-import java.sql.Date;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -415,7 +414,7 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 
 				loan.setAccepted(true);
 				loan.setAcceptedBy(getCurrentUser().getUsername());
-				loan.setAcceptedDate(new Date(System.currentTimeMillis()));
+				loan.setAcceptedDate(Instant.now());
 				loan.setSignedContractRef(decision.getSignedContractRef());
 				loan.setStatus(PdlStatusEnum.Accepted);
 				losProvider.sendDecision(loan, "Y", decision.getSignedContractRef());
@@ -452,7 +451,7 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 
 			loan.setRevoked(true);
 			loan.setRevokedBy(getCurrentUser().getUsername());
-			loan.setRevokedDate(new Date(System.currentTimeMillis()));
+			loan.setRevokedDate(Instant.now());
 			loan.setRevokeReason(reason);
 			loan.setStatus(PdlStatusEnum.Revoked);
 

@@ -1,6 +1,5 @@
 package com.ezetik.kjeypapa.pdl.model;
 
-import java.sql.Date;
 import java.time.Instant;
 
 import com.ezetik.kjeypapa.security.audit.UserDateAudit;
@@ -16,6 +15,8 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
@@ -142,14 +143,65 @@ public class PaydayLoan extends UserDateAudit {
 	@JsonProperty("accepted")
 	private boolean isAccepted;
 	private String acceptedBy;
-	private Date acceptedDate;
+
+	/**
+	 * When the customer accepted.
+	 *
+	 * <p>{@link Instant}, like every other date on this entity. It used to be a
+	 * {@code java.sql.Date}, which is date-only — so the time of acceptance was
+	 * silently discarded — and whose {@code toInstant()} throws
+	 * {@link UnsupportedOperationException}, a landmine for anything that treats
+	 * it like the other date fields.
+	 */
+	private Instant acceptedDate;
 	private String signedContractRef;
 
 	@Column(columnDefinition = "bool default false")
 	@JsonProperty("revoked")
 	private boolean isRevoked;
 	private String revokedBy;
-	private Date revokedDate;
+
+	/** {@link Instant} for the same reasons as {@link #acceptedDate}. */
+	private Instant revokedDate;
+
 	private String revokeReason;
 
+	// ----- when the loan file ended -----
+
+	/**
+	 * When this loan reached a state it does not come back from.
+	 *
+	 * <p>Consent retention is "the life of the loan file", and until this column
+	 * existed there was no date the file ended: a revocation had one, a closure
+	 * had only the last repayment or the audit {@code updatedAt}, and a rejection
+	 * had nothing at all. Retention was reduced to reporting an approximation,
+	 * which is not a basis for disposing of evidence.
+	 */
+	private Instant closedDate;
+
+	/**
+	 * Stamps {@link #closedDate} whenever the loan is in a terminal state.
+	 *
+	 * <p>A lifecycle callback rather than a line at each transition, because the
+	 * transitions are scattered — the reject and loan-update webhooks, the
+	 * acceptance cut-off sweep, an explicit revoke, a customer declining an
+	 * offer — and a rule enforced in five places is a rule that is missed in the
+	 * sixth. Anything that saves this row in a terminal state stamps the date,
+	 * including code written later that has never heard of retention.
+	 *
+	 * <p>Only ever set from null, so the first closure is the one that counts,
+	 * and cleared if the loan somehow leaves a terminal state — an open file has
+	 * no end date, and a stale one would start a retention clock against a loan
+	 * still in use.
+	 */
+	@PrePersist
+	@PreUpdate
+	void stampClosure() {
+		if (status != null && status.isTerminal()) {
+			if (closedDate == null)
+				closedDate = Instant.now();
+		} else {
+			closedDate = null;
+		}
+	}
 }

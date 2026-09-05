@@ -32,26 +32,16 @@ import com.ezetik.kjeypapa.pdl.repository.PdlCbcConsentRepository;
  * an attack. The partial unique index on {@code consent_given} already leaves
  * room for that row.
  *
- * <h2>The clock has no exact start</h2>
+ * <h2>When the clock starts</h2>
  *
- * <p>"The life of the loan file" needs a date the loan file ended, and the
- * schema does not record one. There is no {@code closedDate}. What exists is a
- * revocation date, a last-transaction date, and the audit {@code updatedAt},
- * which is a proxy that drifts if anything touches the row. Every candidate
- * therefore names the date used and where it came from, so nobody reads an
- * approximation as a fact. Recorded as a finding; the right fix is a real
- * closure timestamp, stamped when the rule is confirmed.
+ * <p>"The life of the loan file" needs a date the loan file ended.
+ * {@code PaydayLoan.closedDate} records it, stamped on every transition into a
+ * terminal state. Loans that closed before that column existed fall back to a
+ * derived date, and every candidate names which it used — an approximation must
+ * never read as a recorded fact when the consequence is destroying evidence.
  */
 @Service
 public class PdlConsentRetentionService {
-
-	/**
-	 * States in which the loan file is over. Everything else — including
-	 * Disbursed and Active — is a live file whose consent is still in use, and
-	 * no elapsed period makes it a candidate.
-	 */
-	private static final Set<PdlStatusEnum> FINISHED = Set.of(
-			PdlStatusEnum.Closed, PdlStatusEnum.Rejected, PdlStatusEnum.Revoked);
 
 	@Autowired
 	private PdlCbcConsentRepository consentRepo;
@@ -83,13 +73,17 @@ public class PdlConsentRetentionService {
 		}
 
 		notes.add("Candidates only. Nothing here has been or will be deleted by this job.");
-		notes.add("The loan-file end date is derived, not recorded — see loanEndedSource on each "
-				+ "candidate. A row showing 'updatedAt' is an approximation.");
+		notes.add("loanEndedSource says where each end date came from. 'closedDate' is recorded "
+				+ "at the transition; anything marked approximate is a fallback for a loan that "
+				+ "closed before that column existed and has not been saved since.");
 
 		List<Candidate> candidates = new ArrayList<>();
 		for (PdlCbcConsent c : all) {
 			PaydayLoan loan = c.getLoan();
-			if (loan == null || loan.getStatus() == null || !FINISHED.contains(loan.getStatus()))
+			// Everything that is not terminal — Disbursed and Active included — is a
+			// live file whose consent is still in use, and no elapsed period
+			// makes it a candidate.
+			if (loan == null || loan.getStatus() == null || !loan.getStatus().isTerminal())
 				continue;
 
 			Instant ended = endedOn(loan);
@@ -109,18 +103,26 @@ public class PdlConsentRetentionService {
 	}
 
 	/**
-	 * The best available end date for a finished loan.
+	 * When the loan file ended.
 	 *
-	 * <p>Deliberately conservative: where several dates could serve, the one
-	 * that starts the clock latest wins, because holding a record slightly too
-	 * long is recoverable and disposing of it slightly too early is not.
+	 * <p>{@code closedDate} is the answer and it is recorded, not inferred —
+	 * {@code PaydayLoan.stampClosure()} writes it on every transition into a
+	 * terminal state. The fallbacks below exist only for rows that reached a
+	 * terminal state before that column did and have not been saved since;
+	 * migration 004 backfills them, so in practice they should never be reached.
+	 * They stay because a retention clock that silently starts from
+	 * {@code createdAt} when a date is missing would be far worse than one that
+	 * says which date it used.
+	 *
+	 * <p>Where several dates could serve, the one that starts the clock latest
+	 * wins: holding a record slightly too long is recoverable, disposing of it
+	 * slightly too early is not.
 	 */
 	private static Instant endedOn(PaydayLoan loan) {
+		if (loan.getClosedDate() != null)
+			return loan.getClosedDate();
 		if (loan.getStatus() == PdlStatusEnum.Revoked && loan.getRevokedDate() != null)
-			// Via epoch millis, NOT toInstant(): revokedDate is a java.sql.Date,
-			// whose toInstant() throws UnsupportedOperationException. It is also
-			// date-only, which costs nothing against a clock measured in years.
-			return Instant.ofEpochMilli(loan.getRevokedDate().getTime());
+			return loan.getRevokedDate();
 		Instant updated = loan.getUpdatedAt();
 		if (loan.getStatus() == PdlStatusEnum.Closed && loan.getLastTransactionDate() != null)
 			return latest(loan.getLastTransactionDate(), updated);
@@ -128,13 +130,16 @@ public class PdlConsentRetentionService {
 	}
 
 	private static String endedSource(PaydayLoan loan) {
+		if (loan.getClosedDate() != null)
+			return "closedDate";
 		if (loan.getStatus() == PdlStatusEnum.Revoked && loan.getRevokedDate() != null)
-			return "revokedDate";
+			return "revokedDate (no closedDate; approximate)";
 		if (loan.getStatus() == PdlStatusEnum.Closed && loan.getLastTransactionDate() != null)
 			return loan.getUpdatedAt() != null && loan.getUpdatedAt().isAfter(loan.getLastTransactionDate())
-					? "updatedAt (later than lastTransactionDate; approximate)"
-					: "lastTransactionDate";
-		return loan.getUpdatedAt() == null ? "createdAt (approximate)" : "updatedAt (approximate)";
+					? "updatedAt (no closedDate; approximate)"
+					: "lastTransactionDate (no closedDate; approximate)";
+		return loan.getUpdatedAt() == null ? "createdAt (no closedDate; approximate)"
+				: "updatedAt (no closedDate; approximate)";
 	}
 
 	private static Instant latest(Instant a, Instant b) {

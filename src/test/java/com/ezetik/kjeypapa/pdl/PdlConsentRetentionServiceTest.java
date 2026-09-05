@@ -42,6 +42,9 @@ class PdlConsentRetentionServiceTest {
 		loan.setId(7);
 		loan.setStatus(status);
 		loan.setUpdatedAt(ended);
+		// What stampClosure() would have written on the transition.
+		if (status.isTerminal())
+			loan.setClosedDate(ended);
 
 		PdlCbcConsent c = new PdlCbcConsent();
 		c.setId(1);
@@ -117,9 +120,8 @@ class PdlConsentRetentionServiceTest {
 		assertThat(c.consentId()).isEqualTo(1);
 		assertThat(c.loanStatus()).isEqualTo("Closed");
 		assertThat(c.eligibleFrom()).isBefore(Instant.now());
-		// The date is derived, and the report has to say so rather than let an
-		// approximation read as a recorded fact.
-		assertThat(c.loanEndedSource()).contains("approximate");
+		// Recorded at the transition, so it is not flagged as an approximation.
+		assertThat(c.loanEndedSource()).isEqualTo("closedDate");
 	}
 
 	@Test
@@ -144,7 +146,9 @@ class PdlConsentRetentionServiceTest {
 		Instant transacted = Instant.now().minus(800, ChronoUnit.DAYS);
 		Instant touched = Instant.now().minus(200, ChronoUnit.DAYS);
 		PdlCbcConsent c = consentOn(PdlStatusEnum.Closed, touched);
+		c.getLoan().setClosedDate(null);
 		c.getLoan().setLastTransactionDate(transacted);
+		when(consentRepo.findAllByOrderByIdAsc()).thenReturn(List.of(c));
 
 		RetentionReport r = service.report();
 
@@ -153,18 +157,21 @@ class PdlConsentRetentionServiceTest {
 	}
 
 	@Test
-	@DisplayName("a revocation uses the date it was actually revoked")
+	@DisplayName("a pre-column revocation falls back to the date it was revoked")
 	void revokedUsesItsOwnDate() {
 		years("1");
+		// A loan that closed before closed_date existed and has not been saved
+		// since — migration 004 backfills these, but the fallback must hold.
 		PdlCbcConsent c = consentOn(PdlStatusEnum.Revoked, Instant.now());
-		// java.sql.Date, and its toInstant() throws — the service must not call it.
-		c.getLoan().setRevokedDate(new java.sql.Date(LONG_AGO.toEpochMilli()));
+		c.getLoan().setClosedDate(null);
+		c.getLoan().setRevokedDate(LONG_AGO);
 		when(consentRepo.findAllByOrderByIdAsc()).thenReturn(List.of(c));
 
 		RetentionReport r = service.report();
 
 		assertThat(r.candidates()).hasSize(1);
-		assertThat(r.candidates().get(0).loanEndedSource()).isEqualTo("revokedDate");
+		assertThat(r.candidates().get(0).loanEndedSource())
+				.isEqualTo("revokedDate (no closedDate; approximate)");
 	}
 
 	@Test

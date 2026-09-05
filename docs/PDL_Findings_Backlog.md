@@ -36,10 +36,12 @@ regression · **Found:** device testing, not re-verified since
 Backend serialization issue. The flag does not follow the verification result.
 
 ### F3 — `acceptedDate` is a `dd-MM` string, off by one against `approvedDate`
-**Severity:** low · **Status:** open, carried over from 2026-08-21
+**Severity:** low · **Status:** ~~open~~ **FIXED 2026-09-05** (backend `db3f575`)
 
-Two date fields on the same record in two different shapes, one of them a
-formatted string rather than an instant. Worth fixing together with F4.
+Root cause was F7: the field was a `java.sql.Date`, so it arrived as a bare
+`dd-MM-yyyy` and the app kept it verbatim while every other date went through
+the shared ISO formatter. Both are `Instant` now and the app formats them the
+same way as the rest.
 
 ### F4 — `hibernateLazyInitializer` leaks into nested-entity JSON
 **Severity:** low · **Status:** open, carried over from 2026-08-21
@@ -57,8 +59,16 @@ record and is harmless; noted only so nobody later mistakes it for a corrupted
 archive. The dev database is disposable, so it will not survive to production.
 
 ### F6 — the schema records no loan-closure date
-**Severity:** medium · **Status:** open · **Found:** 2026-09-05, building consent
-retention
+**Severity:** medium · **Status:** ~~open~~ **FIXED 2026-09-05** (backend `db3f575`)
+
+`PaydayLoan.closedDate` now exists, stamped by a `@PrePersist`/`@PreUpdate`
+callback on every transition into a terminal state, with `PdlStatusEnum.isTerminal()`
+as the single definition the stamp and retention both read. Migration 004
+backfills history. Retention reports `loanEndedSource = "closedDate"` with no
+approximations left; the derived fallbacks remain only for a row that closed
+before the column existed and has not been saved since.
+
+*Original finding, for context:*
 
 Retention is "the life of the loan file", which needs a date the file ended, and
 there isn't one. `PaydayLoan` has `applicationDate`, `approvedDate`,
@@ -73,8 +83,16 @@ retention is ever switched on for real, add a real closure timestamp** stamped
 on the transition into `Closed`/`Rejected`, and switch the service to it.
 
 ### F7 — `acceptedDate` and `revokedDate` are `java.sql.Date`
-**Severity:** low · **Status:** open · **Found:** 2026-09-05, by the compiler,
-while writing retention
+**Severity:** low · **Status:** ~~open~~ **FIXED 2026-09-05** (backend `db3f575`)
+
+Both are `Instant`. Migration 004 widens the columns, guarded on the current
+type. **Worth knowing:** on the dev database `ddl-auto=update` widened them by
+itself, which is *not* what it does for check constraints (migration 002) — do
+not generalise either behaviour. `sbf/model/Note.acceptedDate` is still a
+`java.sql.Date`; left alone as it belongs to the TFF product, but it carries the
+same trap.
+
+*Original finding, for context:*
 
 `PaydayLoan` imports `java.sql.Date` for these two. Two consequences:
 `java.sql.Date.toInstant()` throws `UnsupportedOperationException` at runtime —
@@ -100,6 +118,12 @@ Hibernate's `ddl-auto=update` **never** alters check constraints, so the
 `Pending_Bank_Verification` enum value needs the constraint widened by hand. SQL
 is in commit `604f642`. The same trap applies to every future value added to an
 existing string-enum column.
+
+### D1b — apply `docs/migrations/004_pdl_loan_dates.sql`
+Widens `accepted_date`/`revoked_date` to `timestamptz` (guarded — a no-op where
+ddl-auto already did it) and backfills `closed_date` for loans that ended before
+that column existed. Without the backfill, retention falls back to approximations
+for every historical loan.
 
 ### D2 — apply `docs/migrations/003_pdl_cbc_consent_ledger.sql`
 `ddl-auto` creates the consent table but never its indexes, CHECK constraints or
