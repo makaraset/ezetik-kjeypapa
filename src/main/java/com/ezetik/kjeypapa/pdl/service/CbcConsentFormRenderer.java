@@ -4,6 +4,9 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.FontFormatException;
 import java.awt.Graphics2D;
+import java.awt.font.FontRenderContext;
+import java.awt.font.GlyphVector;
+import java.awt.geom.Point2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
@@ -13,8 +16,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.text.BreakIterator;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -212,36 +217,72 @@ public class CbcConsentFormRenderer {
 	// ----- text drawing -----
 
 	/**
-	 * Draws one line, optionally justified to {@code width} by stretching the
-	 * gaps between space-separated runs. Khmer is not written with a space
-	 * between every word, so a line without spaces is left as it is rather than
-	 * letter-spaced into something unreadable.
+	 * Draws one line, justified to {@code width} when asked.
+	 *
+	 * <p>Khmer cannot be justified by stretching spaces: it puts them at phrase
+	 * boundaries, not between every word, so a line may have two or three gaps
+	 * to absorb all the slack and stretching them tears holes through the
+	 * paragraph. Word justifies Khmer by opening every cluster boundary
+	 * slightly, and that is what this does — the line is shaped first, then the
+	 * slack is spread across the boundaries between clusters.
+	 *
+	 * <p>The spreading deliberately skips zero-advance glyphs: those are the
+	 * vowels, coeng subscripts and diacritics that sit on a base character, and
+	 * moving one away from its base would break the syllable.
 	 */
 	private void drawLine(Graphics2D g, String line, int x, int y, Font font, int width, boolean justify) {
-		String[] parts = line.split(" ");
-		if (!justify || parts.length < 2) {
-			draw(g, line, x, y, font);
-			return;
+		List<GlyphVector> pieces = shape(g, line, font);
+		double natural = 0;
+		int stretchPoints = 0;
+		for (GlyphVector gv : pieces) {
+			natural += gv.getGlyphPosition(gv.getNumGlyphs()).getX();
+			for (int i = 0; i < gv.getNumGlyphs(); i++)
+				if (gv.getGlyphMetrics(i).getAdvanceX() > 0)
+					stretchPoints++;
 		}
-		int natural = 0;
-		for (String p : parts)
-			natural += widthOf(g, p, font);
-		int gap = (width - natural) / (parts.length - 1);
-		// Khmer puts spaces at phrase boundaries, not between every word, so a
-		// line can have two or three gaps to absorb the whole slack. Stretching
-		// those tears holes in the paragraph; past a few spaces' worth it reads
-		// better ragged, which is what Word's Khmer justification avoids by
-		// also stretching between characters.
-		int spaceW = g.getFontMetrics(font).stringWidth(" ");
-		if (gap <= 0 || gap > spaceW * 4) {
-			draw(g, line, x, y, font);
-			return;
+		stretchPoints--; // no gap after the final cluster
+
+		double extra = justify ? width - natural : 0;
+		// Never squeeze, and never open gaps so wide the line reads as broken:
+		// past roughly a character's width the paragraph looks worse justified.
+		double perGap = extra <= 0 || stretchPoints <= 0 ? 0
+				: Math.min(extra / stretchPoints, font.getSize2D() * 0.22);
+
+		double cx = x;
+		for (GlyphVector gv : pieces) {
+			double offset = 0;
+			int n = gv.getNumGlyphs();
+			for (int i = 0; i < n; i++) {
+				Point2D p = gv.getGlyphPosition(i);
+				gv.setGlyphPosition(i, new Point2D.Double(p.getX() + offset, p.getY()));
+				if (gv.getGlyphMetrics(i).getAdvanceX() > 0)
+					offset += perGap;
+			}
+			g.drawGlyphVector(gv, (float) cx, y);
+			cx += gv.getGlyphPosition(n).getX() + offset;
 		}
-		int cx = x;
-		for (String part : parts) {
-			draw(g, part, cx, y, font);
-			cx += widthOf(g, part, font) + gap;
+	}
+
+	/**
+	 * Shapes a line into glyph vectors, one per stretch of characters the font
+	 * can draw, so a fallback face covers anything it cannot. Shaping per
+	 * stretch rather than per character keeps each Khmer syllable in one piece.
+	 */
+	private List<GlyphVector> shape(Graphics2D g, String text, Font font) {
+		List<GlyphVector> out = new ArrayList<>();
+		FontRenderContext frc = g.getFontRenderContext();
+		int i = 0;
+		while (i < text.length()) {
+			boolean ok = font.canDisplay(text.charAt(i));
+			int j = i;
+			while (j < text.length() && font.canDisplay(text.charAt(j)) == ok)
+				j++;
+			char[] run = text.substring(i, j).toCharArray();
+			out.add((ok ? font : fallback(font)).layoutGlyphVector(frc, run, 0, run.length,
+					Font.LAYOUT_LEFT_TO_RIGHT));
+			i = j;
 		}
+		return out;
 	}
 
 	/**
@@ -266,57 +307,49 @@ public class CbcConsentFormRenderer {
 		}
 	}
 
-	/** Measured exactly the way {@link #draw} paints it. */
+	/** Measured from the shaped glyphs, exactly as the line is drawn. */
 	private int widthOf(Graphics2D g, String text, Font font) {
-		int w = 0;
-		int i = 0;
-		while (i < text.length()) {
-			boolean ok = font.canDisplay(text.charAt(i));
-			int j = i;
-			while (j < text.length() && font.canDisplay(text.charAt(j)) == ok)
-				j++;
-			w += g.getFontMetrics(ok ? font : fallback(font)).stringWidth(text.substring(i, j));
-			i = j;
-		}
-		return w;
+		double w = 0;
+		for (GlyphVector gv : shape(g, text, font))
+			w += gv.getGlyphPosition(gv.getNumGlyphs()).getX();
+		return (int) Math.ceil(w);
 	}
 
 	private static Font fallback(Font like) {
 		return new Font(Font.SANS_SERIF, like.getStyle(), like.getSize());
 	}
 
-	/** Greedy wrap, measured the same way it is drawn. */
+	/**
+	 * Greedy wrap that fills each line to the measure.
+	 *
+	 * <p>Breaks between grapheme clusters rather than only at spaces. Khmer is
+	 * written without a space between every word, so wrapping on spaces alone
+	 * leaves lines well short of the measure — and justification then has to
+	 * open enormous gaps to make up the difference, which is what tore the
+	 * first justified draft apart. Word breaks Khmer with a dictionary; a
+	 * cluster boundary is the closest we get without one, and it keeps every
+	 * syllable whole.
+	 */
 	private List<String> wrap(Graphics2D g, String text, Font font, int maxWidth) {
 		List<String> lines = new ArrayList<>();
+		BreakIterator clusters = BreakIterator.getCharacterInstance(new Locale("km"));
+		String flat = text.trim().replaceAll("\\s+", " ");
+		clusters.setText(flat);
+
 		StringBuilder line = new StringBuilder();
-		for (String word : text.trim().split("\\s+")) {
-			String candidate = line.isEmpty() ? word : line + " " + word;
-			if (widthOf(g, candidate, font) <= maxWidth) {
-				line = new StringBuilder(candidate);
-				continue;
-			}
-			if (!line.isEmpty()) {
-				lines.add(line.toString());
-				line = new StringBuilder();
-			}
-			if (widthOf(g, word, font) <= maxWidth) {
-				line = new StringBuilder(word);
+		int start = clusters.first();
+		for (int end = clusters.next(); end != BreakIterator.DONE; start = end, end = clusters.next()) {
+			String cluster = flat.substring(start, end);
+			// A space that lands at the end of a full line is simply dropped.
+			if (widthOf(g, line + cluster, font) > maxWidth && line.length() > 0) {
+				lines.add(line.toString().stripTrailing());
+				line = new StringBuilder(cluster.isBlank() ? "" : cluster);
 			} else {
-				// A single Khmer run can be longer than the measure; break it by
-				// character rather than let it run off the page.
-				StringBuilder chunk = new StringBuilder();
-				for (char c : word.toCharArray()) {
-					if (chunk.length() > 0 && widthOf(g, chunk.toString() + c, font) > maxWidth) {
-						lines.add(chunk.toString());
-						chunk = new StringBuilder();
-					}
-					chunk.append(c);
-				}
-				line = chunk;
+				line.append(cluster);
 			}
 		}
 		if (!line.isEmpty())
-			lines.add(line.toString());
+			lines.add(line.toString().stripTrailing());
 		return lines;
 	}
 

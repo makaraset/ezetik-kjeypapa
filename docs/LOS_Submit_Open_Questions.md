@@ -605,9 +605,11 @@ Two things worth knowing about the result:
   fewer glyphs than characters) rather than merely checking the file name.
 - Coverage also varies by build — the 2010 one has no Latin letters at all — so
   text is drawn run by run against `canDisplay` with a fallback face.
-- **Justification is capped.** Khmer puts spaces at phrase boundaries rather
-  than between every word, so a line may have only two or three gaps to absorb
-  the slack; stretching them tore holes in the paragraph. Lines needing more
-  than about four spaces' worth are left ragged. Word achieves an even
-  justification by also stretching between characters, which Java2D will not do
-  for us — if Sambat need exact justification, that is the gap to close.
+- **Justification now matches their form.** Khmer cannot be justified by
+  stretching spaces — it does not put one between every word — so the line is
+  shaped first and the slack is then spread across cluster boundaries, the way
+  Word opens Khmer text. Zero-advance glyphs are skipped, so a vowel or coeng
+  subscript never drifts off its base. Wrapping also breaks between clusters
+  rather than only at spaces, which fills each line to the measure and leaves
+  justification only a little slack to absorb; before that, short lines forced
+  huge gaps.
