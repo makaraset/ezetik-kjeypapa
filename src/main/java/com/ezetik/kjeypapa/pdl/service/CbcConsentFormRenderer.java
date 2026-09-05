@@ -142,7 +142,6 @@ public class CbcConsentFormRenderer {
 		// The stored version and reference, not today's config: this document
 		// must match the record filed against it.
 		String version = notBlank(loan.getCbcConsentTextVersion()) ? loan.getCbcConsentTextVersion() : textVersion;
-		String ref = notBlank(loan.getCbcConsentRef()) ? loan.getCbcConsentRef() : "CBC-" + loanId + "-" + version;
 		ZonedDateTime at = loan.getCbcConsentDate() != null ? loan.getCbcConsentDate().atZone(KH)
 				: ZonedDateTime.now(KH);
 
@@ -182,7 +181,6 @@ public class CbcConsentFormRenderer {
 		y = row(g, label, marginX, valueX, y, lineH, "ជាអក្សរឡាតាំង", latinName);
 		y = row(g, label, marginX, valueX, y, lineH, "លេខអត្តសញ្ញាណប័ណ្ណ", s(pi.getIdNo()));
 		y = row(g, label, marginX, valueX, y, lineH, "លេខសំណើ", String.valueOf(loanId));
-		y = row(g, label, marginX, valueX, y, lineH, "លេខយោង", ref);
 		y = row(g, label, marginX, valueX, y, lineH, "កាលបរិច្ឆេទ",
 				at.format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm")));
 		y += Math.round(lineH * 1.1f);
