@@ -680,14 +680,19 @@ public class NoteServiceImpl implements NoteService {
 							.getRegistedId());
 
 			ConsolidateData data = sbfService.getFacilityByCIF(cif);
+			// SBF facility data may be unavailable (e.g. upstream returned nothing);
+			// degrade gracefully by skipping the aging enrichment instead of failing.
+			List<LoanFacilityInfo> facilities = (data != null) ? data.getLoanFacilityInfo() : null;
 
 			for (NoteTransaction nt : notes) {
 
-				for (LoanFacilityInfo lf : data.getLoanFacilityInfo()) {
+				if (facilities != null) {
+					for (LoanFacilityInfo lf : facilities) {
 
-					if (lf.getLoanFacRefNo().equals(nt.getLoanFacRefNo())) {
-						nt.setAging(lf.getAging());
-						break;
+						if (lf.getLoanFacRefNo().equals(nt.getLoanFacRefNo())) {
+							nt.setAging(lf.getAging());
+							break;
+						}
 					}
 				}
 
