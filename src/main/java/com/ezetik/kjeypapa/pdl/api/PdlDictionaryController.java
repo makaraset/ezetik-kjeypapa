@@ -1,12 +1,15 @@
 package com.ezetik.kjeypapa.pdl.api;
 
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+
+import com.ezetik.kjeypapa.pdl.service.PaydayLoanServiceImpl;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ezetik.kjeypapa.pdl.model.PdlCodeList;
@@ -34,6 +37,12 @@ public class PdlDictionaryController {
 	@Autowired
 	private PdlDictionaryService service;
 
+	@Autowired
+	private com.ezetik.kjeypapa.pdl.service.CbcConsentFormRenderer consentForm;
+
+	@org.springframework.beans.factory.annotation.Value("${pdl.cbc.text-version:v1}")
+	private String currentTextVersion;
+
 	/**
 	 * @param level  province | district | commune | village
 	 * @param parent parent code — required for every level below province, so a
@@ -57,6 +66,28 @@ public class PdlDictionaryController {
 		if ("EMPLOYER".equalsIgnoreCase(name == null ? "" : name.trim()))
 			return ResponseEntity.ok(new Message<>("SUCCESS", "OK", List.of()));
 		return service.list(name);
+	}
+
+	/**
+	 * The CBC consent wording, with the hash the consent record will carry.
+	 *
+	 * <p>The app must render THIS rather than a copy bundled in its own assets.
+	 * A bundled copy is a second source of the same legal text: the two were
+	 * byte-identical but nothing enforced it, so an app release could change
+	 * what the customer agrees to without changing what the record proves — and
+	 * the record would still verify. Serving it means the text read and the text
+	 * hashed are one string.
+	 *
+	 * @param version the wording version; omit for the current one
+	 */
+	@GetMapping("/consent-text")
+	public ResponseEntity<Message<Map<String, String>>> consentText(
+			@RequestParam(required = false) String version) {
+		String text = consentForm.consentTextKm(version);
+		return ResponseEntity.ok(new Message<>("SUCCESS", "OK", Map.of(
+				"version", version == null || version.isBlank() ? currentTextVersion : version,
+				"text", text,
+				"hash", PaydayLoanServiceImpl.sha256(text))));
 	}
 
 	/** Snapshot stamp, so the app can skip re-downloading unchanged lists. */
