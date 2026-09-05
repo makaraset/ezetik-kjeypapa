@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.ezetik.kjeypapa.pdl.service.LosSubmitException;
 import com.ezetik.kjeypapa.pdl.service.PdlCbcConsentLedger;
+import com.ezetik.kjeypapa.pdl.service.PdlCbcConsentLedger.ArchiveReport;
 import com.ezetik.kjeypapa.pdl.service.PdlCbcConsentLedger.LedgerReport;
 import com.ezetik.kjeypapa.pdl.service.PdlConsentBackfillService;
 import com.ezetik.kjeypapa.security.util.Message;
@@ -53,6 +54,24 @@ public class PdlConsentAdminController {
 				report.broken() == 0 ? "Consent ledger intact" + note
 						: report.broken() + " record(s) do not verify" + note,
 				report));
+	}
+
+	/**
+	 * Checks every archived consent document against the hash its record keeps.
+	 *
+	 * <p>Its own endpoint because it reads every stored PDF, which the chain walk
+	 * above does not. The two answer different questions and neither implies the
+	 * other: the documents live in an ordinary table with no trigger on it, so
+	 * one can be replaced while the chain still verifies perfectly.
+	 */
+	@GetMapping("/verify-archives")
+	public ResponseEntity<Message<ArchiveReport>> verifyArchives() {
+		ArchiveReport r = ledger.verifyArchives();
+		boolean ok = r.findings().isEmpty();
+		return ResponseEntity.ok(new Message<>(ok ? "SUCCESS" : "FAILED",
+				ok ? "All " + r.checked() + " archived document(s) match their records"
+						: r.missing() + " missing, " + r.altered() + " altered",
+				r));
 	}
 
 	/**

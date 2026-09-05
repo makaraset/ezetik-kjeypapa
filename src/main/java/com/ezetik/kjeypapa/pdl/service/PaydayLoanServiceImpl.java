@@ -41,6 +41,7 @@ import com.ezetik.kjeypapa.pdl.repository.PdlEmploymentInfoRepository;
 import com.ezetik.kjeypapa.pdl.repository.PdlPaymentScheduleRepository;
 import com.ezetik.kjeypapa.pdl.repository.PdlPersonalInfoRepository;
 import com.ezetik.kjeypapa.pdl.repository.PaydayLoanRepository;
+import com.ezetik.kjeypapa.pdl.repository.PdlCbcConsentRepository;
 import com.ezetik.kjeypapa.security.model.User;
 import com.ezetik.kjeypapa.security.service.UserService;
 import com.ezetik.kjeypapa.security.util.Message;
@@ -73,6 +74,9 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 
 	@Autowired
 	private ImageRepository imageRepo;
+
+	@Autowired
+	private PdlCbcConsentRepository consentRepo;
 
 	@Autowired
 	private UserService userService;
@@ -278,6 +282,13 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 			// from, so the two cannot disagree.
 			String consentRef = "CBC-" + loan.getId() + "-" + consent.textVersion();
 			String textHash = sha256(consentForm.consentTextKm(consent.textVersion()));
+			// Keep the bytes that were actually filed. Re-rendering reproduces
+			// them today, but only because the record freezes every input; an
+			// archive does not depend on that staying true, and it is the only
+			// thing that answers "show me the document this person signed"
+			// after a font, a renderer or a wording file has moved on.
+			String documentRef = archiveConsentPdf(loan, consentPdf);
+			String documentHash = ConsentHash.sha256(consentPdf);
 			loan.setCbcConsentDate(consent.consentDate());
 			loan.setCbcConsentTextVersion(consent.textVersion());
 			loan.setCbcConsentRef(consentRef);
@@ -292,7 +303,8 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 
 			// The evidence itself, appended to the chained ledger. The columns
 			// above are a convenience for existing readers; this is the record.
-			consentLedger.append(consentRecord(loan, consent, consentRef, textHash));
+			consentLedger.append(
+					consentRecord(loan, consent, consentRef, textHash, documentRef, documentHash));
 
 			return resp("SUCCESS", "Application submitted to LOS", repo.save(loan), HttpStatus.OK);
 
@@ -643,6 +655,30 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 				body = consentForm.render(CbcConsentData.of(loan, pi, consentForm.formReference()));
 				type = "image/png";
 			}
+			case "ECBC_CONSENT_PDF" -> {
+				// The bytes Sambat received, served verbatim. Separate from the
+				// slot above because that one is a PNG the app can display
+				// without a PDF reader — a rendering of the consent, not the
+				// artefact that was filed. Only the record knows which document
+				// belongs to this loan, and only consents filed since archiving
+				// began have one.
+				PdlCbcConsent rec = consentRepo.findByLoan_Id(loanId).orElse(null);
+				if (rec == null || blank(rec.getDocumentRef()))
+					return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+				Image archived = imageRepo.findByFileName(rec.getDocumentRef());
+				if (archived == null || archived.getData() == null)
+					return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+				body = archived.getData();
+				// The record says what was filed; check the file still is that.
+				// Served either way — withholding evidence because it looks
+				// wrong is worse than handing it over with the discrepancy
+				// stated — but a mismatch is not something to pass over quietly.
+				String actual = ConsentHash.sha256(body);
+				if (!actual.equals(rec.getDocumentHash()))
+					log.error("CONSENT-ARCHIVE MISMATCH loan={} ref={} recorded={} actual={}",
+							loanId, rec.getDocumentRef(), rec.getDocumentHash(), actual);
+				type = "application/pdf";
+			}
 			default -> {
 				return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
 			}
@@ -658,12 +694,12 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 
 	/**
 	 * Assembles the consent record from the same facts the filed document was
-	 * rendered from. Fields that later work populates — the archived document,
-	 * the capture context — are empty strings rather than nulls, so the
-	 * canonical form does not change when they start being filled in.
+	 * rendered from. Fields that later work populates — the capture context —
+	 * are empty strings rather than nulls, so the canonical form does not change
+	 * when they start being filled in.
 	 */
 	private PdlCbcConsent consentRecord(PaydayLoan loan, CbcConsentData consent, String consentRef,
-			String textHash) {
+			String textHash, String documentRef, String documentHash) {
 		PdlCbcConsent c = new PdlCbcConsent();
 		c.setLoan(loan);
 		c.setUser(loan.getUser());
@@ -678,14 +714,40 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 		c.setIdNo(nullToEmpty(consent.idNo()));
 		c.setCustomerNameKm(nullToEmpty(consent.customerNameKm()));
 		c.setCustomerNameLatin(nullToEmpty(consent.customerNameLatin()));
-		c.setDocumentRef("");
-		c.setDocumentHash("");
+		c.setDocumentRef(nullToEmpty(documentRef));
+		c.setDocumentHash(nullToEmpty(documentHash));
 		c.setAppVersion("");
 		c.setDeviceModel("");
 		c.setIpAddress("");
 		c.setCaptureSource(PdlCbcConsentLedger.LIVE);
 		c.setLosAppId(loan.getLosAppId());
 		return c;
+	}
+
+	/**
+	 * Stores the filed consent PDF and returns the reference the record keeps.
+	 *
+	 * <p>Follows {@code PdlAccountRequestService.storeDoc()}: the stored name is
+	 * the reference the app fetches by, so it is a UUID rather than anything
+	 * guessable. {@code E_CBC_CONSENT} is already in
+	 * {@code PdlDocumentAccess.LOAN_TAGS}, so owner-only access applies with no
+	 * new gate. Runs inside the submit transaction, so a failed filing leaves no
+	 * orphaned document behind.
+	 */
+	private String archiveConsentPdf(PaydayLoan loan, byte[] pdf) {
+		Image image = Image.build();
+		String name = "pdl-cbc-" + java.util.UUID.randomUUID() + ".pdf";
+		image.setFileName(name);
+		image.setFileType("application/pdf");
+		image.setSize(pdf.length);
+		image.setData(pdf);
+		image.setEntityClass("E_CBC_CONSENT");
+		image.setEntityId(String.valueOf(loan.getId()));
+		// Image.build() hardcodes "default"; the document belongs to a person.
+		image.setCreatedBy(loan.getUser().getUsername());
+		image.setUpdatedBy(loan.getUser().getUsername());
+		imageRepo.save(image);
+		return name;
 	}
 
 	private static String nullToEmpty(String v) {

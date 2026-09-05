@@ -6,6 +6,8 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.ezetik.kjeypapa.image.model.Image;
+import com.ezetik.kjeypapa.image.repository.ImageRepository;
 import com.ezetik.kjeypapa.pdl.model.PdlCbcConsent;
 import com.ezetik.kjeypapa.pdl.repository.PdlCbcConsentRepository;
 
@@ -35,6 +37,9 @@ public class PdlCbcConsentLedger {
 
 	@Autowired
 	private PdlCbcConsentRepository repo;
+
+	@Autowired
+	private ImageRepository imageRepo;
 
 	@PersistenceContext
 	private EntityManager em;
@@ -161,6 +166,45 @@ public class PdlCbcConsentLedger {
 		return new LedgerReport(all.size(), chain.size() - evidence.size(), evidence.size(),
 				head == null ? "" : String.valueOf(head.getId()),
 				head == null ? "" : head.getRowHash(), chain);
+	}
+
+	/** The result of checking archived documents against the hashes recorded for them. */
+	public record ArchiveReport(int checked, int missing, int altered, List<Finding> findings) {
+	}
+
+	/**
+	 * Checks that each archived consent document still is the document its record
+	 * says was filed.
+	 *
+	 * <p>Separate from {@link #verify()} because it reads every stored PDF, which
+	 * the chain walk does not need to do. The chain protects the record; this
+	 * protects the artefact the record points at. Neither covers the other: a
+	 * document can be swapped without touching a single consent row, and the
+	 * chain would still verify perfectly.
+	 *
+	 * <p>Records written before archiving began have no document and are skipped
+	 * rather than counted as missing — there is nothing to find.
+	 */
+	public ArchiveReport verifyArchives() {
+		List<Finding> findings = new ArrayList<>();
+		int checked = 0;
+		int missing = 0;
+
+		for (PdlCbcConsent c : repo.findAllByOrderByIdAsc()) {
+			if (blank(c.getDocumentRef()))
+				continue;
+			checked++;
+			Image archived = imageRepo.findByFileName(c.getDocumentRef());
+			if (archived == null || archived.getData() == null) {
+				missing++;
+				findings.add(new Finding(c.getId(), c.getConsentRef(), "DOCUMENT",
+						"the archived document " + c.getDocumentRef() + " is gone"));
+			} else if (!ConsentHash.sha256(archived.getData()).equals(c.getDocumentHash())) {
+				findings.add(new Finding(c.getId(), c.getConsentRef(), "DOCUMENT",
+						"the archived document is not the one that was filed"));
+			}
+		}
+		return new ArchiveReport(checked, missing, findings.size() - missing, findings);
 	}
 
 	/** Names what a record cannot prove, in the order an auditor would ask. */

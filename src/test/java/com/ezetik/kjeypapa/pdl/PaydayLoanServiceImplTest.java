@@ -28,6 +28,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 import com.ezetik.kjeypapa.image.repository.ImageRepository;
 import com.ezetik.kjeypapa.pdl.model.PaydayLoan;
+import com.ezetik.kjeypapa.pdl.model.PdlCbcConsent;
+import com.ezetik.kjeypapa.pdl.service.ConsentHash;
 import com.ezetik.kjeypapa.pdl.model.PdlBankInfo;
 import com.ezetik.kjeypapa.pdl.model.PdlDocTypeEnum;
 import com.ezetik.kjeypapa.pdl.model.PdlEmploymentInfo;
@@ -647,6 +649,51 @@ class PaydayLoanServiceImplTest {
 		// and the record stamped on the loan is the record it was rendered from
 		assertThat(loan.getCbcConsentDate()).isEqualTo(rendered.getValue().consentDate());
 		assertThat(loan.getCbcConsentTextVersion()).isEqualTo(rendered.getValue().textVersion());
+	}
+
+	@Test
+	void submit_archivesTheExactBytesItFiled() {
+		// Re-rendering reproduces the document today, but only because the
+		// record freezes every input. The archive is what answers "show me the
+		// document this person signed" after a font, a renderer or a wording
+		// file has moved on — so it must hold the bytes that went on the wire,
+		// and the consent record must carry their hash.
+		PaydayLoan loan = submittableLoan();
+		byte[] filed = { '%', 'P', 'D', 'F', 7, 7, 7 };
+		when(consentForm.renderPdf(any())).thenReturn(filed);
+		when(losProvider.submitApplication(eq(loan), any())).thenReturn("258100");
+
+		service.submit(1);
+
+		var stored = org.mockito.ArgumentCaptor.forClass(com.ezetik.kjeypapa.image.model.Image.class);
+		var recorded = org.mockito.ArgumentCaptor.forClass(PdlCbcConsent.class);
+		verify(imageRepo).save(stored.capture());
+		verify(consentLedger).append(recorded.capture());
+
+		assertThat(stored.getValue().getData()).isSameAs(filed);
+		assertThat(stored.getValue().getEntityClass()).isEqualTo("E_CBC_CONSENT");
+		assertThat(stored.getValue().getFileType()).isEqualTo("application/pdf");
+		// PdlDocumentAccess.LOAN_TAGS gates E_CBC_CONSENT by loan, so the id
+		// stored here is what makes the document reachable by its owner only.
+		assertThat(stored.getValue().getEntityId()).isEqualTo(String.valueOf(loan.getId()));
+
+		assertThat(recorded.getValue().getDocumentRef()).isEqualTo(stored.getValue().getFileName());
+		assertThat(recorded.getValue().getDocumentHash()).isEqualTo(ConsentHash.sha256(filed));
+	}
+
+	@Test
+	void submit_archivesNothingWhenFilingFails() {
+		// The archive is part of the same transaction, but the assertion is
+		// worth keeping explicit: a document on file for an application Sambat
+		// never received would read as a consent that was acted on.
+		PaydayLoan loan = submittableLoan();
+		when(losProvider.submitApplication(eq(loan), any()))
+				.thenThrow(new LosSubmitException("LOS_DOWN", "unreachable"));
+
+		service.submit(1);
+
+		verify(imageRepo, never()).save(any(com.ezetik.kjeypapa.image.model.Image.class));
+		verify(consentLedger, never()).append(any());
 	}
 
 	@Test

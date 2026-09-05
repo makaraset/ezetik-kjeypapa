@@ -5,6 +5,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import com.ezetik.kjeypapa.pdl.service.PdlCbcConsentLedger.ArchiveReport;
 import com.ezetik.kjeypapa.pdl.service.PdlCbcConsentLedger.Finding;
 import com.ezetik.kjeypapa.pdl.service.PdlCbcConsentLedger.LedgerReport;
 
@@ -45,10 +46,24 @@ public class PdlConsentLedgerScheduler {
 			return;
 		}
 
-		if (r.broken() == 0) {
+		// The chain protects the records; it says nothing about the documents
+		// they point at, which live in an ordinary table with no trigger on it.
+		// A document can be swapped without touching a consent row at all.
+		ArchiveReport a = ledger.verifyArchives();
+		for (Finding f : a.findings())
+			log.error("CONSENT-ARCHIVE FAILED id={} ref={} {}", f.id(), f.consentRef(), f.problem());
+
+		if (r.broken() == 0 && a.findings().isEmpty()) {
 			// One line, always the same shape, carrying the value worth keeping.
-			log.info("CONSENT-LEDGER OK records={} head_id={} head_hash={} incomplete={}",
-					r.checked(), r.headId(), r.headHash(), r.incomplete());
+			log.info("CONSENT-LEDGER OK records={} head_id={} head_hash={} incomplete={} documents={}",
+					r.checked(), r.headId(), r.headHash(), r.incomplete(), a.checked());
+			return;
+		}
+
+		if (r.broken() == 0) {
+			log.error("CONSENT-ARCHIVE FAILED documents={} missing={} altered={} (chain itself intact,"
+					+ " head_id={} head_hash={})", a.checked(), a.missing(), a.altered(), r.headId(),
+					r.headHash());
 			return;
 		}
 
