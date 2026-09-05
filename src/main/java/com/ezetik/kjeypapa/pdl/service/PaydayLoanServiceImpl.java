@@ -18,6 +18,7 @@ import com.ezetik.kjeypapa.image.model.Image;
 import com.ezetik.kjeypapa.image.repository.ImageRepository;
 import com.ezetik.kjeypapa.pdl.model.PaydayLoan;
 import com.ezetik.kjeypapa.pdl.model.PdlAttachment;
+import com.ezetik.kjeypapa.pdl.model.PdlCbcConsent;
 import com.ezetik.kjeypapa.pdl.model.PdlBankInfo;
 import com.ezetik.kjeypapa.pdl.model.PdlDocTypeEnum;
 import com.ezetik.kjeypapa.pdl.model.PdlEmploymentInfo;
@@ -91,6 +92,9 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 
 	@Autowired
 	private LosDocumentAssembler losDocs;
+
+	@Autowired
+	private PdlCbcConsentLedger consentLedger;
 
 	/**
 	 * The document slots we send Sambat, in the order the customer sees them.
@@ -272,17 +276,23 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 			// that never happened, and re-stamped the date on every retry.
 			// Stamped from the SAME record the filed document was rendered
 			// from, so the two cannot disagree.
+			String consentRef = "CBC-" + loan.getId() + "-" + consent.textVersion();
+			String textHash = sha256(consentForm.consentTextKm(consent.textVersion()));
 			loan.setCbcConsentDate(consent.consentDate());
 			loan.setCbcConsentTextVersion(consent.textVersion());
-			loan.setCbcConsentRef("CBC-" + loan.getId() + "-" + consent.textVersion());
+			loan.setCbcConsentRef(consentRef);
 			// The rest of the evidence Sambat's record needs (2026-09-04): the
 			// wording is proven by hash, not just named by version.
 			// Hash the wording of the version being stamped, not whatever
 			// cbc/consent-km.txt happens to hold: bumping the version without
 			// syncing that file would pin a label to a different text's hash.
-			loan.setCbcConsentTextHash(sha256(consentForm.consentTextKm(consent.textVersion())));
+			loan.setCbcConsentTextHash(textHash);
 			loan.setCbcConsentLanguage("km");
 			loan.setCbcConsentChannel("MOBILE_APP");
+
+			// The evidence itself, appended to the chained ledger. The columns
+			// above are a convenience for existing readers; this is the record.
+			consentLedger.append(consentRecord(loan, consent, consentRef, textHash));
 
 			return resp("SUCCESS", "Application submitted to LOS", repo.save(loan), HttpStatus.OK);
 
@@ -644,6 +654,38 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 			log.warn("Could not render LOS document {} for loan {}: {}", slot, id, e.toString());
 			return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
 		}
+	}
+
+	/**
+	 * Assembles the consent record from the same facts the filed document was
+	 * rendered from. Fields that later work populates — the archived document,
+	 * the capture context — are empty strings rather than nulls, so the
+	 * canonical form does not change when they start being filled in.
+	 */
+	private PdlCbcConsent consentRecord(PaydayLoan loan, CbcConsentData consent, String consentRef,
+			String textHash) {
+		PdlCbcConsent c = new PdlCbcConsent();
+		c.setLoan(loan);
+		c.setUser(loan.getUser());
+		c.setConsentRef(consentRef);
+		c.setConsentGiven(true);
+		c.setConsentDate(consent.consentDate());
+		c.setTextVersion(consent.textVersion());
+		c.setTextHash(textHash);
+		c.setTextLanguage("km");
+		c.setChannel("MOBILE_APP");
+		c.setFormReference(nullToEmpty(consent.formReference()));
+		c.setIdNo(nullToEmpty(consent.idNo()));
+		c.setCustomerNameKm(nullToEmpty(consent.customerNameKm()));
+		c.setCustomerNameLatin(nullToEmpty(consent.customerNameLatin()));
+		c.setDocumentRef("");
+		c.setDocumentHash("");
+		c.setAppVersion("");
+		c.setDeviceModel("");
+		c.setIpAddress("");
+		c.setCaptureSource(PdlCbcConsentLedger.LIVE);
+		c.setLosAppId(loan.getLosAppId());
+		return c;
 	}
 
 	private static String nullToEmpty(String v) {
