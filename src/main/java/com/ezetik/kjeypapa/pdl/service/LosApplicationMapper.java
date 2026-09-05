@@ -69,9 +69,15 @@ public class LosApplicationMapper {
 	/** Cambodia, per Sambat (2026-08-28): nationality and country both take KHM. */
 	private static final String KHM = "KHM";
 
-	public NewApplicationParam toParam(PaydayLoan loan) {
+	/**
+	 * @param consentPdf the consent document as filed. Passed in rather than
+	 *        rendered here so that the bytes Sambat receive are the same object
+	 *        the caller archives and hashes — rendering twice invites two
+	 *        different documents for one consent.
+	 */
+	public NewApplicationParam toParam(PaydayLoan loan, byte[] consentPdf) {
 		config.assertConfigured();
-		return build(loan, false);
+		return build(loan, false, consentPdf);
 	}
 
 	/**
@@ -80,10 +86,12 @@ public class LosApplicationMapper {
 	 * request with Sambat's reference payload; never for a real submit.
 	 */
 	public NewApplicationParam preview(PaydayLoan loan) {
-		return build(loan, true);
+		// A preview has no filed document: previewing must never look like
+		// evidence that a consent was given.
+		return build(loan, true, null);
 	}
 
-	private NewApplicationParam build(PaydayLoan loan, boolean lenient) {
+	private NewApplicationParam build(PaydayLoan loan, boolean lenient, byte[] consentPdf) {
 		this.lenient = lenient;
 		int uid = loan.getUser().getId();
 		PdlPersonalInfo pi = first(personalRepo.findByUser(uid));
@@ -102,12 +110,12 @@ public class LosApplicationMapper {
 		// A constant, NEVER the customer's username: their LOS dies with a slow
 		// 500/timeout on a doneBy it cannot resolve (root-caused 2026-09-03).
 		param.setDoneBy(str(config.getDoneBy()));
-		param.setNewAppRequest(request(loan, pi, ei, bi));
+		param.setNewAppRequest(request(loan, pi, ei, bi, consentPdf));
 		return param;
 	}
 
 	private NewApplicationRequest request(PaydayLoan loan, PdlPersonalInfo pi, PdlEmploymentInfo ei,
-			PdlBankInfo bi) {
+			PdlBankInfo bi, byte[] consentPdf) {
 		NewApplicationRequest r = new NewApplicationRequest();
 
 		r.setHidCurrentUserId(intOf(config.getHidCurrentUserId()));
@@ -269,9 +277,8 @@ public class LosApplicationMapper {
 		// NID, ref, timestamp. In their MissingData mandatory set (2026-09-03);
 		// their own reference reuses an arbitrary file here, so a rendered
 		// record of the real consent is well within what the slot accepts.
-		if (pi != null) {
-			byte[] pdf = consentForm.renderPdf(loan, pi);
-			r.setDoc_ECBCConsentForm(java.util.Base64.getEncoder().encodeToString(pdf));
+		if (consentPdf != null && consentPdf.length > 0) {
+			r.setDoc_ECBCConsentForm(java.util.Base64.getEncoder().encodeToString(consentPdf));
 			r.setDoc_ECBCConsentForm_FileName("ECBCConsentForm-" + id + ".pdf");
 		}
 

@@ -65,12 +65,12 @@ public class LosProviderImpl implements LosProvider {
 	private String acceptTrnCode;
 
 	@Override
-	public String submitApplication(PaydayLoan loan) {
+	public String submitApplication(PaydayLoan loan, byte[] consentPdf) {
 		if (mockEnabled) {
 			return "LOS-MOCK-" + loan.getId();
 		}
 
-		NewApplicationParam param = mapper.toParam(loan);
+		NewApplicationParam param = mapper.toParam(loan, consentPdf);
 		JsonNode raw;
 		try {
 			raw = sbf.newLoanApplication(param);

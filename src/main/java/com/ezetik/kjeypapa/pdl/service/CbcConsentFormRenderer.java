@@ -29,8 +29,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
-import com.ezetik.kjeypapa.pdl.model.PaydayLoan;
-import com.ezetik.kjeypapa.pdl.model.PdlPersonalInfo;
 
 /**
  * Renders Sambat's CBC consent form — the document filed as
@@ -76,9 +74,22 @@ public class CbcConsentFormRenderer {
 	@Value("${pdl.cbc.text-version:v1}")
 	private String textVersion;
 
-	/** Sambat's own reference for this form, printed as its footer. */
+	/**
+	 * Sambat's current form reference. Copied onto a consent record when one is
+	 * created; a form is then printed from the record, so an old consent keeps
+	 * showing the reference it was filed under rather than today's.
+	 */
 	@Value("${pdl.cbc.form-reference:}")
 	private String formReference;
+
+	public String formReference() {
+		return formReference;
+	}
+
+	/** The wording version a new consent record should be stamped with. */
+	public String currentTextVersion() {
+		return textVersion;
+	}
 
 	private final Map<String, String> textCache = new ConcurrentHashMap<>();
 	private volatile Font khmerRegular;
@@ -118,32 +129,31 @@ public class CbcConsentFormRenderer {
 	}
 
 	/** The consent as a PDF — the format Sambat file. */
-	public byte[] renderPdf(PaydayLoan loan, PdlPersonalInfo pi) {
+	public byte[] renderPdf(CbcConsentData data) {
 		try {
-			return SimplePdfWriter.singleImagePage(renderImage(loan, pi));
+			return SimplePdfWriter.singleImagePage(renderImage(data));
 		} catch (IOException e) {
 			throw new LosSubmitException("LOS_CONSENT_RENDER", "Could not render the CBC consent form");
 		}
 	}
 
 	/** The same document as a PNG, for viewing in the app. */
-	public byte[] render(PaydayLoan loan, PdlPersonalInfo pi) {
+	public byte[] render(CbcConsentData data) {
 		try {
 			ByteArrayOutputStream out = new ByteArrayOutputStream();
-			ImageIO.write(renderImage(loan, pi), "png", out);
+			ImageIO.write(renderImage(data), "png", out);
 			return out.toByteArray();
 		} catch (IOException e) {
 			throw new LosSubmitException("LOS_CONSENT_RENDER", "Could not render the CBC consent form");
 		}
 	}
 
-	private BufferedImage renderImage(PaydayLoan loan, PdlPersonalInfo pi) {
-		int loanId = loan.getId() == null ? 0 : loan.getId();
-		// The stored version and reference, not today's config: this document
-		// must match the record filed against it.
-		String version = notBlank(loan.getCbcConsentTextVersion()) ? loan.getCbcConsentTextVersion() : textVersion;
-		ZonedDateTime at = loan.getCbcConsentDate() != null ? loan.getCbcConsentDate().atZone(KH)
-				: ZonedDateTime.now(KH);
+	private BufferedImage renderImage(CbcConsentData data) {
+		// Every value is taken from the record, never from config or the clock:
+		// the document and the record it belongs to are the same facts.
+		int loanId = data.loanId();
+		String version = data.textVersion();
+		ZonedDateTime at = data.consentDate().atZone(KH);
 
 		int width = Math.round(PAGE_W_PT * DPI);
 		int height = Math.round(PAGE_H_PT * DPI);
@@ -175,11 +185,11 @@ public class CbcConsentFormRenderer {
 
 		// Borrower block — their labels, in their order.
 		int valueX = marginX + Math.round(150f * DPI);
-		String khmerName = (s(pi.getKhmerFamilyName()) + " " + s(pi.getKhmerFirstName())).trim();
-		String latinName = (s(pi.getLatinFamilyName()) + " " + s(pi.getLatinFirstName())).trim();
+		String khmerName = s(data.customerNameKm());
+		String latinName = s(data.customerNameLatin());
 		y = row(g, label, marginX, valueX, y, lineH, "ឈ្មោះអតិថិជន", khmerName.isEmpty() ? latinName : khmerName);
 		y = row(g, label, marginX, valueX, y, lineH, "ជាអក្សរឡាតាំង", latinName);
-		y = row(g, label, marginX, valueX, y, lineH, "លេខអត្តសញ្ញាណប័ណ្ណ", s(pi.getIdNo()));
+		y = row(g, label, marginX, valueX, y, lineH, "លេខអត្តសញ្ញាណប័ណ្ណ", s(data.idNo()));
 		y = row(g, label, marginX, valueX, y, lineH, "លេខសំណើ", String.valueOf(loanId));
 		y = row(g, label, marginX, valueX, y, lineH, "កាលបរិច្ឆេទ",
 				at.format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm")));
@@ -197,9 +207,10 @@ public class CbcConsentFormRenderer {
 		}
 
 		// Footer — their form reference, bottom right.
-		if (notBlank(formReference)) {
+		String formRef = s(data.formReference());
+		if (notBlank(formRef)) {
 			int fy = height - Math.round(MARGIN_BOTTOM_PT * DPI);
-			draw(g, formReference, width - marginX - widthOf(g, formReference, footer), fy, footer);
+			draw(g, formRef, width - marginX - widthOf(g, formRef, footer), fy, footer);
 		}
 
 		g.dispose();

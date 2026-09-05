@@ -13,7 +13,11 @@ import com.ezetik.kjeypapa.pdl.payload.LosProductSyncPayload;
 public interface LosProvider {
 
 	/** BRS 2.3 — submit a new application; returns the LOS application number. */
-	String submitApplication(PaydayLoan loan);
+	/**
+	 * @param consentPdf the consent document as filed, rendered by the caller so
+	 *        that the same bytes are sent, archived and hashed
+	 */
+	String submitApplication(PaydayLoan loan, byte[] consentPdf);
 
 	/**
 	 * BRS 2.7 — relay the customer's accept ("Y" + signed contract) / reject

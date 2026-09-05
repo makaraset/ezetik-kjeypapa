@@ -51,6 +51,9 @@ class LosApplicationMapperTest {
 
 	@InjectMocks LosApplicationMapper mapper;
 
+	/** Stand-in for the document the caller rendered and archived. */
+	private static final byte[] CONSENT_PDF = { '%', 'P', 'D', 'F', 1, 2, 3 };
+
 	private PaydayLoan loan;
 	private PdlPersonalInfo pi;
 
@@ -97,12 +100,10 @@ class LosApplicationMapperTest {
 		when(config.getLoanTerm()).thenReturn("1");
 		when(config.getDoneBy()).thenReturn("KjeyPapa");
 		when(config.getUtilizationCategory()).thenReturn("23");
-		// Sambat wants the consent as a PDF now, so the mapper calls renderPdf.
-		when(consentForm.renderPdf(any(), any())).thenReturn(new byte[] { 1, 2, 3 });
 	}
 
 	private NewApplicationRequest map() {
-		return mapper.toParam(loan).getNewAppRequest();
+		return mapper.toParam(loan, CONSENT_PDF).getNewAppRequest();
 	}
 
 	@Test
@@ -281,7 +282,7 @@ class LosApplicationMapperTest {
 		// Their LOS dies (slow 500/timeout) on a doneBy it cannot resolve —
 		// root-caused 2026-09-03 with the same payload succeeding under a
 		// resolvable name. Any leak of the username here regresses that outage.
-		assertThat(mapper.toParam(loan).getDoneBy()).isEqualTo("KjeyPapa");
+		assertThat(mapper.toParam(loan, CONSENT_PDF).getDoneBy()).isEqualTo("KjeyPapa");
 	}
 
 	@Test
@@ -301,8 +302,12 @@ class LosApplicationMapperTest {
 	@DisplayName("the e-CBC consent form is rendered and attached at submit")
 	void consentFormAttached() {
 		NewApplicationRequest r = map();
-		assertThat(r.getDoc_ECBCConsentForm()).isNotEmpty();
+		// Exactly the bytes handed in — the mapper must not render its own copy,
+		// or Sambat could receive a different document from the one archived.
+		assertThat(r.getDoc_ECBCConsentForm())
+				.isEqualTo(java.util.Base64.getEncoder().encodeToString(CONSENT_PDF));
 		assertThat(r.getDoc_ECBCConsentForm_FileName()).isEqualTo("ECBCConsentForm-1.pdf");
+		org.mockito.Mockito.verifyNoInteractions(consentForm);
 	}
 
 	@Test
@@ -340,9 +345,9 @@ class LosApplicationMapperTest {
 		// would file a second credit application — and a second CBC enquiry —
 		// for the same loan.
 		when(config.getAppId()).thenReturn(0L);
-		assertThat(mapper.toParam(loan).getAppId()).isZero();
+		assertThat(mapper.toParam(loan, CONSENT_PDF).getAppId()).isZero();
 
 		loan.setLosAppId(8281L);
-		assertThat(mapper.toParam(loan).getAppId()).isEqualTo(8281L);
+		assertThat(mapper.toParam(loan, CONSENT_PDF).getAppId()).isEqualTo(8281L);
 	}
 }

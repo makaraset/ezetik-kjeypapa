@@ -243,7 +243,19 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 			if (bi == null || blank(bi.getBankStatementFileRef()))
 				return resp("MISSING_DOCUMENT", "Missing document: bank statement", null, HttpStatus.EXPECTATION_FAILED);
 
-			String losNo = losProvider.submitApplication(loan);
+			// Build the consent BEFORE filing, and render the document from it.
+			// The document used to be rendered inside the LOS call, before the
+			// consent was stamped, so it fell back to config and the clock and
+			// was computed independently of the record kept beside it. One set
+			// of facts now produces one document, and those exact bytes are
+			// what Sambat receive.
+			CbcConsentData consent = new CbcConsentData(loan.getId(), Instant.now(), cbcTextVersion,
+					consentForm.formReference(), pi == null ? "" : nullToEmpty(pi.getIdNo()),
+					pi == null ? "" : name(pi.getKhmerFamilyName(), pi.getKhmerFirstName()),
+					pi == null ? "" : name(pi.getLatinFamilyName(), pi.getLatinFirstName()));
+			byte[] consentPdf = consentForm.renderPdf(consent);
+
+			String losNo = losProvider.submitApplication(loan, consentPdf);
 			loan.setLosApplicationNo(losNo);
 			loan.setStatus(PdlStatusEnum.Submitted);
 			// Clear any failure recorded by an earlier attempt. Submitting is
@@ -258,16 +270,17 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 			// actually filed — viewable via GET /pdl/{id}/cbc-consent. Stamping
 			// before the call left a committed consent behind for a submission
 			// that never happened, and re-stamped the date on every retry.
-			loan.setCbcConsentDate(Instant.now());
-			loan.setCbcConsentTextVersion(cbcTextVersion);
-			// Server-authoritative: overwrite any client-sent placeholder ref.
-			loan.setCbcConsentRef("CBC-" + loan.getId() + "-" + cbcTextVersion);
+			// Stamped from the SAME record the filed document was rendered
+			// from, so the two cannot disagree.
+			loan.setCbcConsentDate(consent.consentDate());
+			loan.setCbcConsentTextVersion(consent.textVersion());
+			loan.setCbcConsentRef("CBC-" + loan.getId() + "-" + consent.textVersion());
 			// The rest of the evidence Sambat's record needs (2026-09-04): the
 			// wording is proven by hash, not just named by version.
 			// Hash the wording of the version being stamped, not whatever
 			// cbc/consent-km.txt happens to hold: bumping the version without
 			// syncing that file would pin a label to a different text's hash.
-			loan.setCbcConsentTextHash(sha256(consentForm.consentTextKm(cbcTextVersion)));
+			loan.setCbcConsentTextHash(sha256(consentForm.consentTextKm(consent.textVersion())));
 			loan.setCbcConsentLanguage("km");
 			loan.setCbcConsentChannel("MOBILE_APP");
 
@@ -611,9 +624,13 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 				type = "image/jpeg";
 			}
 			case "ECBC_CONSENT" -> {
-				if (pi == null)
+				// Rendered from the stamped consent, so it reproduces the filed
+				// document. An application with no consent yet has no document
+				// to show — saying so is truthful, where the old fallback
+				// invented a plausible-looking one.
+				if (pi == null || loan.getCbcConsentDate() == null)
 					return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
-				body = consentForm.render(loan, pi);
+				body = consentForm.render(CbcConsentData.of(loan, pi, consentForm.formReference()));
 				type = "image/png";
 			}
 			default -> {
@@ -627,6 +644,14 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 			log.warn("Could not render LOS document {} for loan {}: {}", slot, id, e.toString());
 			return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
 		}
+	}
+
+	private static String nullToEmpty(String v) {
+		return v == null ? "" : v;
+	}
+
+	private static String name(String family, String first) {
+		return (nullToEmpty(family) + " " + nullToEmpty(first)).trim();
 	}
 
 	/** The single current row per user, or null. */

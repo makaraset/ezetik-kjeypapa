@@ -634,3 +634,31 @@ is now the only case where a word breaks.
 bytes: a version has to mean one exact byte sequence or the stored hash stops
 proving anything. Applications already filed under v2 keep re-rendering from
 the v2 file.
+
+---
+
+## The consent filed is now the consent recorded (2026-09-05)
+
+The consent PDF used to be rendered *inside* the LOS call, before the consent
+was stamped on the loan. The renderer filled the gaps from configuration and
+the clock, so the document Sambat received and the record we kept beside it
+were computed independently — they matched by luck, not by construction, and a
+retry after a configuration change would have made them differ.
+
+The renderer now takes a frozen record (`CbcConsentData`) instead of the loan
+and the live profile, and has no fallbacks left: a consent with no date or no
+wording version cannot be rendered at all. `submit()` builds that record first,
+renders the document from it, and hands those exact bytes to the mapper, so
+what is filed is what is recorded.
+
+Two consequences worth knowing:
+
+- **A draft no longer has a consent document.** Asking for one returns 404
+  rather than a plausible-looking document for a consent that has not happened.
+- **A filed consent re-renders identically, forever.** The identity printed on
+  the form is frozen into the record, so a customer editing their name later no
+  longer changes the document shown for an application already filed.
+
+Verified live: application 258061 (AppId 8306) filed with the reordered flow,
+its document re-renders byte-identically, and the payload is unchanged at 102
+fields with the same key set.

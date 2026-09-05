@@ -1,6 +1,7 @@
 package com.ezetik.kjeypapa.pdl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
@@ -16,6 +17,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.ezetik.kjeypapa.pdl.model.PaydayLoan;
 import com.ezetik.kjeypapa.pdl.model.PdlPersonalInfo;
+import com.ezetik.kjeypapa.pdl.service.CbcConsentData;
 import com.ezetik.kjeypapa.pdl.service.CbcConsentFormRenderer;
 
 /**
@@ -38,6 +40,11 @@ class CbcConsentFormRendererTest {
 		return r;
 	}
 
+	private CbcConsentData data() {
+		return new CbcConsentData(23, java.time.Instant.parse("2026-09-04T09:07:22Z"),
+				"v1-test", "Form _ CBC 01 _ V2 _ 09122025", "110553867", "សែត មករា", "SET MAKARA");
+	}
+
 	private PaydayLoan loan() {
 		PaydayLoan l = new PaydayLoan();
 		l.setId(23);
@@ -57,7 +64,7 @@ class CbcConsentFormRendererTest {
 	@Test
 	@DisplayName("renders a real PNG carrying the consent")
 	void rendersAPng() throws Exception {
-		byte[] png = renderer().render(loan(), person());
+		byte[] png = renderer().render(data());
 
 		BufferedImage img = ImageIO.read(new ByteArrayInputStream(png));
 		assertThat(img).isNotNull();
@@ -100,11 +107,10 @@ class CbcConsentFormRendererTest {
 	@Test
 	@DisplayName("a customer with no Khmer name still gets a form")
 	void latinOnlyCustomer() throws Exception {
-		PdlPersonalInfo pi = person();
-		pi.setKhmerFamilyName(null);
-		pi.setKhmerFirstName(null);
+		CbcConsentData latinOnly = new CbcConsentData(23, java.time.Instant.now(), "v1-test",
+				"Form _ CBC 01", "110553867", "", "SET MAKARA");
 
-		byte[] png = renderer().render(loan(), pi);
+		byte[] png = renderer().render(latinOnly);
 
 		assertThat(ImageIO.read(new ByteArrayInputStream(png))).isNotNull();
 	}
@@ -112,7 +118,7 @@ class CbcConsentFormRendererTest {
 	@Test
 	@DisplayName("renders a valid single-page PDF — what Sambat asked for")
 	void rendersAPdf() throws Exception {
-		byte[] pdf = renderer().renderPdf(loan(), person());
+		byte[] pdf = renderer().renderPdf(data());
 
 		String head = new String(pdf, 0, 9, java.nio.charset.StandardCharsets.US_ASCII);
 		assertThat(head).startsWith("%PDF-1.");
@@ -174,5 +180,26 @@ class CbcConsentFormRendererTest {
 
 		assertThat(text).contains("\u200B");
 		assertThat(text.chars().filter(c -> c == 0x200B).count()).isGreaterThanOrEqualTo(20);
+	}
+
+	@Test
+	@DisplayName("a consent that does not exist yet cannot be rendered")
+	void refusesToRenderBeforeConsentExists() {
+		// The renderer used to fall back to config and the clock, which is how
+		// the copy filed with Sambat came to be computed independently of the
+		// record stored beside it. There is nothing to fall back to now.
+		assertThatThrownBy(() -> new CbcConsentData(23, null, "v1-test", "", "", "", ""))
+				.hasMessageContaining("before the consent is recorded");
+		assertThatThrownBy(() -> new CbcConsentData(23, java.time.Instant.now(), " ", "", "", "", ""))
+				.hasMessageContaining("without a wording version");
+	}
+
+	@Test
+	@DisplayName("the same record renders the same bytes, every time")
+	void renderIsDeterministic() {
+		// This is what makes the archived document checkable years later: if a
+		// re-render can differ, "the document we filed" stops being provable.
+		CbcConsentData d = data();
+		assertThat(renderer().renderPdf(d)).isEqualTo(renderer().renderPdf(d));
 	}
 }

@@ -41,6 +41,7 @@ import com.ezetik.kjeypapa.pdl.repository.PdlBankInfoRepository;
 import com.ezetik.kjeypapa.pdl.repository.PdlEmploymentInfoRepository;
 import com.ezetik.kjeypapa.pdl.repository.PdlPaymentScheduleRepository;
 import com.ezetik.kjeypapa.pdl.repository.PdlPersonalInfoRepository;
+import com.ezetik.kjeypapa.pdl.service.CbcConsentData;
 import com.ezetik.kjeypapa.pdl.service.LosProvider;
 import com.ezetik.kjeypapa.pdl.service.LosSubmitException;
 import com.ezetik.kjeypapa.pdl.service.PaydayLoanServiceImpl;
@@ -83,6 +84,14 @@ class PaydayLoanServiceImplTest {
 		// Legacy free-amount creates pass the product cap unless a test overrides.
 		lenient().when(pricingService.withinProductCap(any(), any(), org.mockito.ArgumentMatchers.anyDouble()))
 				.thenReturn(true);
+		// submit() now renders the consent document before filing, so the
+		// renderer is a collaborator of every submit test.
+		lenient().when(consentForm.renderPdf(any())).thenReturn(new byte[] { '%', 'P', 'D', 'F' });
+		lenient().when(consentForm.formReference()).thenReturn("Form _ CBC 01");
+		// @Value is not processed in a plain Mockito test, so the wording version
+		// would be null — and building a consent record now refuses that, rather
+		// than stamping a version-less consent.
+		org.springframework.test.util.ReflectionTestUtils.setField(service, "cbcTextVersion", "v3-2026-09");
 	}
 
 	private User user(int id) {
@@ -143,7 +152,7 @@ class PaydayLoanServiceImplTest {
 		ResponseEntity<Message<PaydayLoan>> r = service.submit(1);
 
 		assertThat(r.getBody().getType()).isEqualTo("MISSING_DOCUMENT");
-		verify(losProvider, never()).submitApplication(any());
+		verify(losProvider, never()).submitApplication(any(), any());
 	}
 
 	@Test
@@ -161,13 +170,13 @@ class PaydayLoanServiceImplTest {
 		PdlBankInfo bi = new PdlBankInfo();
 		bi.setBankStatementFileRef("stmt.png");
 		when(bankRepo.findByUser(CURRENT_ID)).thenReturn(List.of(bi));
-		when(losProvider.submitApplication(loan)).thenReturn("LOS-MOCK-1");
+		when(losProvider.submitApplication(eq(loan), any())).thenReturn("LOS-MOCK-1");
 
 		PaydayLoan out = service.submit(1).getBody().getData();
 
 		assertThat(out.getStatus()).isEqualTo(PdlStatusEnum.Submitted);
 		assertThat(out.getLosApplicationNo()).isEqualTo("LOS-MOCK-1");
-		verify(losProvider).submitApplication(loan);
+		verify(losProvider).submitApplication(eq(loan), any());
 	}
 
 	/** Sets up a loan whose five profile documents are all present. */
@@ -196,7 +205,7 @@ class PaydayLoanServiceImplTest {
 		PaydayLoan loan = submittableLoan();
 		loan.setLosStatusCode("LOS_UNAVAILABLE");
 		loan.setLosMessage("Could not reach Sambat's loan system.");
-		when(losProvider.submitApplication(loan)).thenReturn("257852");
+		when(losProvider.submitApplication(eq(loan), any())).thenReturn("257852");
 
 		PaydayLoan out = service.submit(1).getBody().getData();
 
@@ -209,7 +218,7 @@ class PaydayLoanServiceImplTest {
 	@Test
 	void submit_surfacesTheFieldsLosSaysAreMissing() {
 		PaydayLoan loan = submittableLoan();
-		when(losProvider.submitApplication(loan)).thenThrow(new LosSubmitException("R-MISSINGDATA",
+		when(losProvider.submitApplication(eq(loan), any())).thenThrow(new LosSubmitException("R-MISSINGDATA",
 				"needs more", List.of("CustP_CAddCBCommune", "CustP_Occupation")));
 
 		var body = service.submit(1).getBody();
@@ -226,7 +235,7 @@ class PaydayLoanServiceImplTest {
 	@Test
 	void submit_doesNotStampConsentWhenLosRejects() {
 		PaydayLoan loan = submittableLoan();
-		when(losProvider.submitApplication(loan))
+		when(losProvider.submitApplication(eq(loan), any()))
 				.thenThrow(new LosSubmitException("R-REJECTED", "no thanks"));
 
 		service.submit(1);
@@ -240,7 +249,7 @@ class PaydayLoanServiceImplTest {
 	@Test
 	void submit_stampsConsentOnlyOnSuccess() {
 		PaydayLoan loan = submittableLoan();
-		when(losProvider.submitApplication(loan)).thenReturn("254906");
+		when(losProvider.submitApplication(eq(loan), any())).thenReturn("254906");
 
 		PaydayLoan out = service.submit(1).getBody().getData();
 
@@ -253,7 +262,7 @@ class PaydayLoanServiceImplTest {
 	@Test
 	void submit_neverLeaksInternalErrorTextToTheCustomer() {
 		PaydayLoan loan = submittableLoan();
-		when(losProvider.submitApplication(loan))
+		when(losProvider.submitApplication(eq(loan), any()))
 				.thenThrow(new IllegalStateException("SBF /new-loan-application returned 500 at https://internal"));
 
 		var body = service.submit(1).getBody();
@@ -276,7 +285,7 @@ class PaydayLoanServiceImplTest {
 		when(employmentRepo.findByUser(CURRENT_ID)).thenReturn(List.of(ei2));
 		// bankRepo.findByUser → empty (no bank statement) → blocked.
 		assertThat(service.submit(1).getBody().getType()).isEqualTo("MISSING_DOCUMENT");
-		verify(losProvider, never()).submitApplication(any());
+		verify(losProvider, never()).submitApplication(any(), any());
 	}
 
 	@Test
@@ -369,7 +378,7 @@ class PaydayLoanServiceImplTest {
 	void submit_returnsNotFoundForAnotherUsersLoan() {
 		loanOwnedBy(999, PdlStatusEnum.Draft);
 		assertThat(service.submit(1).getBody().getType()).isEqualTo("NOT_FOUND");
-		verify(losProvider, never()).submitApplication(any());
+		verify(losProvider, never()).submitApplication(any(), any());
 	}
 
 	@Test
@@ -538,7 +547,7 @@ class PaydayLoanServiceImplTest {
 		PaydayLoan loan = submittableLoan();
 		when(consentForm.consentTextKm(org.mockito.ArgumentMatchers.nullable(String.class)))
 				.thenReturn("ការយល់ព្រម");
-		when(losProvider.submitApplication(loan)).thenReturn("257916");
+		when(losProvider.submitApplication(eq(loan), any())).thenReturn("257916");
 
 		PaydayLoan out = service.submit(1).getBody().getData();
 
@@ -576,7 +585,7 @@ class PaydayLoanServiceImplTest {
 		org.springframework.test.util.ReflectionTestUtils.setField(service, "cbcTextVersion", "v9-test");
 		when(consentForm.consentTextKm("v9-test")).thenReturn("wording of v9");
 		when(consentForm.consentTextKm()).thenReturn("SOME OTHER CURRENT TEXT");
-		when(losProvider.submitApplication(loan)).thenReturn("257999");
+		when(losProvider.submitApplication(eq(loan), any())).thenReturn("257999");
 
 		PaydayLoan out = service.submit(1).getBody().getData();
 
@@ -612,5 +621,45 @@ class PaydayLoanServiceImplTest {
 		PaydayLoan loan = service.createApplication(p).getBody().getData();
 
 		assertThat(loan.getCbcConsentRef()).isNull();
+	}
+
+	@Test
+	void submit_filesTheDocumentItRendered() {
+		// The document used to be rendered inside the LOS call, before the
+		// consent was stamped: it took the renderer's fallbacks and so was
+		// computed independently of the record kept beside it. One record must
+		// produce one document, and those exact bytes must be what is filed.
+		PaydayLoan loan = submittableLoan();
+		byte[] filed = { '%', 'P', 'D', 'F', 9, 9 };
+		when(consentForm.renderPdf(any())).thenReturn(filed);
+		when(losProvider.submitApplication(eq(loan), any())).thenReturn("257999");
+
+		service.submit(1);
+
+		var rendered = org.mockito.ArgumentCaptor.forClass(CbcConsentData.class);
+		var sent = org.mockito.ArgumentCaptor.forClass(byte[].class);
+		var order = org.mockito.Mockito.inOrder(consentForm, losProvider);
+		order.verify(consentForm).renderPdf(rendered.capture());
+		order.verify(losProvider).submitApplication(eq(loan), sent.capture());
+
+		assertThat(sent.getValue()).isSameAs(filed);
+		// and the record stamped on the loan is the record it was rendered from
+		assertThat(loan.getCbcConsentDate()).isEqualTo(rendered.getValue().consentDate());
+		assertThat(loan.getCbcConsentTextVersion()).isEqualTo(rendered.getValue().textVersion());
+	}
+
+	@Test
+	void submit_recordsNoConsentWhenFilingFails() {
+		// A consent is evidence that an application was filed. If the filing
+		// throws, nothing may be left behind suggesting one happened.
+		PaydayLoan loan = submittableLoan();
+		when(losProvider.submitApplication(eq(loan), any()))
+				.thenThrow(new LosSubmitException("LOS_DOWN", "unreachable"));
+
+		service.submit(1);
+
+		assertThat(loan.getCbcConsentDate()).isNull();
+		assertThat(loan.getCbcConsentTextHash()).isNull();
+		assertThat(loan.getStatus()).isEqualTo(PdlStatusEnum.Draft);
 	}
 }
