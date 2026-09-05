@@ -1,6 +1,5 @@
 package com.ezetik.kjeypapa.sbf.payload;
 
-import java.sql.Date;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
@@ -27,7 +26,7 @@ public class NoteTransaction {
 	private NoteStatusEnum status;
 	private int aging;
 	private Instant createdAt;
-	private Date rejectDate;
+	private Instant rejectDate;
 	private boolean isAccepted;
 	private boolean isUpdateDisRequired;
 	private NoteAttachmentResponse purchaseOrder;

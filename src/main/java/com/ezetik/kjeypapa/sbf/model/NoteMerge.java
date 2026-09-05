@@ -1,6 +1,5 @@
 package com.ezetik.kjeypapa.sbf.model;
 
-import java.sql.Date;
 import java.time.Instant;
 
 import com.ezetik.kjeypapa.security.model.User;
@@ -25,20 +24,20 @@ public class NoteMerge {
 	private User user;
 	private boolean isReviewed;
 	private String reviewedBy;
-	private Date reviewedDate;
+	private Instant reviewedDate;
 	private boolean isEligible;
 	private boolean isRejected;
 	private String rejectedBy;
-	private Date rejectedDate;
+	private Instant rejectedDate;
 	private boolean isConfirmed;
 	private String confirmedBy;
-	private Date confirmedDate;
+	private Instant confirmedDate;
 	private boolean isApproved;
 	private String approvedBy;
-	private Date approvedDate;
+	private Instant approvedDate;
 	private boolean isDelivryConfirmed;
 	private String deliveryCofirmedBy;
-	private Date deliveryConfirmedDate;
+	private Instant deliveryConfirmedDate;
 
 	private String loanFacRefNo;
 

@@ -1,6 +1,5 @@
 package com.ezetik.kjeypapa.sbf.model;
 
-import java.sql.Date;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -69,13 +68,13 @@ public class Note extends UserDateAudit {
 	@Column(columnDefinition = "bool default false")
 	private boolean isReviewed;
 	private String reviewedBy;
-	private Date reviewedDate;
+	private Instant reviewedDate;
 	private boolean isEligible;
 
 	@Column(columnDefinition = "bool default false")
 	private boolean isRejected;
 	private String rejectedBy;
-	private Date rejectedDate;
+	private Instant rejectedDate;
 
 //	private boolean isConfirmed;
 //	private String confirmedBy;
@@ -83,26 +82,26 @@ public class Note extends UserDateAudit {
 
 	private boolean isApproved;
 	private String approvedBy;
-	private Date approvedDate;
+	private Instant approvedDate;
 	private String approvedComment;
 
 	// Customer
 	@Column(columnDefinition = "bool default false")
 	private boolean isAccepted;
 	private String acceptedBy;
-	private Date acceptedDate;
+	private Instant acceptedDate;
 
 	// Customer
 	@Column(columnDefinition = "bool default false")
 	private boolean isGoodReceived;
 	private String receivedBy;
-	private Date receivedDate;
+	private Instant receivedDate;
 
 	private String loanFacRefNo;
 
 	private boolean isDelivryConfirmed;
 	private String deliveryCofirmedBy;
-	private Date deliveryConfirmedDate;
+	private Instant deliveryConfirmedDate;
 
 //	@ColumnDefault("false")
 //	private boolean isSignedNoteCorrect;

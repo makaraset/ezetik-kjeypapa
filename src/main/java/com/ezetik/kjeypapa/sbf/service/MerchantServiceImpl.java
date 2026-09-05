@@ -1,6 +1,7 @@
 package com.ezetik.kjeypapa.sbf.service;
 
-import java.sql.Date;
+import java.time.Instant;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -100,7 +101,7 @@ public class MerchantServiceImpl implements MerchantService {
 
 				note.setDelivryConfirmed(true);
 				note.setDeliveryCofirmedBy(SecurityContextHolder.getContext().getAuthentication().getName());
-				note.setDeliveryConfirmedDate(new Date(System.currentTimeMillis()));
+				note.setDeliveryConfirmedDate(Instant.now());
 				note.setStatus(NoteStatusEnum.Pending_Confirmation);
 
 				noteRepo.save(note);

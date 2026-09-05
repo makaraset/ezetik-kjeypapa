@@ -1,6 +1,5 @@
 package com.ezetik.kjeypapa.sbf.service;
 
-import java.sql.Date;
 import java.text.SimpleDateFormat;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -190,7 +189,7 @@ public class NoteServiceImpl implements NoteService {
 			if (isEligible) {
 				note.setReviewed(true);
 				note.setReviewedBy(authentication.getName());
-				note.setReviewedDate(new Date(System.currentTimeMillis()));
+				note.setReviewedDate(Instant.now());
 				note.setStatus(NoteStatusEnum.Reviewed);
 
 				note = noteRepo.save(note);
@@ -220,7 +219,7 @@ public class NoteServiceImpl implements NoteService {
 
 				note.setRejected(true);
 				note.setRejectedBy(SecurityContextHolder.getContext().getAuthentication().getName());
-				note.setRejectedDate(new Date(System.currentTimeMillis()));
+				note.setRejectedDate(Instant.now());
 				note.setStatus(NoteStatusEnum.Rejected);
 
 				resp = new Message<>("SUCCESS", "Noted is rejected", noteRepo.save(note));
@@ -257,7 +256,7 @@ public class NoteServiceImpl implements NoteService {
 
 					note.setApproved(isApproved);
 					note.setApprovedBy(SecurityContextHolder.getContext().getAuthentication().getName());
-					note.setApprovedDate(new Date(System.currentTimeMillis()));
+					note.setApprovedDate(Instant.now());
 					note.setStatus(NoteStatusEnum.Approved);
 					note.setApprovedComment(comment);
 
@@ -309,7 +308,7 @@ public class NoteServiceImpl implements NoteService {
 
 					note.setAccepted(isAccepted);
 					note.setAcceptedBy(SecurityContextHolder.getContext().getAuthentication().getName());
-					note.setAcceptedDate(new Date(System.currentTimeMillis()));
+					note.setAcceptedDate(Instant.now());
 
 					nar.setLoanFacility(submitNoteToCBS(note));
 
@@ -365,7 +364,7 @@ public class NoteServiceImpl implements NoteService {
 
 					note.setGoodReceived(isGoodReceived);
 					note.setReceivedBy(SecurityContextHolder.getContext().getAuthentication().getName());
-					note.setReceivedDate(new Date(System.currentTimeMillis()));
+					note.setReceivedDate(Instant.now());
 
 					System.out.println(note.toString());
 					// Disbursement here

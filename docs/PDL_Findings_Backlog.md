@@ -49,6 +49,31 @@ same way as the rest.
 Proxy internals appear in API responses. Cosmetic until something downstream
 tries to parse them strictly.
 
+### F8 — `sbf_note` has both `repayment_date` and `repyament_date`
+**Severity:** low · **Status:** open · **Found:** 2026-09-05, while widening the
+Note date columns
+
+Both columns exist, both `timestamptz`. Only the correctly spelled one is mapped
+by an entity field, so the misspelled one is dead weight that nothing writes and
+nothing reads — but it is one autocomplete away from being used by mistake.
+
+Not fixed in migration 005: dropping a column is not something to slip into a
+type migration. Check it is empty, then drop it in its own change.
+
+### F9 — Note workflow dates rendered a day early in the app
+**Severity:** low · **Status:** ~~open~~ **FIXED 2026-09-05** (app `9856672`)
+
+Found while sweeping F7. `note_transaction_model.dart` formatted eight dates with
+`DateFormat(...).format(DateTime.parse(v))` and no `.toLocal()`, so any instant
+late in the UTC day rendered as the previous day in Phnom Penh (UTC+7). Live data
+shows it: note 1's `reviewedDate` is `2023-02-12T17:00:00Z`, which is 13 Feb
+locally and was displaying as the 12th.
+
+This predates the sweep — `disbursementDate`, `repaymentDate` and `createdAt`
+were already Instants and already wrong. All eight now go through one helper that
+converts to local time and returns blank rather than throwing on an unreadable
+value.
+
 ### F5 — a stray pre-ledger `E_CBC_CONSENT` image row
 **Severity:** informational · **Status:** no action proposed · **Found:**
 2026-09-05 while listing archived consents
@@ -88,9 +113,11 @@ on the transition into `Closed`/`Rejected`, and switch the service to it.
 Both are `Instant`. Migration 004 widens the columns, guarded on the current
 type. **Worth knowing:** on the dev database `ddl-auto=update` widened them by
 itself, which is *not* what it does for check constraints (migration 002) — do
-not generalise either behaviour. `sbf/model/Note.acceptedDate` is still a
-`java.sql.Date`; left alone as it belongs to the TFF product, but it carries the
-same trap.
+not generalise either behaviour. **Swept 2026-09-05 (`40f4470`):** the TFF Note product had eleven more —
+six on `Note`, five on the `NoteMerge` DTO — plus `NoteTransaction.rejectDate`,
+which sat in a DTO whose other date fields were already `Instant`. All now
+`Instant`; migration 005 widens the seven `sbf_note` columns. No
+`java.sql.Date` remains anywhere in `src/main`.
 
 *Original finding, for context:*
 
@@ -124,6 +151,11 @@ Widens `accepted_date`/`revoked_date` to `timestamptz` (guarded — a no-op wher
 ddl-auto already did it) and backfills `closed_date` for loans that ended before
 that column existed. Without the backfill, retention falls back to approximations
 for every historical loan.
+
+### D1c — apply `docs/migrations/005_sbf_note_dates.sql`
+Widens the seven `sbf_note` date columns to `timestamptz` (guarded — a no-op
+where ddl-auto already did it). Without it, `Note` reads `Instant` from `date`
+columns wherever ddl-auto is off.
 
 ### D2 — apply `docs/migrations/003_pdl_cbc_consent_ledger.sql`
 `ddl-auto` creates the consent table but never its indexes, CHECK constraints or
