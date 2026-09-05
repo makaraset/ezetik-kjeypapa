@@ -23,6 +23,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * but caches the bearer app-wide, since PDL calls (NID OCR at signup, CIF
  * lookup) run outside an authenticated session.
  */
+@lombok.extern.slf4j.Slf4j
 @Component
 public class SbfGatewayClient {
 
@@ -182,10 +183,41 @@ public class SbfGatewayClient {
 				.header("Authorization", "Bearer " + token())
 				.timeout(Duration.ofSeconds(submitTimeoutSeconds))
 				.POST(HttpRequest.BodyPublishers.ofString(body)).build();
-		HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+		// Whether the request reached them decides whether a retry is safe, so the
+		// two failures are told apart here rather than collapsed into one.
+		HttpResponse<String> resp;
+		try {
+			resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+		} catch (java.net.http.HttpConnectTimeoutException | java.net.ConnectException e) {
+			// Never left our side. Nothing was filed; retrying costs nothing.
+			log.warn("LOS submit: could not connect: {}", e.toString());
+			throw new LosSubmitException("LOS_UNAVAILABLE", "Could not reach Sambat's loan system.");
+		} catch (java.io.IOException e) {
+			// The request WAS sent — a read timeout, a reset, a dropped
+			// response. Sambat may hold a real application we have no record
+			// of. This is the case that must never auto-retry.
+			log.error("LOS submit: outcome unknown after sending ({} bytes): {}", bytes, e.toString());
+			throw new LosSubmitException(LosSubmitException.OUTCOME_UNKNOWN,
+					"We sent your application but did not get a reply from Sambat. We are "
+							+ "confirming with them before sending it again, so it cannot be "
+							+ "filed twice.");
+		}
 		if (resp.statusCode() != 200) {
 			String detail = resp.body() == null ? ""
 					: resp.body().substring(0, Math.min(512, resp.body().length()));
+			// A 5xx means they received the request and something broke while
+			// handling it. Whether an application was created is unknowable from
+			// here, so it is treated like a lost reply rather than a refusal —
+			// the alternative is a retry that files a second credit enquiry.
+			// A 4xx is a refusal: they looked at the request and declined it,
+			// so nothing was created and retrying is safe.
+			if (resp.statusCode() >= 500) {
+				log.error("LOS submit: {} from Sambat, outcome unknown: {}", resp.statusCode(), detail);
+				throw new LosSubmitException(LosSubmitException.OUTCOME_UNKNOWN,
+						"Sambat's loan system had a problem while receiving your application. We "
+								+ "are confirming with them before sending it again, so it cannot "
+								+ "be filed twice.");
+			}
 			throw new IllegalStateException(
 					"SBF /new-loan-application returned " + resp.statusCode() + ": " + detail);
 		}

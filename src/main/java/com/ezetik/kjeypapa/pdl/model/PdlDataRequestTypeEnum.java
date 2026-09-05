@@ -27,10 +27,17 @@ public enum PdlDataRequestTypeEnum {
 	/**
 	 * "I withdraw my consent."
 	 *
-	 * <p>A request, not an automatic revocation. A credit-bureau enquiry already
-	 * made cannot be un-made, and what withdrawal means for an application in
-	 * flight or a disbursed loan is Sambat's to define. Recorded, routed to a
-	 * human, and answered — never silently actioned.
+	 * <p><b>Not offered to customers</b> — see
+	 * {@code PdlDataRequestService.OFFERED}. Sambat ruled (2026-09-05) that the
+	 * CBC consent cannot be withdrawn, because the enquiry it authorises is made
+	 * automatically as part of assessing the loan: by the time anyone could
+	 * withdraw, the thing consented to has already happened, and there is
+	 * nothing left to stop.
+	 *
+	 * <p>The value stays declared. {@code ddl-auto} wrote it into the column's
+	 * check constraint on first run and will not widen that constraint later, so
+	 * removing it here would only guarantee a migration if the ruling ever
+	 * changes. Existing records also keep their meaning.
 	 */
 	WITHDRAW_CONSENT
 }

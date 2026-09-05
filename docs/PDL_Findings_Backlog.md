@@ -49,6 +49,35 @@ same way as the rest.
 Proxy internals appear in API responses. Cosmetic until something downstream
 tries to parse them strictly.
 
+### F11 — a direct SQL status change does not stamp `closedDate`
+**Severity:** informational · **Status:** by design · **Found:** 2026-09-05,
+cleaning up test fixtures with an UPDATE
+
+`PaydayLoan.stampClosure()` is a JPA lifecycle callback, so it fires only for
+writes that go through the entity. A status changed by hand in SQL leaves
+`closed_date` null, and consent retention then falls back to its approximate
+date for that loan.
+
+Not a defect — the fallback exists for exactly this — but worth knowing before
+anyone fixes production data with an UPDATE. Set `closed_date` in the same
+statement, as migration 004 does.
+
+### F10 — `PC_PaymentChannelName` is a constant, and a second bank is coming
+**Severity:** medium *when bank two lands*, none before · **Status:** open by
+design · **Confirmed by Sambat 2026-09-05**
+
+Every application sends `CAMBODIAN PUBLIC BANK PLC`. Sambat confirmed the name
+is right and that **two more banks are coming**. A constant is correct only
+while exactly one payroll bank is integrated; the moment the second arrives,
+every application still claims the customer banks at the first — wrong data on a
+real credit file, accepted silently, exactly the class of error the submit gate
+exists to prevent.
+
+**Before integrating bank two:** ask Sambat for the canonical sheet spellings of
+the new banks (ours, e.g. "Campu Bank", are not theirs and cannot be sent as-is)
+and make this a per-customer lookup keyed on the payroll bank. Noted in
+`application.properties` beside the property.
+
 ### F8 — `sbf_note` has both `repayment_date` and `repyament_date`
 **Severity:** low · **Status:** open · **Found:** 2026-09-05, while widening the
 Note date columns

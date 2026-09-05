@@ -85,6 +85,19 @@ class PdlDataRequestServiceTest {
 	}
 
 	@Test
+	@DisplayName("consent withdrawal is refused at the endpoint, not just hidden in the app")
+	void withdrawalIsNotOffered() {
+		// Sambat ruled the CBC consent is not withdrawable: the enquiry it
+		// authorises happens automatically while the loan is assessed, so there
+		// is nothing left to stop. The app does not offer it and the API must
+		// not accept it either — an endpoint is reachable without the app.
+		var body = service.create(payload("WITHDRAW_CONSENT")).getBody();
+
+		assertThat(body.getType()).isEqualTo("INVALID");
+		verify(repo, never()).save(any());
+	}
+
+	@Test
 	@DisplayName("a second open request of the same type is refused")
 	void duplicateOpenRequestIsRefused() {
 		// Two open deletion requests are one obligation. Letting them pile up

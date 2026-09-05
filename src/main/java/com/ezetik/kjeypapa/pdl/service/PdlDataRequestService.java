@@ -2,6 +2,7 @@ package com.ezetik.kjeypapa.pdl.service;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -25,19 +26,38 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * Data-rights requests: the customer side of the CBC consent.
  *
- * <p>The consent text tells the customer they may see what we hold, correct it,
- * ask for deletion and withdraw the consent. Until now there was no way to do
- * any of that, which made the promise decorative. This is the mechanism.
+ * <p>The consent text tells the customer they may see what we hold, correct it
+ * and ask for deletion. Until now there was no way to do any of that, which made
+ * the promise decorative. This is the mechanism.
+ *
+ * <p>Withdrawal is not among them: Sambat ruled (2026-09-05) that the CBC
+ * consent cannot be withdrawn, because the enquiry it authorises is made
+ * automatically while the loan is assessed. See {@link #OFFERED}.
  *
  * <p>Nothing here acts automatically. Every request is recorded and routed to a
- * person, including withdrawal — a credit-bureau enquiry already made cannot be
- * un-made, and deciding what withdrawal means for a loan in flight is Sambat's
- * call, not a default in our code. The value is that the request, its timing and
- * its answer are all on record.
+ * person; the value is that the request, its timing and its answer are all on
+ * record.
  */
 @Slf4j
 @Service
 public class PdlDataRequestService {
+
+	/**
+	 * The rights a customer may actually exercise here.
+	 *
+	 * <p>{@code WITHDRAW_CONSENT} is deliberately absent. Sambat ruled
+	 * (2026-09-05) that the CBC consent is not withdrawable: the enquiry it
+	 * authorises is made automatically while the loan is assessed, so by the
+	 * time anyone could withdraw it there is nothing left to stop. Offering a
+	 * control that cannot do what its name says is worse than not offering it —
+	 * the customer would believe something had been undone.
+	 *
+	 * <p>Enforced here rather than only hidden in the app, because the endpoint
+	 * is reachable without it.
+	 */
+	private static final Set<PdlDataRequestTypeEnum> OFFERED = Set.of(
+			PdlDataRequestTypeEnum.ACCESS, PdlDataRequestTypeEnum.CORRECTION,
+			PdlDataRequestTypeEnum.DELETION);
 
 	/** Statuses that mean "somebody still owes this customer an answer". */
 	private static final List<PdlDataRequestStatusEnum> OPEN = List.of(
@@ -62,9 +82,8 @@ public class PdlDataRequestService {
 	@Transactional
 	public ResponseEntity<Message<PdlDataRequest>> create(PdlDataRequestPayload payload) {
 		PdlDataRequestTypeEnum type = parseType(payload == null ? null : payload.getType());
-		if (type == null)
-			return resp("INVALID", "Unknown request type. Expected one of: "
-					+ java.util.Arrays.toString(PdlDataRequestTypeEnum.values()), null);
+		if (type == null || !OFFERED.contains(type))
+			return resp("INVALID", "Unknown request type. Expected one of: " + OFFERED, null);
 
 		User user = currentUser();
 		boolean alreadyOpen = repo.findByUser_IdAndStatusIn(user.getId(), OPEN).stream()

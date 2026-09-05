@@ -17,6 +17,20 @@ public class LosSubmitException extends RuntimeException {
 
 	private static final long serialVersionUID = 1L;
 
+	/**
+	 * The request left us and we never learned what happened to it.
+	 *
+	 * <p>Kept apart from {@code LOS_UNAVAILABLE} because the two demand
+	 * opposite responses. Unavailable means Sambat was never reached, so
+	 * resubmitting is free. Unknown means they may well have filed a real credit
+	 * application under a real customer's name — resubmitting then files it
+	 * twice, and a duplicate credit enquiry is not something an apology fixes.
+	 *
+	 * <p>A loan carrying this code refuses to submit again until a person has
+	 * checked Sambat's console and said which way it went.
+	 */
+	public static final String OUTCOME_UNKNOWN = "LOS_OUTCOME_UNKNOWN";
+
 	/** Our own code, stored on the loan (e.g. {@code R-MISSINGDATA}). */
 	private final String losCode;
 

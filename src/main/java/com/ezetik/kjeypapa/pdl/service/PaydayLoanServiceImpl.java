@@ -226,6 +226,17 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 				return resp("INVALID", "Only a Draft application can be submitted", null,
 						HttpStatus.EXPECTATION_FAILED);
 
+			// A previous attempt was sent and never answered. Sambat may hold a
+			// real application for this loan, so sending it again could file a
+			// second credit enquiry against the same person — the one failure
+			// mode that an apology does not undo. Blocked until an operator has
+			// checked their console and resolved it either way.
+			if (LosSubmitException.OUTCOME_UNKNOWN.equals(loan.getLosStatusCode()))
+				return resp("LOS_AWAITING_RECONCILIATION",
+						"We are confirming this application with Sambat before sending it again, "
+								+ "so it cannot be filed twice. We will be in touch shortly.",
+						null, HttpStatus.EXPECTATION_FAILED);
+
 			// V8 document set (Sambat 2026-08-13 QB2.1): NID front+back, selfie,
 			// employment card, bank statement — captured at signup as profile
 			// file-refs; validate those, not per-loan re-uploads.
@@ -320,6 +331,12 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 			if (!e.getMissingFields().isEmpty())
 				return resp("LOS_MISSING_DATA",
 						"Sambat needs more information: " + humanFields(e.getMissingFields()), null,
+						HttpStatus.EXPECTATION_FAILED);
+			// An unanswered submission is not a rejection, and must not reach the
+			// app under a type it renders as one — nothing was refused, and the
+			// application may well be filed.
+			if (LosSubmitException.OUTCOME_UNKNOWN.equals(e.getLosCode()))
+				return resp("LOS_AWAITING_RECONCILIATION", e.getMessage(), null,
 						HttpStatus.EXPECTATION_FAILED);
 			return resp("LOS_REJECTED", e.getMessage(), null, HttpStatus.EXPECTATION_FAILED);
 
