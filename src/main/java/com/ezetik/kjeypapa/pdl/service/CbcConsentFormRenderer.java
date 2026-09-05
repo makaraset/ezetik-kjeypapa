@@ -319,38 +319,90 @@ public class CbcConsentFormRenderer {
 		return new Font(Font.SANS_SERIF, like.getStyle(), like.getSize());
 	}
 
+	/** Zero-width space — Khmer's word separator, invisible when drawn. */
+	private static final char ZWSP = '\u200B';
+
 	/**
-	 * Greedy wrap that fills each line to the measure.
+	 * Greedy wrap that breaks between WORDS.
 	 *
-	 * <p>Breaks between grapheme clusters rather than only at spaces. Khmer is
-	 * written without a space between every word, so wrapping on spaces alone
-	 * leaves lines well short of the measure — and justification then has to
-	 * open enormous gaps to make up the difference, which is what tore the
-	 * first justified draft apart. Word breaks Khmer with a dictionary; a
-	 * cluster boundary is the closest we get without one, and it keeps every
-	 * syllable whole.
+	 * <p>Khmer does not put a space between every word; it marks the boundaries
+	 * with zero-width spaces, and Sambat's document carries them. Those, plus
+	 * ordinary spaces, are the break opportunities — so a line ends where a word
+	 * ends, as it does on their form, rather than mid-word.
+	 *
+	 * <p>A single word wider than the measure is still broken between clusters:
+	 * running off the page would be worse than an ugly break, and this is the
+	 * only case where a word is split.
 	 */
 	private List<String> wrap(Graphics2D g, String text, Font font, int maxWidth) {
 		List<String> lines = new ArrayList<>();
-		BreakIterator clusters = BreakIterator.getCharacterInstance(new Locale("km"));
-		String flat = text.trim().replaceAll("\\s+", " ");
-		clusters.setText(flat);
-
 		StringBuilder line = new StringBuilder();
-		int start = clusters.first();
-		for (int end = clusters.next(); end != BreakIterator.DONE; start = end, end = clusters.next()) {
-			String cluster = flat.substring(start, end);
-			// A space that lands at the end of a full line is simply dropped.
-			if (widthOf(g, line + cluster, font) > maxWidth && line.length() > 0) {
-				lines.add(line.toString().stripTrailing());
-				line = new StringBuilder(cluster.isBlank() ? "" : cluster);
+
+		for (String word : words(text)) {
+			boolean spaced = word.startsWith(" ");
+			String w = spaced ? word.substring(1) : word;
+			if (w.isEmpty())
+				continue;
+			String candidate = line.isEmpty() ? w : line + (spaced ? " " : "") + w;
+			if (widthOf(g, candidate, font) <= maxWidth) {
+				line = new StringBuilder(candidate);
+				continue;
+			}
+			if (!line.isEmpty()) {
+				lines.add(line.toString());
+				line = new StringBuilder();
+			}
+			if (widthOf(g, w, font) <= maxWidth) {
+				line = new StringBuilder(w);
 			} else {
-				line.append(cluster);
+				line = new StringBuilder(breakByCluster(g, w, font, maxWidth, lines));
 			}
 		}
 		if (!line.isEmpty())
-			lines.add(line.toString().stripTrailing());
+			lines.add(line.toString());
 		return lines;
+	}
+
+	/**
+	 * Splits on the break opportunities, keeping a leading space on a word that
+	 * followed a real space so it is still drawn with one. A zero-width space
+	 * is a break opportunity only — it never reaches the page.
+	 */
+	private static List<String> words(String text) {
+		List<String> out = new ArrayList<>();
+		StringBuilder cur = new StringBuilder();
+		boolean spaceBefore = false;
+		for (char c : text.trim().toCharArray()) {
+			if (c == ZWSP || Character.isWhitespace(c)) {
+				if (cur.length() > 0) {
+					out.add((spaceBefore ? " " : "") + cur);
+					cur.setLength(0);
+				}
+				spaceBefore = c != ZWSP;
+				continue;
+			}
+			cur.append(c);
+		}
+		if (cur.length() > 0)
+			out.add((spaceBefore ? " " : "") + cur);
+		return out;
+	}
+
+	/** Last resort for a single word wider than the measure. */
+	private String breakByCluster(Graphics2D g, String word, Font font, int maxWidth, List<String> lines) {
+		BreakIterator clusters = BreakIterator.getCharacterInstance(new Locale("km"));
+		clusters.setText(word);
+		StringBuilder chunk = new StringBuilder();
+		int start = clusters.first();
+		for (int end = clusters.next(); end != BreakIterator.DONE; start = end, end = clusters.next()) {
+			String cluster = word.substring(start, end);
+			if (chunk.length() > 0 && widthOf(g, chunk + cluster, font) > maxWidth) {
+				lines.add(chunk.toString());
+				chunk = new StringBuilder();
+			}
+			chunk.append(cluster);
+		}
+		return chunk.toString();
 	}
 
 	// ----- resources -----

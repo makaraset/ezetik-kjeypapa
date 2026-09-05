@@ -613,3 +613,24 @@ Two things worth knowing about the result:
   rather than only at spaces, which fills each line to the measure and leaves
   justification only a little slack to absorb; before that, short lines forced
   huge gaps.
+
+---
+
+## Khmer line breaking now happens at words (2026-09-05)
+
+Khmer marks word boundaries with **zero-width spaces**, not real ones, and
+Sambat's .docx carries 25 of them. Our copy had lost them — the corrected text
+reached us pasted as plain text, and pasting strips them silently — so the form
+could only break between clusters, i.e. mid-word.
+
+Re-taken from their document with the separators intact, and **proved
+equivalent**: with the zero-width spaces removed it is character-for-character
+the corrected wording Makara supplied, so the legal text is unchanged. Lines
+now end where words end, as on their form. A word wider than the measure is
+still split between clusters — running off the page would be worse — but that
+is now the only case where a word breaks.
+
+`pdl.cbc.text-version` bumped **v2 → v3-2026-09**. Same wording, different
+bytes: a version has to mean one exact byte sequence or the stored hash stops
+proving anything. Applications already filed under v2 keep re-rendering from
+the v2 file.

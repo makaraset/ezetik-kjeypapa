@@ -158,4 +158,21 @@ class CbcConsentFormRendererTest {
 		assertThat(text.length()).isGreaterThan(1500);
 		assertThat(text.split("\\n\\s*\\n")).hasSize(3); // three paragraphs
 	}
+
+	@Test
+	@DisplayName("the shipped wording carries Sambat's word separators")
+	void wordingHasWordBoundaries() {
+		// Khmer marks word boundaries with zero-width spaces rather than real
+		// ones, and Sambat's .docx carries them. They are what lets a line break
+		// between words instead of mid-word; a copy pasted through a plain-text
+		// field loses them silently, which is how ours lost them once already.
+		CbcConsentFormRenderer r = new CbcConsentFormRenderer();
+		ReflectionTestUtils.setField(r, "consentTextKmOverride", "");
+		ReflectionTestUtils.setField(r, "consentTextKmFile", "cbc/consent-km.txt");
+
+		String text = r.consentTextKm();
+
+		assertThat(text).contains("\u200B");
+		assertThat(text.chars().filter(c -> c == 0x200B).count()).isGreaterThanOrEqualTo(20);
+	}
 }
