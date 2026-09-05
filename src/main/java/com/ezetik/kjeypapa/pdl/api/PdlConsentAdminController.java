@@ -14,6 +14,8 @@ import com.ezetik.kjeypapa.pdl.service.PdlCbcConsentLedger;
 import com.ezetik.kjeypapa.pdl.service.PdlCbcConsentLedger.ArchiveReport;
 import com.ezetik.kjeypapa.pdl.service.PdlCbcConsentLedger.LedgerReport;
 import com.ezetik.kjeypapa.pdl.service.PdlConsentBackfillService;
+import com.ezetik.kjeypapa.pdl.service.PdlConsentRetentionService;
+import com.ezetik.kjeypapa.pdl.service.PdlConsentRetentionService.RetentionReport;
 import com.ezetik.kjeypapa.security.util.Message;
 
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -37,6 +39,9 @@ public class PdlConsentAdminController {
 
 	@Autowired
 	private PdlConsentBackfillService backfill;
+
+	@Autowired
+	private PdlConsentRetentionService retention;
 
 	/**
 	 * Walks the chain and reports anything that does not hold up.
@@ -72,6 +77,25 @@ public class PdlConsentAdminController {
 				ok ? "All " + r.checked() + " archived document(s) match their records"
 						: r.missing() + " missing, " + r.altered() + " altered",
 				r));
+	}
+
+	/**
+	 * Consent records whose loan file has been over for longer than the
+	 * configured retention period.
+	 *
+	 * <p>A list, not an action. Nothing is deleted here or by the nightly job —
+	 * disposal of consent evidence is a deliberate act by somebody who has read
+	 * this, and the period itself is still to be confirmed with Sambat. Each
+	 * candidate names the date its clock started and where that date came from,
+	 * because the schema records no loan-closure timestamp and some of those
+	 * dates are approximations.
+	 */
+	@GetMapping("/retention")
+	public ResponseEntity<Message<RetentionReport>> retention() {
+		RetentionReport r = retention.report();
+		String msg = !r.configured() ? "No retention period configured; nothing expires"
+				: r.candidates().size() + " consent(s) past retention, reported only";
+		return ResponseEntity.ok(new Message<>("SUCCESS", msg, r));
 	}
 
 	/**

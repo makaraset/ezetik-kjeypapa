@@ -56,6 +56,38 @@ from a flow that predates consent archiving. It is not referenced by any consent
 record and is harmless; noted only so nobody later mistakes it for a corrupted
 archive. The dev database is disposable, so it will not survive to production.
 
+### F6 — the schema records no loan-closure date
+**Severity:** medium · **Status:** open · **Found:** 2026-09-05, building consent
+retention
+
+Retention is "the life of the loan file", which needs a date the file ended, and
+there isn't one. `PaydayLoan` has `applicationDate`, `approvedDate`,
+`acceptedDate`, `revokedDate`, `disbursementDate`, `repaymentDate` and
+`lastTransactionDate` — but nothing stamped when a loan reaches `Closed` or
+`Rejected`. `PdlConsentRetentionService` falls back to the audit `updatedAt`,
+which is a proxy that moves whenever anything touches the row, and every
+candidate it reports names the date it used and flags it as approximate.
+
+That is honest but it is not a foundation for disposing of evidence. **Before
+retention is ever switched on for real, add a real closure timestamp** stamped
+on the transition into `Closed`/`Rejected`, and switch the service to it.
+
+### F7 — `acceptedDate` and `revokedDate` are `java.sql.Date`
+**Severity:** low · **Status:** open · **Found:** 2026-09-05, by the compiler,
+while writing retention
+
+`PaydayLoan` imports `java.sql.Date` for these two. Two consequences:
+`java.sql.Date.toInstant()` throws `UnsupportedOperationException` at runtime —
+the retention service called it and would have failed on the first revoked loan,
+caught here only because a test set one — and the type is date-only, so any time
+component is silently lost.
+
+This is very likely the root of **F3** (`acceptedDate` rendering as a `dd-MM`
+string, off by one against `approvedDate`). Fix them together: move both to
+`Instant` like every other date on the entity, with a migration for the column
+type.
+
+
 ---
 
 ## Before first deployment
