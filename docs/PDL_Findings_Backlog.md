@@ -227,6 +227,18 @@ API URL removed from the app.
 
 ---
 
+## Settled by Sambat, 2026-09-05
+
+- **Consent records are not destroyed.** No retention period, no disposal, and
+  none expected. `pdl.consent.retention-years` stays empty and the retention job
+  stays off; both now mean "this is the answer", not "we are waiting". Do not set
+  a period without a written instruction that supersedes this.
+- **CBC consent cannot be withdrawn** — the enquiry it authorises is automatic
+  during assessment, so there is nothing left to stop. Removed from the app and
+  refused by the API.
+- **Double-submit protection is ours to build.** Done: an unanswered submission
+  blocks resubmission until an operator reconciles it.
+
 ## Known, accepted, not a finding
 
 - `EzetikKjeypapaApplicationTests.contextLoads` errors locally. It needs a live

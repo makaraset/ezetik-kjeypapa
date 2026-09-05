@@ -18,11 +18,17 @@ import com.ezetik.kjeypapa.pdl.repository.PdlCbcConsentRepository;
 /**
  * Which consent records have outlived the loan file they belong to.
  *
- * <p><b>It reports. It never disposes.</b> Deleting evidence on a timer is how
- * evidence disappears the week somebody needs it, and the retention period is
- * not settled — the product decision was "same life as the loan file, confirm
- * with Sambat", and that confirmation has not arrived. So this computes a list
- * and stops. Disposal stays a deliberate act by a person who has read the list.
+ * <p><b>It reports. It never disposes — and as of 2026-09-05 it never will.</b>
+ * Sambat ruled that consent records are not to be destroyed at all. No period is
+ * configured, none is expected, and with the property unset this class reports
+ * that nothing expires and stops.
+ *
+ * <p>It stays for two reasons. It answers "what would be eligible, if a rule
+ * ever existed" without anybody writing a query against consent evidence by
+ * hand; and if the ruling changes, the safe half of the work is already done and
+ * reviewed. Deleting evidence on a timer is how evidence disappears the week
+ * somebody needs it, so disposal would still be a deliberate act by a person who
+ * had read the list.
  *
  * <p>When disposal is eventually built it must <b>redact the archived document
  * and append a redaction row to the ledger</b>, never delete a consent row. A
@@ -66,9 +72,10 @@ public class PdlConsentRetentionService {
 		Integer years = years();
 
 		if (years == null) {
-			notes.add("pdl.consent.retention-years is not set, so no consent ever expires. "
-					+ "This is the default and it is deliberate: the period is 'same life as the "
-					+ "loan file', pending confirmation from Sambat.");
+			notes.add("No consent expires. Sambat ruled on 2026-09-05 that consent records are "
+					+ "not to be destroyed, so no retention period is configured and none is "
+					+ "expected. This report exists to answer 'what would be eligible' without "
+					+ "anyone querying consent evidence by hand.");
 			return new RetentionReport(false, null, now, all.size(), all.size(), List.of(), notes);
 		}
 

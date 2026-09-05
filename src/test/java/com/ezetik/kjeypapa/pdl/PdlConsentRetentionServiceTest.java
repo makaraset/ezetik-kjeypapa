@@ -60,8 +60,9 @@ class PdlConsentRetentionServiceTest {
 	@Test
 	@DisplayName("with no period configured, nothing ever expires")
 	void unsetPeriodExpiresNothing() {
-		// The default, and deliberately so: the period is unconfirmed, and a
-		// blank config must not quietly mean zero.
+		// The shipped state, and the final answer: Sambat ruled 2026-09-05 that
+		// consent records are not destroyed. A blank config must never quietly
+		// mean zero.
 		years("");
 		when(consentRepo.findAllByOrderByIdAsc())
 				.thenReturn(List.of(consentOn(PdlStatusEnum.Closed, LONG_AGO)));
@@ -71,7 +72,7 @@ class PdlConsentRetentionServiceTest {
 		assertThat(r.configured()).isFalse();
 		assertThat(r.candidates()).isEmpty();
 		assertThat(r.stillRetained()).isEqualTo(1);
-		assertThat(r.notes()).anyMatch(n -> n.contains("no consent ever expires"));
+		assertThat(r.notes()).anyMatch(n -> n.contains("No consent expires"));
 	}
 
 	@Test
