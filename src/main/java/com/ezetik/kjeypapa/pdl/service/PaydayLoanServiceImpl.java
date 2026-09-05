@@ -177,7 +177,9 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 				loan.setRepaymentDate(p.getRepaymentDate());
 			}
 
-			loan.setCbcConsentRef(p.getCbcConsentRef());
+			// The consent reference is server-owned and issued at submit. Taking
+			// one from the client left an attacker-chosen value on any draft that
+			// was never submitted.
 			loan.setBankConsent(Boolean.TRUE.equals(p.getBankConsent()));
 			loan.setApplicationDate(Instant.now());
 			loan.setStatus(PdlStatusEnum.Draft);
@@ -262,7 +264,10 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 			loan.setCbcConsentRef("CBC-" + loan.getId() + "-" + cbcTextVersion);
 			// The rest of the evidence Sambat's record needs (2026-09-04): the
 			// wording is proven by hash, not just named by version.
-			loan.setCbcConsentTextHash(sha256(consentForm.consentTextKm()));
+			// Hash the wording of the version being stamped, not whatever
+			// cbc/consent-km.txt happens to hold: bumping the version without
+			// syncing that file would pin a label to a different text's hash.
+			loan.setCbcConsentTextHash(sha256(consentForm.consentTextKm(cbcTextVersion)));
 			loan.setCbcConsentLanguage("km");
 			loan.setCbcConsentChannel("MOBILE_APP");
 
@@ -472,8 +477,6 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 		}
 	}
 
-	@Value("${pdl.cbc.consent-text:I consent to Sambat Finance conducting a credit enquiry with the Credit Bureau of Cambodia (CBC) for the purpose of assessing this loan application, in accordance with the Prakas on Credit Reporting.}")
-	private String cbcConsentText;
 
 	@Value("${pdl.settlement.mock:true}")
 	private boolean settlementMock;
@@ -649,7 +652,11 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 						HttpStatus.EXPECTATION_FAILED);
 			PdlCbcConsentResponse r = new PdlCbcConsentResponse(loan.getId(), loan.getLoanRefNo(),
 					loan.getLosApplicationNo(), loan.getCustomerName(), loan.getCbcConsentRef(),
-					loan.getCbcConsentDate(), loan.getCbcConsentTextVersion(), cbcConsentText,
+					loan.getCbcConsentDate(), loan.getCbcConsentTextVersion(),
+					// The wording the stored hash covers. Serving anything else —
+					// as an unset English default once did — hands the customer a
+					// text that can never verify against its own record.
+					consentForm.consentTextKm(loan.getCbcConsentTextVersion()),
 					loan.getLosAppId(), true, loan.getCbcConsentTextHash(),
 					loan.getCbcConsentLanguage(), loan.getCbcConsentChannel());
 			return new ResponseEntity<>(new Message<>("SUCCESS", "Get data success", r), HttpStatus.OK);

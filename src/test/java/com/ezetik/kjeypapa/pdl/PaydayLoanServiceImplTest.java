@@ -536,7 +536,8 @@ class PaydayLoanServiceImplTest {
 		// The record must stand alone as evidence: version NAMES the wording,
 		// the hash PROVES it (a label can be reused, a stored text edited).
 		PaydayLoan loan = submittableLoan();
-		when(consentForm.consentTextKm()).thenReturn("ការយល់ព្រម");
+		when(consentForm.consentTextKm(org.mockito.ArgumentMatchers.nullable(String.class)))
+				.thenReturn("ការយល់ព្រម");
 		when(losProvider.submitApplication(loan)).thenReturn("257916");
 
 		PaydayLoan out = service.submit(1).getBody().getData();
@@ -562,5 +563,54 @@ class PaydayLoanServiceImplTest {
 				.isEqualTo("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
 		assertThat(PaydayLoanServiceImpl.sha256("ការយល់ព្រម"))
 				.isEqualTo(PaydayLoanServiceImpl.sha256("ការយល់ព្រម"));
+	}
+
+	@Test
+	void submit_hashesTheWordingOfTheVersionItStamps() {
+		// The version label names the wording; the hash proves it. Hashing
+		// "whatever is current" instead of the stamped version's own text lets
+		// the two drift the moment a version is bumped without the current file
+		// being synced — the label would still match while the hash described
+		// different words.
+		PaydayLoan loan = submittableLoan();
+		org.springframework.test.util.ReflectionTestUtils.setField(service, "cbcTextVersion", "v9-test");
+		when(consentForm.consentTextKm("v9-test")).thenReturn("wording of v9");
+		when(consentForm.consentTextKm()).thenReturn("SOME OTHER CURRENT TEXT");
+		when(losProvider.submitApplication(loan)).thenReturn("257999");
+
+		PaydayLoan out = service.submit(1).getBody().getData();
+
+		assertThat(out.getCbcConsentTextVersion()).isEqualTo("v9-test");
+		assertThat(out.getCbcConsentTextHash())
+				.isEqualTo(PaydayLoanServiceImpl.sha256("wording of v9"))
+				.isNotEqualTo(PaydayLoanServiceImpl.sha256("SOME OTHER CURRENT TEXT"));
+	}
+
+	@Test
+	void getCbcConsent_servesTextThatVerifiesAgainstItsOwnHash() {
+		// A record whose text does not hash to its own textHash is worse than
+		// no record: it invites exactly the dispute it exists to settle.
+		PaydayLoan loan = loanOwnedBy(CURRENT_ID, PdlStatusEnum.Submitted);
+		loan.setCbcConsentDate(java.time.Instant.now());
+		loan.setCbcConsentTextVersion("v3-2026-09");
+		loan.setCbcConsentTextHash(PaydayLoanServiceImpl.sha256("the khmer wording"));
+		when(consentForm.consentTextKm("v3-2026-09")).thenReturn("the khmer wording");
+
+		var body = service.getCbcConsent(1).getBody().getData();
+
+		assertThat(body.getText()).isEqualTo("the khmer wording");
+		assertThat(PaydayLoanServiceImpl.sha256(body.getText())).isEqualTo(body.getTextHash());
+	}
+
+	@Test
+	void createApplication_ignoresAClientSuppliedConsentReference() {
+		// The reference is server-issued at submit. Accepting one let a caller
+		// leave a chosen value sitting on a draft.
+		PdlApplicationPayload p = payload();
+		p.setCbcConsentRef("CBC-999-forged");
+
+		PaydayLoan loan = service.createApplication(p).getBody().getData();
+
+		assertThat(loan.getCbcConsentRef()).isNull();
 	}
 }
