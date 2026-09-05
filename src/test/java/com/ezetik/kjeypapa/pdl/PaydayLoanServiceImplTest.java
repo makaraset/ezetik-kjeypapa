@@ -29,6 +29,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import com.ezetik.kjeypapa.image.repository.ImageRepository;
 import com.ezetik.kjeypapa.pdl.model.PaydayLoan;
 import com.ezetik.kjeypapa.pdl.model.PdlCbcConsent;
+import com.ezetik.kjeypapa.pdl.service.ConsentContext;
 import com.ezetik.kjeypapa.pdl.service.ConsentHash;
 import com.ezetik.kjeypapa.pdl.model.PdlBankInfo;
 import com.ezetik.kjeypapa.pdl.model.PdlDocTypeEnum;
@@ -152,7 +153,7 @@ class PaydayLoanServiceImplTest {
 	void submit_blocksWhenAMandatoryDocumentIsMissing() {
 		loanOwnedBy(CURRENT_ID, PdlStatusEnum.Draft);
 		// No profile doc refs → personalRepo/bankRepo.findByUser return empty → gate blocks.
-		ResponseEntity<Message<PaydayLoan>> r = service.submit(1);
+		ResponseEntity<Message<PaydayLoan>> r = service.submit(1, ConsentContext.NONE);
 
 		assertThat(r.getBody().getType()).isEqualTo("MISSING_DOCUMENT");
 		verify(losProvider, never()).submitApplication(any(), any());
@@ -175,7 +176,7 @@ class PaydayLoanServiceImplTest {
 		when(bankRepo.findByUser(CURRENT_ID)).thenReturn(List.of(bi));
 		when(losProvider.submitApplication(eq(loan), any())).thenReturn("LOS-MOCK-1");
 
-		PaydayLoan out = service.submit(1).getBody().getData();
+		PaydayLoan out = service.submit(1, ConsentContext.NONE).getBody().getData();
 
 		assertThat(out.getStatus()).isEqualTo(PdlStatusEnum.Submitted);
 		assertThat(out.getLosApplicationNo()).isEqualTo("LOS-MOCK-1");
@@ -210,7 +211,7 @@ class PaydayLoanServiceImplTest {
 		loan.setLosMessage("Could not reach Sambat's loan system.");
 		when(losProvider.submitApplication(eq(loan), any())).thenReturn("257852");
 
-		PaydayLoan out = service.submit(1).getBody().getData();
+		PaydayLoan out = service.submit(1, ConsentContext.NONE).getBody().getData();
 
 		assertThat(out.getStatus()).isEqualTo(PdlStatusEnum.Submitted);
 		assertThat(out.getLosApplicationNo()).isEqualTo("257852");
@@ -224,7 +225,7 @@ class PaydayLoanServiceImplTest {
 		when(losProvider.submitApplication(eq(loan), any())).thenThrow(new LosSubmitException("R-MISSINGDATA",
 				"needs more", List.of("CustP_CAddCBCommune", "CustP_Occupation")));
 
-		var body = service.submit(1).getBody();
+		var body = service.submit(1, ConsentContext.NONE).getBody();
 
 		assertThat(body.getType()).isEqualTo("LOS_MISSING_DATA");
 		// The customer must be told WHICH details, in words they can act on.
@@ -241,7 +242,7 @@ class PaydayLoanServiceImplTest {
 		when(losProvider.submitApplication(eq(loan), any()))
 				.thenThrow(new LosSubmitException("R-REJECTED", "no thanks"));
 
-		service.submit(1);
+		service.submit(1, ConsentContext.NONE);
 
 		// A consent record for a submission that never happened is a false
 		// audit trail — this is why the stamp moved below the LOS call.
@@ -254,7 +255,7 @@ class PaydayLoanServiceImplTest {
 		PaydayLoan loan = submittableLoan();
 		when(losProvider.submitApplication(eq(loan), any())).thenReturn("254906");
 
-		PaydayLoan out = service.submit(1).getBody().getData();
+		PaydayLoan out = service.submit(1, ConsentContext.NONE).getBody().getData();
 
 		assertThat(out.getStatus()).isEqualTo(PdlStatusEnum.Submitted);
 		assertThat(out.getLosApplicationNo()).isEqualTo("254906");
@@ -268,7 +269,7 @@ class PaydayLoanServiceImplTest {
 		when(losProvider.submitApplication(eq(loan), any()))
 				.thenThrow(new IllegalStateException("SBF /new-loan-application returned 500 at https://internal"));
 
-		var body = service.submit(1).getBody();
+		var body = service.submit(1, ConsentContext.NONE).getBody();
 
 		assertThat(body.getType()).isEqualTo("LOS_UNAVAILABLE");
 		assertThat(body.getMessage()).doesNotContain("https://");
@@ -287,7 +288,7 @@ class PaydayLoanServiceImplTest {
 		ei2.setEmploymentCardFileRef("empcard.png");
 		when(employmentRepo.findByUser(CURRENT_ID)).thenReturn(List.of(ei2));
 		// bankRepo.findByUser → empty (no bank statement) → blocked.
-		assertThat(service.submit(1).getBody().getType()).isEqualTo("MISSING_DOCUMENT");
+		assertThat(service.submit(1, ConsentContext.NONE).getBody().getType()).isEqualTo("MISSING_DOCUMENT");
 		verify(losProvider, never()).submitApplication(any(), any());
 	}
 
@@ -380,7 +381,7 @@ class PaydayLoanServiceImplTest {
 	@Test
 	void submit_returnsNotFoundForAnotherUsersLoan() {
 		loanOwnedBy(999, PdlStatusEnum.Draft);
-		assertThat(service.submit(1).getBody().getType()).isEqualTo("NOT_FOUND");
+		assertThat(service.submit(1, ConsentContext.NONE).getBody().getType()).isEqualTo("NOT_FOUND");
 		verify(losProvider, never()).submitApplication(any(), any());
 	}
 
@@ -552,7 +553,7 @@ class PaydayLoanServiceImplTest {
 				.thenReturn("ការយល់ព្រម");
 		when(losProvider.submitApplication(eq(loan), any())).thenReturn("257916");
 
-		PaydayLoan out = service.submit(1).getBody().getData();
+		PaydayLoan out = service.submit(1, ConsentContext.NONE).getBody().getData();
 
 		assertThat(out.getCbcConsentDate()).isNotNull();
 		assertThat(out.getCbcConsentRef()).startsWith("CBC-");
@@ -590,7 +591,7 @@ class PaydayLoanServiceImplTest {
 		when(consentForm.consentTextKm()).thenReturn("SOME OTHER CURRENT TEXT");
 		when(losProvider.submitApplication(eq(loan), any())).thenReturn("257999");
 
-		PaydayLoan out = service.submit(1).getBody().getData();
+		PaydayLoan out = service.submit(1, ConsentContext.NONE).getBody().getData();
 
 		assertThat(out.getCbcConsentTextVersion()).isEqualTo("v9-test");
 		assertThat(out.getCbcConsentTextHash())
@@ -637,7 +638,7 @@ class PaydayLoanServiceImplTest {
 		when(consentForm.renderPdf(any())).thenReturn(filed);
 		when(losProvider.submitApplication(eq(loan), any())).thenReturn("257999");
 
-		service.submit(1);
+		service.submit(1, ConsentContext.NONE);
 
 		var rendered = org.mockito.ArgumentCaptor.forClass(CbcConsentData.class);
 		var sent = org.mockito.ArgumentCaptor.forClass(byte[].class);
@@ -663,7 +664,7 @@ class PaydayLoanServiceImplTest {
 		when(consentForm.renderPdf(any())).thenReturn(filed);
 		when(losProvider.submitApplication(eq(loan), any())).thenReturn("258100");
 
-		service.submit(1);
+		service.submit(1, ConsentContext.NONE);
 
 		var stored = org.mockito.ArgumentCaptor.forClass(com.ezetik.kjeypapa.image.model.Image.class);
 		var recorded = org.mockito.ArgumentCaptor.forClass(PdlCbcConsent.class);
@@ -682,6 +683,39 @@ class PaydayLoanServiceImplTest {
 	}
 
 	@Test
+	void submit_recordsTheCircumstancesTheConsentWasGivenIn() {
+		PaydayLoan loan = submittableLoan();
+		when(losProvider.submitApplication(eq(loan), any())).thenReturn("258200");
+
+		service.submit(1, new ConsentContext("2.0.1+45", "iPhone14,3 / iOS 26.6.1", "203.0.113.9"));
+
+		var recorded = org.mockito.ArgumentCaptor.forClass(PdlCbcConsent.class);
+		verify(consentLedger).append(recorded.capture());
+		assertThat(recorded.getValue().getAppVersion()).isEqualTo("2.0.1+45");
+		assertThat(recorded.getValue().getDeviceModel()).isEqualTo("iPhone14,3 / iOS 26.6.1");
+		assertThat(recorded.getValue().getIpAddress()).isEqualTo("203.0.113.9");
+	}
+
+	@Test
+	void submit_stillWorksWhenTheClientSendsNoContext() {
+		// An older app build sends neither header. It must file normally and
+		// record '' — the same encoding the pre-ledger consents use — rather
+		// than failing, or a release would strand every customer who had not
+		// yet updated.
+		PaydayLoan loan = submittableLoan();
+		when(losProvider.submitApplication(eq(loan), any())).thenReturn("258201");
+
+		var body = service.submit(1, ConsentContext.NONE).getBody();
+
+		var recorded = org.mockito.ArgumentCaptor.forClass(PdlCbcConsent.class);
+		verify(consentLedger).append(recorded.capture());
+		assertThat(body.getType()).isEqualTo("SUCCESS");
+		assertThat(recorded.getValue().getAppVersion()).isEmpty();
+		assertThat(recorded.getValue().getDeviceModel()).isEmpty();
+		assertThat(recorded.getValue().getIpAddress()).isEmpty();
+	}
+
+	@Test
 	void submit_archivesNothingWhenFilingFails() {
 		// The archive is part of the same transaction, but the assertion is
 		// worth keeping explicit: a document on file for an application Sambat
@@ -690,7 +724,7 @@ class PaydayLoanServiceImplTest {
 		when(losProvider.submitApplication(eq(loan), any()))
 				.thenThrow(new LosSubmitException("LOS_DOWN", "unreachable"));
 
-		service.submit(1);
+		service.submit(1, ConsentContext.NONE);
 
 		verify(imageRepo, never()).save(any(com.ezetik.kjeypapa.image.model.Image.class));
 		verify(consentLedger, never()).append(any());
@@ -704,7 +738,7 @@ class PaydayLoanServiceImplTest {
 		when(losProvider.submitApplication(eq(loan), any()))
 				.thenThrow(new LosSubmitException("LOS_DOWN", "unreachable"));
 
-		service.submit(1);
+		service.submit(1, ConsentContext.NONE);
 
 		assertThat(loan.getCbcConsentDate()).isNull();
 		assertThat(loan.getCbcConsentTextHash()).isNull();

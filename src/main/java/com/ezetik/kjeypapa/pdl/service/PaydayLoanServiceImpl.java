@@ -217,7 +217,7 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 
 	@Override
 	@Transactional
-	public ResponseEntity<Message<PaydayLoan>> submit(int id) {
+	public ResponseEntity<Message<PaydayLoan>> submit(int id, ConsentContext context) {
 		try {
 			PaydayLoan loan = ownedLoanOrNull(id);
 			if (loan == null)
@@ -303,8 +303,8 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 
 			// The evidence itself, appended to the chained ledger. The columns
 			// above are a convenience for existing readers; this is the record.
-			consentLedger.append(
-					consentRecord(loan, consent, consentRef, textHash, documentRef, documentHash));
+			consentLedger.append(consentRecord(loan, consent, consentRef, textHash, documentRef,
+					documentHash, context));
 
 			return resp("SUCCESS", "Application submitted to LOS", repo.save(loan), HttpStatus.OK);
 
@@ -694,12 +694,17 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 
 	/**
 	 * Assembles the consent record from the same facts the filed document was
-	 * rendered from. Fields that later work populates — the capture context —
-	 * are empty strings rather than nulls, so the canonical form does not change
-	 * when they start being filled in.
+	 * rendered from, plus the circumstances the consent was given in.
+	 *
+	 * <p>The context is corroboration, not proof: two of its three fields are
+	 * headers the client writes. An older app that sends neither still submits
+	 * normally and records empty strings — the same encoding the pre-ledger
+	 * consents use, and the reason the canonical form did not change when these
+	 * started being populated.
 	 */
 	private PdlCbcConsent consentRecord(PaydayLoan loan, CbcConsentData consent, String consentRef,
-			String textHash, String documentRef, String documentHash) {
+			String textHash, String documentRef, String documentHash, ConsentContext context) {
+		ConsentContext ctx = context == null ? ConsentContext.NONE : context;
 		PdlCbcConsent c = new PdlCbcConsent();
 		c.setLoan(loan);
 		c.setUser(loan.getUser());
@@ -716,9 +721,9 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 		c.setCustomerNameLatin(nullToEmpty(consent.customerNameLatin()));
 		c.setDocumentRef(nullToEmpty(documentRef));
 		c.setDocumentHash(nullToEmpty(documentHash));
-		c.setAppVersion("");
-		c.setDeviceModel("");
-		c.setIpAddress("");
+		c.setAppVersion(ctx.appVersion());
+		c.setDeviceModel(ctx.deviceModel());
+		c.setIpAddress(ctx.ipAddress());
 		c.setCaptureSource(PdlCbcConsentLedger.LIVE);
 		c.setLosAppId(loan.getLosAppId());
 		return c;

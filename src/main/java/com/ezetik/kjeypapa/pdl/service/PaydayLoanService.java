@@ -27,7 +27,8 @@ public interface PaydayLoanService {
 
 	ResponseEntity<Message<PaydayLoan>> createApplication(PdlApplicationPayload payload);
 
-	ResponseEntity<Message<PaydayLoan>> submit(int id);
+	/** @param context where the consent was given; never null, use {@link ConsentContext#NONE} */
+	ResponseEntity<Message<PaydayLoan>> submit(int id, ConsentContext context);
 
 	ResponseEntity<Message<PdlAttachment>> uploadDocument(int pdlId, PdlDocTypeEnum docType, List<Image> images);
 

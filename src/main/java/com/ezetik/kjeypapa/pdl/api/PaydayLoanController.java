@@ -40,7 +40,10 @@ import com.ezetik.kjeypapa.pdl.payload.PdlQuoteResponse;
 import com.ezetik.kjeypapa.pdl.payload.PdlTransaction;
 import com.ezetik.kjeypapa.pdl.service.PaydayLoanService;
 import com.ezetik.kjeypapa.pdl.service.PdlPricingService;
+import com.ezetik.kjeypapa.pdl.service.ConsentContext;
 import com.ezetik.kjeypapa.security.util.Message;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 import io.swagger.v3.oas.annotations.tags.Tag;
 
@@ -53,6 +56,13 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @RequestMapping("/api/v1/pdl")
 @Tag(name = "08- Payday Loan API", description = "Payday Loan (PDL) customer controller")
 public class PaydayLoanController {
+
+	/**
+	 * Same peers the OCR rate limiter trusts. One property, because the two must
+	 * agree on what a client's address is.
+	 */
+	@org.springframework.beans.factory.annotation.Value("${pdl.ocr.rate-limit.trusted-proxies:}")
+	private String trustedProxies;
 
 	@Autowired
 	private PaydayLoanService service;
@@ -132,11 +142,20 @@ public class PaydayLoanController {
 		return service.createApplication(payload);
 	}
 
-	/** Validate the 5 mandatory docs are present, then send to LOS (Draft → Submitted). */
+	/**
+	 * Validate the 5 mandatory docs are present, then send to LOS (Draft → Submitted).
+	 *
+	 * <p>The consent captured here records the app build, device and address it
+	 * came from. Assembled in the controller because this is the only layer that
+	 * should know an HTTP request exists; the service takes a value object rather
+	 * than reaching into {@code RequestContextHolder}.
+	 */
 	@PostMapping("/{id}/submit")
 	@PreAuthorize("hasRole('CUSTOMER')")
-	public ResponseEntity<Message<PaydayLoan>> submit(@PathVariable("id") int id) {
-		return service.submit(id);
+	public ResponseEntity<Message<PaydayLoan>> submit(@PathVariable("id") int id,
+			HttpServletRequest request) {
+		return service.submit(id, new ConsentContext(request.getHeader("X-App-Version"),
+				request.getHeader("X-Device"), ClientAddress.of(request, trustedProxies)));
 	}
 
 	/** Upload one of the mandatory documents (multipart; mirrors the Note pattern). */

@@ -49,7 +49,7 @@ public class OcrRateLimitFilter extends OncePerRequestFilter {
 	@Override
 	protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain)
 			throws ServletException, IOException {
-		String client = clientKey(req);
+		String client = ClientAddress.of(req, trustedProxies);
 		long minute = System.currentTimeMillis() / 60_000L;
 		long[] b = buckets.computeIfAbsent(client, k -> new long[] { minute, 0 });
 		boolean over;
@@ -69,19 +69,5 @@ public class OcrRateLimitFilter extends OncePerRequestFilter {
 			return;
 		}
 		chain.doFilter(req, res);
-	}
-
-	private String clientKey(HttpServletRequest req) {
-		String peer = req.getRemoteAddr();
-		if (trustedProxies == null || trustedProxies.isBlank())
-			return peer;
-		boolean trusted = java.util.Arrays.stream(trustedProxies.split(",")).map(String::trim)
-				.anyMatch(p -> !p.isEmpty() && p.equals(peer));
-		String fwd = req.getHeader("X-Forwarded-For");
-		if (!trusted || fwd == null || fwd.isBlank())
-			return peer;
-		// The right-most entry is the one the trusted proxy itself appended.
-		String[] hops = fwd.split(",");
-		return hops[hops.length - 1].trim();
 	}
 }
