@@ -221,9 +221,18 @@ retained off the database host. Alert on `CONSENT-LEDGER FAILED` and
 `CONSENT-ARCHIVE FAILED`.
 
 ### D7 — the standing environment items
-`ocr.mock.enabled=false` (confirm false, not merely absent), webhook inbound auth
-enabled, `API_BASE_URL` defined for release builds, and the temporary localhost
-API URL removed from the app.
+**`los.mock.enabled` is committed as `true`.** Every live UAT submission this
+project has made was driven by a command-line override; the checked-in default
+still points at the mock. Deployed as-is the app looks *entirely successful* —
+applications "submit", the customer sees a confirmation, and a reference like
+`LOS-MOCK-41` comes back — while Sambat receive nothing at all. It is the
+quietest possible failure and it belongs at the top of any release check.
+
+Also: `ocr.mock.enabled=false` (confirm false, not merely absent — the mock
+returns one person's identity for *any* image), `pdl.webhook.auth.enabled=true`,
+`pdl.dictionary.refresh.enabled=true` once the cadence is agreed, `API_BASE_URL`
+defined for release builds, and the temporary localhost API URL removed from the
+app.
 
 ---
 
