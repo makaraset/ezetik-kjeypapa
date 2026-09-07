@@ -49,6 +49,32 @@ same way as the rest.
 Proxy internals appear in API responses. Cosmetic until something downstream
 tries to parse them strictly.
 
+### F13 — one notification per user, forever — and it broke every repeat webhook
+**Severity:** high · **Status:** ~~open~~ **FIXED 2026-09-07** (`0092644`)
+
+`NotificationModel.user` was mapped `@OneToOne`, so Hibernate generated
+`UNIQUE (user_id)` on `ez_notification`. A user could hold exactly one
+notification, ever. The first insert succeeded; every one after it violated the
+constraint, marked the surrounding transaction rollback-only, and took the whole
+request down.
+
+Worst on the inbound LOS webhooks: **a loan status update from Sambat was
+discarded because a notification could not be written**, and Sambat were
+answered with an opaque HTTP 403 — the rollback exception reaching the error
+dispatch, which is not on the security whitelist. In production this would have
+failed for every customer after their first-ever notification.
+
+Found by running the example bodies for Manith's API pack against the live
+backend: four of seven came back with empty responses.
+
+It hid because `notify()` skips the database write when a user has no FCM token,
+so most test users never stored even a first row — and the one user who had one
+is why it surfaced at all.
+
+`@ManyToOne` now, with migration 006 to drop the constraint (`ddl-auto` will not
+drop it — same trap as 002 and 004). Verified: the same webhook three times in a
+row answers 200, 200, 200.
+
 ### F12 — a malformed webhook body answered HTTP 403 with no content
 **Severity:** medium · **Status:** ~~open~~ **FIXED 2026-09-07** (`0e26ff2`)
 
@@ -205,6 +231,11 @@ for every historical loan.
 Widens the seven `sbf_note` date columns to `timestamptz` (guarded — a no-op
 where ddl-auto already did it). Without it, `Note` reads `Instant` from `date`
 columns wherever ddl-auto is off.
+
+### D1d — apply `docs/migrations/006_notification_many_per_user.sql`
+Drops `UNIQUE (user_id)` from `ez_notification`. Without it, every LOS webhook
+to a customer who already has one notification fails with an opaque 403 and the
+status update is lost. See F13.
 
 ### D2 — apply `docs/migrations/003_pdl_cbc_consent_ledger.sql`
 `ddl-auto` creates the consent table but never its indexes, CHECK constraints or

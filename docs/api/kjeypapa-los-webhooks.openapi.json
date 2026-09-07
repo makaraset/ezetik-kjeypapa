@@ -1,0 +1,576 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Kjey PAPA — inbound webhooks for Sambat LOS",
+    "version": "2026-09-07",
+    "description": "The seven endpoints Sambat LOS calls on Kjey PAPA. This file contains ONLY those endpoints; the rest of our API is not part of this integration.\n\n**Every timestamp must be a full ISO-8601 instant** (2026-08-21T09:00:00Z). A bare date is rejected with HTTP 400 naming the field.\n\nAll responses use the envelope {type, message, data}. A 200 means delivered — including a no-op, whose message begins \"Ignored —\". Handlers are idempotent, so re-delivery after a network failure is safe.\n\nSee PDL_Our_Webhook_Endpoints_for_LOS.docx for the narrative version.",
+    "contact": {
+      "name": "Kjey PAPA (Ezetik)"
+    }
+  },
+  "servers": [
+    {
+      "url": "{base}",
+      "description": "Kjey PAPA backend — host supplied separately",
+      "variables": {
+        "base": {
+          "default": "https://uat.example"
+        }
+      }
+    }
+  ],
+  "tags": [
+    {
+      "name": "09- LOS Webhook API",
+      "description": "Sambat LOS inbound notifications (server-to-server)"
+    }
+  ],
+  "paths": {
+    "/api/v1/pdl/los/rework": {
+      "post": {
+        "tags": [
+          "09- LOS Webhook API"
+        ],
+        "operationId": "rework",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LosNotificationPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pdl/los/reject": {
+      "post": {
+        "tags": [
+          "09- LOS Webhook API"
+        ],
+        "operationId": "reject",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LosNotificationPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pdl/los/product-sync": {
+      "post": {
+        "tags": [
+          "09- LOS Webhook API"
+        ],
+        "operationId": "productSync",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LosProductSyncPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageString"
+                }
+              }
+            }
+          }
+        },
+        "description": "Accepted and logged, but the product configuration is NOT yet stored — our pricing tiers remain configuration on our side. Send it if convenient; we will wire it to real product config when you want the catalogue to drive our tiers."
+      }
+    },
+    "/api/v1/pdl/los/loan-update": {
+      "post": {
+        "tags": [
+          "09- LOS Webhook API"
+        ],
+        "operationId": "loanUpdate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LosLoanUpdatePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pdl/los/disbursement": {
+      "post": {
+        "tags": [
+          "09- LOS Webhook API"
+        ],
+        "operationId": "disbursement",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LosDisbursementPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pdl/los/bank-verification": {
+      "post": {
+        "tags": [
+          "09- LOS Webhook API"
+        ],
+        "operationId": "bankVerification",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LosBankVerificationPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pdl/los/approved": {
+      "post": {
+        "tags": [
+          "09- LOS Webhook API"
+        ],
+        "operationId": "approved",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LosNotificationPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageString"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "MessageString": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "type": "string"
+          }
+        }
+      },
+      "LosNotificationPayload": {
+        "type": "object",
+        "properties": {
+          "appId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "losApplicationNo": {
+            "type": "string"
+          },
+          "statusCode": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "loanFormRef": {
+            "type": "string"
+          },
+          "loanContractFileRef": {
+            "type": "string"
+          },
+          "repaymentScheduleRef": {
+            "type": "string"
+          },
+          "schedule": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScheduleRow"
+            }
+          },
+          "loanRefNo": {
+            "type": "string"
+          },
+          "settlementAccountNo": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "tenor": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "outstandingAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "loanDocRef": {
+            "type": "string"
+          },
+          "repaymentAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "interestAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "interestRatePercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "processingFee": {
+            "type": "number",
+            "format": "double"
+          },
+          "cbcEnquiryFee": {
+            "type": "number",
+            "format": "double"
+          },
+          "netDisbursedAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "loanPeriodDays": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "signature": {
+            "type": "string"
+          }
+        }
+      },
+      "ScheduleRow": {
+        "type": "object",
+        "properties": {
+          "installmentNo": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "principalDue": {
+            "type": "number",
+            "format": "double"
+          },
+          "interestDue": {
+            "type": "number",
+            "format": "double"
+          },
+          "feeDue": {
+            "type": "number",
+            "format": "double"
+          },
+          "otherDue": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalDue": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "LosProductSyncPayload": {
+        "type": "object",
+        "properties": {
+          "productCode": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "minAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "active": {
+            "type": "boolean"
+          }
+        }
+      },
+      "LosLoanUpdatePayload": {
+        "type": "object",
+        "properties": {
+          "appId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "losApplicationNo": {
+            "type": "string"
+          },
+          "loanRefNo": {
+            "type": "string"
+          },
+          "eventId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "outstandingAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "overduePayment": {
+            "type": "number",
+            "format": "double"
+          },
+          "daysPastDue": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "lastPaidAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "lastTransactionDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "schedule": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PaidRow"
+            }
+          },
+          "signature": {
+            "type": "string"
+          }
+        }
+      },
+      "PaidRow": {
+        "type": "object",
+        "properties": {
+          "installmentNo": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "principalPaid": {
+            "type": "number",
+            "format": "double"
+          },
+          "interestPaid": {
+            "type": "number",
+            "format": "double"
+          },
+          "feePaid": {
+            "type": "number",
+            "format": "double"
+          },
+          "penaltyPaid": {
+            "type": "number",
+            "format": "double"
+          },
+          "otherPaid": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalPaid": {
+            "type": "number",
+            "format": "double"
+          },
+          "amountPaid": {
+            "type": "number",
+            "format": "double"
+          },
+          "paidDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "transactionDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "LosDisbursementPayload": {
+        "type": "object",
+        "properties": {
+          "appId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "losApplicationNo": {
+            "type": "string"
+          },
+          "loanRefNo": {
+            "type": "string"
+          },
+          "eventId": {
+            "type": "string"
+          },
+          "disbursementStatus": {
+            "type": "string"
+          },
+          "disbursementTxnId": {
+            "type": "string"
+          },
+          "disbursedAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "disbursedDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "failureReason": {
+            "type": "string"
+          },
+          "signature": {
+            "type": "string"
+          }
+        }
+      },
+      "LosBankVerificationPayload": {
+        "type": "object",
+        "properties": {
+          "appId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "loanRefNo": {
+            "type": "string"
+          },
+          "losApplicationNo": {
+            "type": "string"
+          },
+          "eventId": {
+            "type": "string"
+          },
+          "verificationStatus": {
+            "type": "string"
+          },
+          "disbursementTxnId": {
+            "type": "string"
+          },
+          "failureReason": {
+            "type": "string"
+          },
+          "verificationDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "signature": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "LosSharedSecret": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-LOS-Signature",
+        "description": "Shared secret. Currently DISABLED on our side pending your choice of mechanism (static secret, HMAC over the body, or mTLS) and your source IP addresses. Must be enabled before production."
+      }
+    }
+  }
+}

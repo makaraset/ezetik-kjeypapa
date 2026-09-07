@@ -11,6 +11,19 @@ This is the reverse direction of `LOS_Integration_API_Spec.md`: everything here
 is **you calling us**. All seven are built, live on our UAT, and exercised
 end-to-end.
 
+**Two machine-readable files ship with this document** — import either rather
+than typing the bodies out:
+
+| File | What it is |
+|---|---|
+| `api/kjeypapa-los-webhooks.openapi.json` | OpenAPI 3.1, these seven endpoints and their schemas only. Imports into Swagger UI, Postman or Insomnia. |
+| `api/kjeypapa-los-webhooks.postman_collection.json` | Postman collection with a working example body for each. Set the `base` variable to the host we give you. |
+
+Every example body in the collection was sent against our UAT and accepted. They
+use `appId: 999999`, which deliberately matches no application, so running the
+collection as-is answers `NOT_FOUND` and cannot alter a real loan — replace it
+with the AppId from your own submit response.
+
 ---
 
 ## 1. Where to send
@@ -195,6 +208,13 @@ it freely and we will follow.
 | `name` | string |
 | `minAmount`, `maxAmount` | number |
 | `active` | boolean |
+
+> **Accepted but not yet applied.** This endpoint answers `SUCCESS` and the
+> payload is logged, but the product configuration is **not stored** — our
+> pricing tiers are still configuration on our side, per the ruling that we own
+> the quote. Please do send it if it is convenient; we will wire it to real
+> product config when you want the catalogue to drive our tiers, and we would
+> rather tell you now than have you assume it takes effect.
 
 ---
 

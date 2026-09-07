@@ -1,0 +1,260 @@
+{
+  "info": {
+    "name": "Kjey PAPA — LOS inbound webhooks",
+    "description": "The seven endpoints Sambat LOS calls on Kjey PAPA.\n\nSet the `base` variable to the host we give you. Every body here is a working example — each was sent against our UAT and accepted.\n\nTimestamps must be full ISO-8601 instants; a bare date is rejected with HTTP 400 naming the field.\n\n**appId 999999 is a deliberate placeholder that matches no application.** Every request will answer NOT_FOUND until you replace it with the AppId from your own submit response — which is intentional, so running the collection as-is cannot alter a real loan.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base",
+      "value": "https://uat.example"
+    }
+  ],
+  "item": [
+    {
+      "name": "approved",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base}}/api/v1/pdl/los/approved",
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "pdl",
+            "los",
+            "approved"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"appId\": 999999,\n  \"losApplicationNo\": \"257861\",\n  \"loanRefNo\": \"PDL-2026-0042\",\n  \"statusCode\": \"A-APPROVED\",\n  \"message\": \"Approved\",\n  \"loanFormRef\": \"form-999999.pdf\",\n  \"loanContractFileRef\": \"contract-999999.pdf\",\n  \"repaymentScheduleRef\": \"schedule-999999.pdf\",\n  \"loanDocRef\": \"docs-999999.zip\",\n  \"settlementAccountNo\": \"1122334\",\n  \"currency\": \"USD\",\n  \"tenor\": 1,\n  \"outstandingAmount\": 50.0,\n  \"repaymentAmount\": 50.0,\n  \"interestAmount\": 0.37,\n  \"interestRatePercent\": 1.5,\n  \"processingFee\": 3.0,\n  \"cbcEnquiryFee\": 1.0,\n  \"netDisbursedAmount\": 45.63,\n  \"loanPeriodDays\": 15,\n  \"schedule\": [\n    {\n      \"installmentNo\": 1,\n      \"dueDate\": \"2026-09-21T00:00:00Z\",\n      \"principalDue\": 49.63,\n      \"interestDue\": 0.37,\n      \"feeDue\": 0.0,\n      \"otherDue\": 0.0,\n      \"totalDue\": 50.0\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "See PDL_Our_Webhook_Endpoints_for_LOS.docx §6"
+      }
+    },
+    {
+      "name": "reject",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base}}/api/v1/pdl/los/reject",
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "pdl",
+            "los",
+            "reject"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"appId\": 999999,\n  \"statusCode\": \"R-CBC\",\n  \"message\": \"Credit bureau check did not pass.\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "See PDL_Our_Webhook_Endpoints_for_LOS.docx §6"
+      }
+    },
+    {
+      "name": "rework",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base}}/api/v1/pdl/los/rework",
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "pdl",
+            "los",
+            "rework"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"appId\": 999999,\n  \"statusCode\": \"RW-LPO\",\n  \"message\": \"Employment document is not readable.\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "See PDL_Our_Webhook_Endpoints_for_LOS.docx §6"
+      }
+    },
+    {
+      "name": "disbursement",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base}}/api/v1/pdl/los/disbursement",
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "pdl",
+            "los",
+            "disbursement"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"appId\": 999999,\n  \"loanRefNo\": \"PDL-2026-0042\",\n  \"eventId\": \"evt-0001\",\n  \"disbursementStatus\": \"DISBURSED\",\n  \"disbursementTxnId\": \"TXN-99001\",\n  \"disbursedAmount\": 45.63,\n  \"disbursedDate\": \"2026-09-08T03:15:00Z\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "See PDL_Our_Webhook_Endpoints_for_LOS.docx §6"
+      }
+    },
+    {
+      "name": "loan-update",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base}}/api/v1/pdl/los/loan-update",
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "pdl",
+            "los",
+            "loan-update"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"appId\": 999999,\n  \"loanRefNo\": \"PDL-2026-0042\",\n  \"eventId\": \"evt-0002\",\n  \"status\": \"Closed\",\n  \"outstandingAmount\": 0.0,\n  \"overduePayment\": 0.0,\n  \"daysPastDue\": 0,\n  \"lastPaidAmount\": 50.0,\n  \"lastTransactionDate\": \"2026-09-21T04:00:00Z\",\n  \"schedule\": [\n    {\n      \"installmentNo\": 1,\n      \"principalPaid\": 49.63,\n      \"interestPaid\": 0.37,\n      \"feePaid\": 0.0,\n      \"penaltyPaid\": 0.0,\n      \"otherPaid\": 0.0,\n      \"totalPaid\": 50.0,\n      \"amountPaid\": 50.0,\n      \"paidDate\": \"2026-09-21T04:00:00Z\",\n      \"transactionDate\": \"2026-09-21T04:00:00Z\",\n      \"status\": \"PAID\"\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "See PDL_Our_Webhook_Endpoints_for_LOS.docx §6"
+      }
+    },
+    {
+      "name": "bank-verification",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base}}/api/v1/pdl/los/bank-verification",
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "pdl",
+            "los",
+            "bank-verification"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"appId\": 999999,\n  \"loanRefNo\": \"PDL-2026-0042\",\n  \"eventId\": \"evt-0003\",\n  \"verificationStatus\": \"SUCCESS\",\n  \"disbursementTxnId\": \"TXN-99001\",\n  \"verificationDate\": \"2026-09-07T08:00:00Z\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "See PDL_Our_Webhook_Endpoints_for_LOS.docx §6"
+      }
+    },
+    {
+      "name": "product-sync",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base}}/api/v1/pdl/los/product-sync",
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "pdl",
+            "los",
+            "product-sync"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"productCode\": \"PDL\",\n  \"name\": \"Payday Loan\",\n  \"minAmount\": 10.0,\n  \"maxAmount\": 50.0,\n  \"active\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "See PDL_Our_Webhook_Endpoints_for_LOS.docx §6"
+      }
+    }
+  ]
+}
