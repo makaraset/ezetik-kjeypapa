@@ -49,6 +49,26 @@ same way as the rest.
 Proxy internals appear in API responses. Cosmetic until something downstream
 tries to parse them strictly.
 
+### F12 — a malformed webhook body answered HTTP 403 with no content
+**Severity:** medium · **Status:** ~~open~~ **FIXED 2026-09-07** (`0e26ff2`)
+
+A body Jackson could not parse never reached a controller, so the request fell
+through to the error dispatch, which is not on the security whitelist, and
+Sambat were told **403 Forbidden with an empty body** about what was really one
+badly formatted date. We lost a day to this on 2026-08-21 looking at credentials.
+
+Now a 400 naming the field and the expected format, including inside nested
+schedule rows. Documented for Sambat in
+`PDL_Our_Webhook_Endpoints_for_LOS.md` §5.
+
+**Carries its own trap:** the handler must import
+`tools.jackson.databind.exc.InvalidFormatException`. This project is on Jackson
+3, but the Jackson 2 class still resolves at compile time — import the wrong one
+and it compiles cleanly, never matches at runtime, and the field name silently
+vanishes from every message. `Reference.getFieldName()` is also
+`getPropertyName()` in Jackson 3. A test drives a real Jackson read rather than
+a constructed exception, so it would catch a regression to either.
+
 ### F11 — a direct SQL status change does not stamp `closedDate`
 **Severity:** informational · **Status:** by design · **Found:** 2026-09-05,
 cleaning up test fixtures with an UPDATE
