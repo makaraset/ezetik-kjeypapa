@@ -4,8 +4,9 @@
 |---|---|
 | **For** | Sambat Finance / Tricube LOS |
 | **From** | Kjey PAPA (Ezetik) |
-| **Date** | 2026-09-07 *(supersedes the 2026-09-04 version)* |
+| **Date** | 2026-09-07, rev. 2 *(supersedes the 2026-09-04 version)* |
 | **Subject** | The consent record as built, and the fields we propose sending you |
+| **Rev. 2** | Answers Chanthy Lay's three review comments: the timestamp format (§3), who "customer" means and what a request can do (§6) |
 
 You asked for the CBC consent as **both a PDF and a record**. The 2026-09-04
 version of this document proposed nine fields. Since then we have built the
@@ -23,7 +24,7 @@ document rather than amending it.
 | The filed PDF | discarded after sending | archived, hash recorded, served back verbatim |
 | Capture context | not recorded | app build, device model, IP address |
 | The wording | interim translation | **your final Khmer text**, version `v3-2026-09` |
-| Customer rights | nowhere to exercise them | access, correction and deletion requests in the app |
+| Customer rights | nowhere to exercise them | the borrower can *request* access, correction or deletion in the app — see §6 |
 
 Your rulings of 2026-09-05 are implemented: consent is **not withdrawable**,
 consent records are **never destroyed**, and protecting against a duplicate
@@ -64,7 +65,7 @@ Twenty-nine fields. Grouped by the question each answers.
 |---|---|---|---|
 | `consentRef` | string(64) | `CBC-35-v3-2026-09` | Our immutable reference. Ties record ↔ PDF ↔ application in support calls. |
 | `consentGiven` | boolean | `true` | Stated, not implied. A record that relies on its own existence to mean "yes" is hard to audit. |
-| `consentDate` | ISO-8601 with offset | `2026-09-05T14:45:37+07:00` | When. The offset matters: a bare timestamp read as UTC moves a Cambodian consent seven hours and can land it on the wrong day. |
+| `consentDate` | ISO-8601 instant, UTC | `2026-09-05T07:45:37.122303Z` | When. Stored and sent as UTC — the trailing `Z` **is** the offset (zero), so the instant is exact and unambiguous. This example is 14:45:37 on 05-Sep in Phnom Penh. |
 | `losAppId` | int64 | `8306` | Your application id. Ties the consent to the enquiry it authorised. |
 
 ### What they agreed to
@@ -76,6 +77,13 @@ Twenty-nine fields. Grouped by the question each answers.
 | `textLanguage` | string(8) | `km` | Which language was actually read. |
 | `channel` | string(32) | `MOBILE_APP` | An in-app tick box, not a wet signature. Distinguishes it from a branch-signed form. |
 | `formReference` | string(128) | `Form _ CBC 01 _ … _ V2 _ 09122025` | Your form reference, as printed on the document. |
+
+> **On time zones (asked 2026-09-07).** There is no risk of a wrong day, and
+> nothing here is approximate. We store an instant, not a wall-clock reading,
+> and always serialise it with an explicit zone — `Z` for UTC. A day only shifts
+> when a timestamp carries *no* zone and a reader guesses one; ours never omits
+> it. If you would rather receive `+07:00` local form on your payload we will
+> send that instead — it denotes the identical instant, and the choice is yours.
 
 ### Who the subject was, at the time
 
@@ -154,8 +162,27 @@ count nobody can ever clear would train everyone to ignore the alert.
 **Consent is not withdrawable.** The enquiry it authorises is made
 automatically while the loan is assessed, so by the time anyone could withdraw
 it there is nothing left to stop. Withdrawal is not offered in the app and the
-API refuses the value. Customers can still request **access, correction and
-deletion** of their data; each is recorded with who decided, when, and why.
+API refuses the value.
+
+**Customer** throughout this document means **the borrower** — the person using
+the Kjey PAPA app — never an SBF or Kjey PAPA staff user.
+
+A borrower may still **request** access to their data, a correction to it, or
+its deletion. Three things are worth being precise about, because "request" is
+doing real work in that sentence:
+
+- **They cannot change or delete anything themselves.** The entire customer-facing
+  surface is read and request-only: fifteen `GET` endpoints and nine `POST`, and
+  no `PUT`, `PATCH` or `DELETE` anywhere on it. A request creates a record for a
+  person to answer; it changes nothing on its own.
+- **A request is decided by an operator**, and the decision is recorded with who
+  made it, when, and why. A refusal must carry a reason — the API rejects one
+  without.
+- **A consent record is never edited or deleted by anyone**, borrower or staff,
+  including us. It is append-only and the database refuses `UPDATE`, `DELETE`
+  and `TRUNCATE` outright. "Deletion" concerns a borrower's personal data
+  generally; per your own ruling of 2026-09-05 the consent evidence itself is
+  never destroyed.
 
 **Consent records are never destroyed.** No retention period, no disposal.
 
@@ -178,7 +205,7 @@ A real record, taken from our system:
 {
   "consentRef":        "CBC-35-v3-2026-09",
   "consentGiven":      true,
-  "consentDate":       "2026-09-05T14:45:37+07:00",
+  "consentDate":       "2026-09-05T07:45:37.122303Z",
   "textVersion":       "v3-2026-09",
   "textHash":          "035f3ea038f727a7245253e9a2fb6167278ce5e4a1624f96b0a61293fcb4dabc",
   "textLanguage":      "km",
