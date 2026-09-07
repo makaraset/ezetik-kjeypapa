@@ -1,9 +1,11 @@
 # e-CBC consent — PDF, record, and how both are protected
 
-**For:** Sambat Finance / Tricube LOS
-**From:** Kjey PAPA (Ezetik)
-**Date:** 2026-09-07 *(supersedes the 2026-09-04 version)*
-**Subject:** the consent record as built, and the fields we propose sending you
+| | |
+|---|---|
+| **For** | Sambat Finance / Tricube LOS |
+| **From** | Kjey PAPA (Ezetik) |
+| **Date** | 2026-09-07 *(supersedes the 2026-09-04 version)* |
+| **Subject** | The consent record as built, and the fields we propose sending you |
 
 You asked for the CBC consent as **both a PDF and a record**. The 2026-09-04
 version of this document proposed nine fields. Since then we have built the
