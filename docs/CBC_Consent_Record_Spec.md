@@ -6,7 +6,7 @@
 | **From** | Kjey PAPA (Ezetik) |
 | **Date** | 2026-09-07, rev. 2 *(supersedes the 2026-09-04 version)* |
 | **Subject** | The consent record as built, and the fields we propose sending you |
-| **Rev. 2** | Answers Chanthy Lay's three review comments: the timestamp format (§3), who "customer" means and what a request can do (§6) |
+| **Rev. 2** | Answers Chanthy Lay's three review comments: the timestamp format — now settled as UTC `Z` (§3) — who "customer" means, and what a request can do (§6) |
 
 You asked for the CBC consent as **both a PDF and a record**. The 2026-09-04
 version of this document proposed nine fields. Since then we have built the
@@ -78,12 +78,22 @@ Twenty-nine fields. Grouped by the question each answers.
 | `channel` | string(32) | `MOBILE_APP` | An in-app tick box, not a wet signature. Distinguishes it from a branch-signed form. |
 | `formReference` | string(128) | `Form _ CBC 01 _ … _ V2 _ 09122025` | Your form reference, as printed on the document. |
 
-> **On time zones (asked 2026-09-07).** There is no risk of a wrong day, and
+> **On time zones — settled 2026-09-07.** There is no risk of a wrong day, and
 > nothing here is approximate. We store an instant, not a wall-clock reading,
-> and always serialise it with an explicit zone — `Z` for UTC. A day only shifts
-> when a timestamp carries *no* zone and a reader guesses one; ours never omits
-> it. If you would rather receive `+07:00` local form on your payload we will
-> send that instead — it denotes the identical instant, and the choice is yours.
+> and always serialise it with an explicit zone. A day only shifts when a
+> timestamp carries *no* zone and a reader guesses one; ours never omits it.
+>
+> **Agreed format: UTC with the `Z` designator.** The reason is specific to this
+> field rather than a matter of style. `consentDate` is one of the values covered
+> by the record's SHA-256 hash, and the hash is computed over the UTC rendering —
+> so the timestamp you hold being byte-identical to ours is what lets either side
+> verify a consent independently, years later, with no conversion rule anyone has
+> to remember. It also matches every other timestamp in the payload, and the
+> format your own webhooks already send us.
+>
+> Rendering it as local time for an operator to read is a display concern and
+> belongs in the console. We would rather not send both forms: two timestamps
+> that can drift apart leave nobody sure which is the record.
 
 ### Who the subject was, at the time
 
@@ -230,6 +240,9 @@ make your copy independently auditable; the rest are ours to keep.
 PascalCase style to sit beside `Doc_ECBCConsentForm`. **Rename freely**; what
 matters is that each exists somewhere, since each answers a question the others
 cannot.
+
+`_DateTime` is sent as **UTC with `Z`**, agreed 2026-09-07 — see the note in §3
+for why that particular field is not a free choice.
 
 `_TextHash` is the one to keep if you keep only one. It is what turns "they
 consented to version 3" into something provable.
