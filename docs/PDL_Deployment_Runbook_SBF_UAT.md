@@ -145,6 +145,23 @@ will not boot without one — the placeholder inside the jar fails credential
 parsing. Mount the real file and point `FIREBASE_CREDENTIALS_PATH` at it, as
 `docker-compose.yml` does.
 
+## 3c. Two things the first real deploy tripped on
+
+**Mounted secrets must be owned by uid 1001.** The container runs as the
+unprivileged `kjeypapa` user (uid 1001). A secret copied in as `root:root 0600`
+is unreadable to it, and the failure is a bare
+`FileNotFoundException: … (Permission denied)` buried four `Caused by` levels
+down. Keep the mode at 600 and `chown 1001:1001` — loosening to 644 would work
+and would be the wrong fix.
+
+    chown 1001:1001 /opt/kjeypapa/secrets/firebase-service-account.json
+    chown -R 1001:1001 /opt/kjeypapa/logs
+
+**Re-copy `docker-compose.yml` whenever it changes.** The source bundle is a
+snapshot; a compose edit made after the last sync is not on the host, and the
+symptom is the application behaving as an older revision said it should. It
+cost one failed boot here, on the `ddl-auto` setting of all things.
+
 ## 4. Deploy
 
 ```
@@ -201,6 +218,32 @@ and limit the blast radius of any defect in our code. Their DBA's call, but
 worth asking for.
 
 ---
+
+## 6b. Deployed — 2026-09-25
+
+Live on `10.32.8.99`, container `kjeypapa-api`, healthy, 0 restarts, boot 16.7 s.
+
+| | |
+|---|---|
+| Backup taken first | `/root/backups/kjey_papa_db-prePDL-20260925-094433.dump`, 467 MB, `pg_restore --list` verified |
+| Migrations | `001`–`006`, all applied, zero errors |
+| Schema | 28 tables — their 16 plus our 12; consent triggers live |
+| Their data | `sbf_note` 383 rows, sum 175,330.10 — **unchanged**; `request_amount` still `numeric` |
+| `ddl-auto` | `none` · `los.mock.enabled` | `false` |
+| Admin endpoints | 403 anonymous, all three |
+| Errors since boot | none |
+
+**Not yet reachable from outside.** The container is bound to `127.0.0.1:8080`
+deliberately — it speaks plain HTTP, and neither customer traffic nor Sambat's
+webhooks should cross a network unencrypted. A reverse proxy terminating TLS is
+the next step, and `TRUSTED_PROXIES` must be set to its address at the same
+time, or every consent will record the proxy's IP instead of the customer's.
+
+**Still to do before this is usable end to end:** the proxy and TLS above;
+`pdl.webhook.auth.enabled` once Sambat give us their source IPs; disabling
+Swagger (the framework logs a warning about it on every boot); and a TFF
+regression pass by someone who can log in — we altered six `sbf_note` date
+columns, so that is not a formality.
 
 ## 7. Verify after deploy
 
