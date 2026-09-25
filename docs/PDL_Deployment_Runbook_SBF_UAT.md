@@ -56,11 +56,45 @@ holding 383 live notes, Hibernate would be free to alter existing TFF tables the
 moment our entities drift from their schema — unreviewed, at startup, with no
 record of what changed.
 
-`docker-compose.yml` therefore pins `SPRING_JPA_HIBERNATE_DDL_AUTO=validate`.
-Validate turns a schema mismatch into a startup failure, which is exactly what
-we want: loud, immediate, and before any traffic.
+`docker-compose.yml` therefore pins `SPRING_JPA_HIBERNATE_DDL_AUTO` to `none`,
+overridable with `DDL_AUTO` for a scratch database. `validate` is the setting we
+actually want — a schema mismatch should stop a boot, loudly and before any
+traffic — but it cannot be used yet. §2b explains why, and it is worth reading
+before changing this.
 
 ---
+
+## 2b. What the replay found — two schema drifts
+
+The replay in §3 was run on 2026-09-25. Diffing their tables before and after
+showed our application would change **two things in `sbf_note`**, a table holding
+383 live notes:
+
+**Six date columns → `timestamptz`.** Expected and wanted: it is our
+`java.sql.Date` → `Instant` sweep, and migration `005` performs it deliberately
+and reversibly.
+
+**`request_amount`: `numeric(38,2)` → `double precision`. Not wanted.** That
+column holds 383 real amounts totalling 175,330.10. Converting exact decimal
+money to binary floating point on live financial data is precisely the kind of
+silent damage `ddl-auto=update` makes easy, and nothing would have reported it.
+
+The cause is almost certainly a Hibernate upgrade: the column was created when
+`Double` mapped to `numeric`, and Hibernate 7 expects `float8`. **SBF's schema is
+right and our entity is wrong** — money belongs in `BigDecimal`, not `Double`.
+
+Consequences for this deployment:
+
+- `ddl-auto=validate` **fails to start**, correctly, on that one column. Verified.
+- `ddl-auto=none` starts and serves normally. Verified — 16.4 s to boot, 200 on
+  the dictionary endpoint, container healthy.
+
+**So deploy with `none` for now**, which preserves their schema exactly and
+matches how their current TFF build already runs. Changing `Note.requestAmount`
+to `BigDecimal` is the real fix, but it reaches `NoteMerge`, `NotePayload`,
+`NoteTransaction`, `Customer` and the money arithmetic in `NoteServiceImpl` — it
+is a tested change, not something to rush under a deployment. Filed as a
+follow-up. Switch to `validate` once it lands; it is worth having.
 
 ## 3. Producing the baseline schema
 
@@ -79,9 +113,37 @@ Produce it by replay, on the API host:
 **That diff is the baseline migration.** It is reviewable, it is provably only
 additive, and it never touched the real database. Hand it to their DBA.
 
-Then apply, in order: the baseline, then `003`, `004`, `005`, `006`.
+This has been done — the result is committed as
+`docs/migrations/001_pdl_baseline_schema.sql`, twelve tables. Apply in order:
+
+    001_pdl_baseline_schema.sql
+    002_pdl_personal_info_hardening.sql
+    003_pdl_cbc_consent_ledger.sql
+    004_pdl_loan_dates.sql
+    005_sbf_note_dates.sql          <- the only one touching an SBF table
+    006_notification_many_per_user.sql
+
+Verified 2026-09-25: the whole sequence applies to a copy of their schema with
+zero errors, and the application then boots against it.
 
 ---
+
+## 3b. Nine environment variables have no default
+
+Any one of them missing and the application does not start, failing in bean
+creation with a placeholder-resolution error:
+
+`DB_USERNAME`, `DB_PASSWORD`, `JWT_SECRET_KEY`, `MAIL_USERNAME`,
+`MAIL_APP_PASSWORD`, `ADMIN_NOTIFY_EMAIL`, `SBF_USERNAME`, `SBF_PASSWORD`,
+`SBF_BASIC_AUTH_BASE64`.
+
+`.env.example` lists all of them. Generate the JWT key per environment with
+`openssl rand -base64 48`; changing it later logs every user out.
+
+**A valid Firebase service-account file is also mandatory.** The application
+will not boot without one — the placeholder inside the jar fails credential
+parsing. Mount the real file and point `FIREBASE_CREDENTIALS_PATH` at it, as
+`docker-compose.yml` does.
 
 ## 4. Deploy
 
@@ -108,7 +170,7 @@ the rest need values from Sambat.
 | Setting | Committed | Required | If wrong |
 |---|---|---|---|
 | `los.mock.enabled` | `true` | **`false`** | The app looks perfectly healthy, returns `LOS-MOCK-nn`, and files **nothing** with Sambat |
-| `spring.jpa.hibernate.ddl-auto` | `update` | **`validate`** | Unreviewed DDL against live TFF data |
+| `spring.jpa.hibernate.ddl-auto` | `update` | **`none`** (see §2b) | `update` converts a live money column to floating point; `validate` refuses to start until the entity is fixed |
 | `spring.jpa.show-sql` | `true` | `false` | Logs every statement, with values |
 | `pdl.webhook.auth.enabled` | `false` | `true` | Sambat's webhooks are reachable by anyone who finds the URL |
 | `pdl.ocr.rate-limit.trusted-proxies` | empty | the proxy address | Every consent records the proxy's IP, not the customer's |

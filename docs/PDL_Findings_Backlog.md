@@ -49,6 +49,29 @@ same way as the rest.
 Proxy internals appear in API responses. Cosmetic until something downstream
 tries to parse them strictly.
 
+### F14 — `Note.requestAmount` is a `Double` over a `numeric(38,2)` money column
+**Severity:** high · **Status:** open · **Found:** 2026-09-25, by replaying our
+schema against a copy of SBF UAT
+
+`sbf_note.request_amount` on SBF's database is `numeric(38,2)` and holds 383 live
+amounts totalling 175,330.10. Our entity declares `Double`, which Hibernate 7
+expects to be `float8`.
+
+Two consequences. `ddl-auto=update` would **convert exact decimal money to
+binary floating point on live data**, silently. And `ddl-auto=validate` refuses
+to start, which is how it was found.
+
+Their schema is right; ours is wrong. Money belongs in `BigDecimal`. The fix
+reaches `Note`, `NoteMerge`, `NotePayload`, `NoteTransaction`, `Customer` and the
+comparison arithmetic in `NoteServiceImpl`, so it needs TFF regression testing
+rather than a quick edit. Deploy with `ddl-auto=none` until it lands, then move
+to `validate`.
+
+Very likely upgrade drift: the column was created when `Double` mapped to
+`numeric`, and the Hibernate 7 upgrade changed the expectation. If so, other
+`Double` fields may differ too — the before/after diff showed only this one on
+`sbf_note`, but re-run that diff after any entity change.
+
 ### F13 — one notification per user, forever — and it broke every repeat webhook
 **Severity:** high · **Status:** ~~open~~ **FIXED 2026-09-07** (`0092644`)
 

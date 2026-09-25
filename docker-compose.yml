@@ -29,10 +29,15 @@ services:
       SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
 
-      # validate, never update: the schema is applied and reviewed by a DBA.
-      # This turns a schema that does not match the entities into a startup
-      # failure rather than a wrong answer discovered later.
-      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      # NEVER update: against SBF's live TFF tables Hibernate would convert
+      # sbf_note.request_amount from numeric(38,2) to double precision — exact
+      # decimal money to binary floating point, on 383 real rows, silently.
+      #
+      # `none` rather than `validate` only because validate correctly refuses to
+      # start over that same column: our entity says Double where their schema
+      # says numeric, and theirs is right. Move to `validate` once F14 lands —
+      # it is the setting we want, and a schema mismatch should stop a boot.
+      SPRING_JPA_HIBERNATE_DDL_AUTO: ${DDL_AUTO:-none}
 
       # Noisy and slow in production, and it prints parameter values.
       SPRING_JPA_SHOW_SQL: "false"
@@ -49,6 +54,10 @@ services:
       # Whose X-Forwarded-For we believe. Empty behind a proxy means every
       # consent records the proxy's own address instead of the customer's.
       PDL_OCR_RATELIMIT_TRUSTEDPROXIES: ${TRUSTED_PROXIES:-}
+
+      # Firebase credentials are mounted, not baked in; point the app at the
+      # mount rather than the placeholder copy inside the jar.
+      FIREBASE_CREDENTIALS_PATH: file:/app/firebase-service-account.json
 
       JAVA_OPTS: "-XX:MaxRAMPercentage=65 -XX:+ExitOnOutOfMemoryError"
 

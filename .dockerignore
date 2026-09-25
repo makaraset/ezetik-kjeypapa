@@ -24,6 +24,10 @@ plans/
 *.docx
 *.pdf
 
+# macOS AppleDouble resource forks. A "._Foo.java" matches Maven's *.java glob
+# and fails the compile with an unhelpful error; they arrive whenever the source
+# is tarred from a Mac without COPYFILE_DISABLE=1.
+._*
 .DS_Store
 .idea/
 .vscode/
