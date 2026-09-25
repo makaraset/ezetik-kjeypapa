@@ -1,0 +1,30 @@
+# Keep the build context small and, more importantly, keep secrets out of it.
+# Anything listed here cannot reach the image even by accident.
+
+target/
+.git/
+.gitignore
+.mvn/wrapper/maven-wrapper.jar
+
+# Secrets and local overrides — these are mounted or injected at run time.
+src/main/resources/application-local.properties
+src/main/resources/firebase-service-account.json
+*.p8
+*.env
+.env
+
+# Runtime data that must never be layered into an image
+src/main/resources/uploads/
+uploads/
+
+# Documentation and design material: large, and of no use to the runtime
+docs/
+plans/
+*.md
+*.docx
+*.pdf
+
+.DS_Store
+.idea/
+.vscode/
+*.iml

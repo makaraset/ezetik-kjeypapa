@@ -1,0 +1,77 @@
+# Kjey PAPA backend on SBF's API host (10.32.8.99).
+#
+# The database is NOT here — it is a separate server (10.32.2.33) outside
+# Docker, so there is no db service and no depends_on. The container reaches it
+# over the network like any other client.
+#
+#   cp .env.example .env     # then fill it in — .env is gitignored
+#   docker compose up -d --build
+#   docker compose logs -f api
+services:
+  api:
+    build: .
+    image: kjeypapa-api:0.0.1
+    container_name: kjeypapa-api
+    restart: unless-stopped
+
+    # Bound to localhost deliberately. Anything public should arrive through a
+    # reverse proxy that terminates TLS — this application speaks plain HTTP,
+    # and Sambat's webhooks and customer traffic must not reach it unencrypted.
+    # Change to "8080:8080" only if a proxy is genuinely not in front of it.
+    ports:
+      - "127.0.0.1:8080:8080"
+
+    env_file: .env
+
+    environment:
+      # Everything the image must not contain. Values come from .env.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+
+      # validate, never update: the schema is applied and reviewed by a DBA.
+      # This turns a schema that does not match the entities into a startup
+      # failure rather than a wrong answer discovered later.
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+
+      # Noisy and slow in production, and it prints parameter values.
+      SPRING_JPA_SHOW_SQL: "false"
+
+      # The single most dangerous default we ship. Left true, the application
+      # looks entirely healthy and files nothing with Sambat.
+      LOS_MOCK_ENABLED: "false"
+
+      # Sambat's webhooks are unauthenticated until both of these are set.
+      PDL_WEBHOOK_AUTH_ENABLED: ${PDL_WEBHOOK_AUTH_ENABLED:-false}
+      PDL_WEBHOOK_ALLOWED_IPS: ${PDL_WEBHOOK_ALLOWED_IPS:-}
+      PDL_WEBHOOK_SECRET: ${PDL_WEBHOOK_SECRET:-}
+
+      # Whose X-Forwarded-For we believe. Empty behind a proxy means every
+      # consent records the proxy's own address instead of the customer's.
+      PDL_OCR_RATELIMIT_TRUSTEDPROXIES: ${TRUSTED_PROXIES:-}
+
+      JAVA_OPTS: "-XX:MaxRAMPercentage=65 -XX:+ExitOnOutOfMemoryError"
+
+    volumes:
+      # Mounted, not baked in: the image is built from a public source tree.
+      - ./secrets/firebase-service-account.json:/app/firebase-service-account.json:ro
+      - uploads:/app/uploads
+      - ./logs:/app/logs
+
+    # 2 CPUs and 4 GB on this host, shared with everything else.
+    deploy:
+      resources:
+        limits:
+          memory: 2560M
+
+    logging:
+      driver: json-file
+      options:
+        # The consent ledger's nightly head hash lives in these logs and is the
+        # only tamper evidence that survives someone editing the database.
+        # Ship them off this host; until then, do not let them roll away quickly.
+        max-size: "50m"
+        max-file: "10"
+
+volumes:
+  uploads:

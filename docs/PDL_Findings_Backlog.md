@@ -271,6 +271,18 @@ editing rows and recomputing the chain, and it only works if the logs are
 retained off the database host. Alert on `CONSENT-LEDGER FAILED` and
 `CONSENT-ARCHIVE FAILED`.
 
+### D8 — Swagger and the API docs are publicly whitelisted
+`/v3/api-docs/**` and `/swagger-ui/**` sit on `WHITE_LIST_URLS`, so any host that
+can reach the application can enumerate all 132 endpoints, admin routes
+included. Disable or restrict them before the service is reachable by anyone
+outside the network. Noted 2026-09-25 while preparing the SBF UAT deployment.
+
+### D9 — SBF UAT: the app user is a database superuser
+`kjey_papa` on `10.32.2.33` is a superuser. The consent ledger's append-only
+guarantee then rests entirely on its trigger, since a superuser ignores table
+privileges, and our application can alter every TFF table in the same database.
+Ask their DBA for a plain role. See the deployment runbook §6.
+
 ### D7 — the standing environment items
 **`los.mock.enabled` is committed as `true`.** Every live UAT submission this
 project has made was driven by a command-line override; the checked-in default
