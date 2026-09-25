@@ -14,12 +14,15 @@ services:
     container_name: kjeypapa-api
     restart: unless-stopped
 
-    # Bound to localhost deliberately. Anything public should arrive through a
-    # reverse proxy that terminates TLS — this application speaks plain HTTP,
-    # and Sambat's webhooks and customer traffic must not reach it unencrypted.
-    # Change to "8080:8080" only if a proxy is genuinely not in front of it.
+    # Localhost by default, on purpose: this application speaks plain HTTP, so
+    # anything public belongs behind a reverse proxy that terminates TLS.
+    #
+    # BIND_ADDR=0.0.0.0 opens it to whatever can route to the host — acceptable
+    # on SBF's private UAT network so the team can reach Swagger and test, and
+    # NOT acceptable once this is internet-facing. There is no host firewall on
+    # 10.32.8.99, so the bind address is the only thing deciding reachability.
     ports:
-      - "127.0.0.1:8080:8080"
+      - "${BIND_ADDR:-127.0.0.1}:8080:8080"
 
     env_file: .env
 

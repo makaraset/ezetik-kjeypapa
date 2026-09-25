@@ -233,8 +233,23 @@ Live on `10.32.8.99`, container `kjeypapa-api`, healthy, 0 restarts, boot 16.7 s
 | Admin endpoints | 403 anonymous, all three |
 | Errors since boot | none |
 
-**Not yet reachable from outside.** The container is bound to `127.0.0.1:8080`
-deliberately — it speaks plain HTTP, and neither customer traffic nor Sambat's
+**Reachable on the UAT network as of 2026-09-25** — `BIND_ADDR=0.0.0.0` in the
+host's `.env`, so the team can use Swagger to test:
+
+| | |
+|---|---|
+| Swagger UI | `http://10.32.8.99:8080/swagger-ui/index.html` |
+| OpenAPI JSON | `http://10.32.8.99:8080/v3/api-docs` |
+
+Note `/swagger-ui.html` returns 403 — only the `/swagger-ui/**` pattern is
+whitelisted, so use `/swagger-ui/index.html`.
+
+The repo default stays `127.0.0.1`; only this host opts out. Verified from
+off-host that authentication still holds — every admin route answers 403 to an
+anonymous caller, and the whole API is plain HTTP, so this is a private-network
+arrangement and nothing more.
+
+**Still not fit to be internet-facing.** The container serves plain HTTP — it speaks plain HTTP, and neither customer traffic nor Sambat's
 webhooks should cross a network unencrypted. A reverse proxy terminating TLS is
 the next step, and `TRUSTED_PROXIES` must be set to its address at the same
 time, or every consent will record the proxy's IP instead of the customer's.

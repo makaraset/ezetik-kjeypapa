@@ -297,8 +297,20 @@ retained off the database host. Alert on `CONSENT-LEDGER FAILED` and
 ### D8 — Swagger and the API docs are publicly whitelisted
 `/v3/api-docs/**` and `/swagger-ui/**` sit on `WHITE_LIST_URLS`, so any host that
 can reach the application can enumerate all 132 endpoints, admin routes
-included. Disable or restrict them before the service is reachable by anyone
-outside the network. Noted 2026-09-25 while preparing the SBF UAT deployment.
+included. SpringDoc itself logs a warning about this on every boot.
+
+**Deliberately left on for UAT (2026-09-25)** — the team needs it to test, and
+`10.32.8.99` is on a private network. Enumeration is the whole exposure:
+authentication still holds, and every admin route answers 403 to an anonymous
+caller, verified from off-host.
+
+**Must be closed before anything internet-facing.** Two things to do together,
+because either alone is insufficient:
+1. Drop `/v3/api-docs/**` and `/swagger-ui/**` from `WHITE_LIST_URLS`, or set
+   `springdoc.api-docs.enabled=false` in the production profile.
+2. Set `BIND_ADDR=127.0.0.1` and put a reverse proxy in front. There is no host
+   firewall on that box, so the bind address is the only thing deciding who can
+   reach the application.
 
 ### D9 — SBF UAT: the app user is a database superuser
 `kjey_papa` on `10.32.2.33` is a superuser. The consent ledger's append-only
