@@ -249,6 +249,45 @@ off-host that authentication still holds — every admin route answers 403 to an
 anonymous caller, and the whole API is plain HTTP, so this is a private-network
 arrangement and nothing more.
 
+### TLS, 2026-09-25
+
+nginx terminates TLS in front of the application with a self-signed certificate;
+SBF terminate real SSL at their gateway, so this only has to satisfy that hop.
+
+| | |
+|---|---|
+| URL | `https://kjey-papa.samatfinance.com.kh` → `10.32.8.99` |
+| Certificate | self-signed, CN `kjey-papa.samatfinance.com.kh`, expires 2028-09-24 |
+| SANs | both `samatfinance` and `sambatfinance` spellings, plus `localhost` and `10.32.8.99` |
+| HTTP :80 | 301 to HTTPS |
+| App :8080 | host loopback only — not reachable from the network |
+
+Three nginx defaults were raised, each because leaving it would break something
+quietly:
+
+- `client_max_body_size` 1m → **64m**. A signup bundle carries five documents
+  inline as base64; the default rejects every account request with a 413 that
+  never reaches the application log.
+- `proxy_read_timeout` 60s → **180s**. Filing with Sambat can take up to 120s.
+  The default cuts the connection mid-submit, manufacturing the
+  unknown-outcome case on every slow filing instead of the rare one.
+- The healthcheck uses `127.0.0.1`, not `localhost`. The config is mounted
+  read-only, so nginx's entrypoint cannot add its IPv6 listener, and `localhost`
+  resolves to `::1` where nothing listens — connection refused, forever.
+
+`TRUSTED_PROXIES=172.28.0.10`, the proxy's **static** address. The compose
+network pins a subnet for this: `ClientAddress` compares the peer by exact
+string, so a DHCP-assigned container IP would silently stop matching after any
+recreate and every consent would start recording the proxy.
+
+Verified end to end: eight requests with eight different spoofed
+`X-Forwarded-For` values were counted as one client and rate-limited at the
+seventh, so forged headers are ignored and the real peer is used.
+
+**Open — see F15:** once SBF's gateway is in front, the right-most hop becomes
+the gateway, not the customer. Ask them which headers it sets before relying on
+the recorded IP.
+
 **Still not fit to be internet-facing.** The container serves plain HTTP — it speaks plain HTTP, and neither customer traffic nor Sambat's
 webhooks should cross a network unencrypted. A reverse proxy terminating TLS is
 the next step, and `TRUSTED_PROXIES` must be set to its address at the same

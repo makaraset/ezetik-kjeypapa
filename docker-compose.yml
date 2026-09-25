@@ -21,8 +21,14 @@ services:
     # on SBF's private UAT network so the team can reach Swagger and test, and
     # NOT acceptable once this is internet-facing. There is no host firewall on
     # 10.32.8.99, so the bind address is the only thing deciding reachability.
+    # nginx fronts this now. The port stays bound to the host loopback so the
+    # healthcheck and local curl still work, and nothing reaches the plain-HTTP
+    # port from the network.
     ports:
       - "${BIND_ADDR:-127.0.0.1}:8080:8080"
+
+    networks:
+      kjeypapa:
 
     env_file: .env
 
@@ -84,6 +90,50 @@ services:
         # Ship them off this host; until then, do not let them roll away quickly.
         max-size: "50m"
         max-file: "10"
+
+  # ---------------------------------------------------------------------
+  # TLS termination.
+  #
+  # SBF terminate real SSL at their gateway; this is the hop behind it, so the
+  # certificate is self-signed and only has to satisfy the gateway, not a
+  # browser's trust store.
+  # ---------------------------------------------------------------------
+  proxy:
+    image: nginx:1.27-alpine
+    container_name: kjeypapa-proxy
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/kjeypapa.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./secrets/certs:/etc/nginx/certs:ro
+      - ./logs/nginx:/var/log/nginx
+    networks:
+      kjeypapa:
+        # Static, because ClientAddress compares the peer address by exact
+        # string equality rather than by CIDR. A DHCP-assigned container IP
+        # would silently stop matching TRUSTED_PROXIES after any recreate, and
+        # every consent would start recording the proxy instead of the customer.
+        ipv4_address: 172.28.0.10
+    healthcheck:
+      # 127.0.0.1, not localhost: the config is mounted read-only, so nginx's
+      # entrypoint cannot add its usual IPv6 listener, and localhost resolves
+      # to ::1 first — where nothing is listening. Connection refused, forever.
+      test: ["CMD", "wget", "-q", "--spider", "--no-check-certificate", "https://127.0.0.1/api/v1/pdl/dictionary/version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+networks:
+  kjeypapa:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
 
 volumes:
   uploads:

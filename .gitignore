@@ -49,3 +49,8 @@ src/main/resources/uploads/
 .env
 secrets/
 logs/
+
+# TLS material — generated per host, never committed
+deploy/nginx/certs/
+*.key
+*.crt

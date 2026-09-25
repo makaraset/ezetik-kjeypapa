@@ -49,6 +49,36 @@ same way as the rest.
 Proxy internals appear in API responses. Cosmetic until something downstream
 tries to parse them strictly.
 
+### F15 — once SBF's gateway is in front, consents will record the gateway's IP
+**Severity:** medium · **Status:** open, needs an answer from SBF · **Found:**
+2026-09-25, setting up TLS
+
+`ClientAddress` takes the **right-most** entry of `X-Forwarded-For` — the hop our
+own proxy appended. That is correct with one proxy and it is proven working: with
+nginx in front, eight requests carrying eight different spoofed
+`X-Forwarded-For` values were all counted as one client and rate-limited at the
+seventh, so the spoofed values were properly ignored.
+
+It stops being correct with two. The chain becomes
+
+    customer -> SBF gateway -> our nginx -> application
+
+and the right-most entry is then the **gateway's** address, not the customer's.
+Every consent would record SBF's own infrastructure, which tells an auditor
+nothing.
+
+Two ways out, and the choice depends on what their gateway actually sends:
+
+1. If the gateway forwards the customer in `X-Forwarded-For`, extend
+   `ClientAddress` to walk leftwards past each address in `trusted-proxies` —
+   the standard approach, and a small change.
+2. If it uses a different header (`X-Real-IP`, `CF-Connecting-IP`, something of
+   their own), read that instead, and only from a trusted peer.
+
+**Ask SBF which headers their gateway sets, and its source address.** Until then
+the field is honest but not very useful — it records the last hop we can vouch
+for, which is what it claims to do.
+
 ### F14 — `Note.requestAmount` is a `Double` over a `numeric(38,2)` money column
 **Severity:** high · **Status:** open · **Found:** 2026-09-25, by replaying our
 schema against a copy of SBF UAT
