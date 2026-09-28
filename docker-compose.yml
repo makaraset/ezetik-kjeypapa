@@ -71,6 +71,13 @@ services:
       # mount rather than the placeholder copy inside the jar.
       FIREBASE_CREDENTIALS_PATH: file:/app/firebase-service-account.json
 
+      # Behind a TLS-terminating proxy. `native` is Tomcat's RemoteIpValve,
+      # which trusts the forwarded headers only from internal-proxies; the
+      # `framework` alternative honours the forgeable left-most entry and
+      # rewrites remoteAddr, which would undo ClientAddress.
+      SERVER_FORWARD_HEADERS_STRATEGY: ${SERVER_FORWARD_HEADERS_STRATEGY:-}
+      SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES: ${SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES:-}
+
       JAVA_OPTS: "-XX:MaxRAMPercentage=65 -XX:+ExitOnOutOfMemoryError"
 
     volumes:
