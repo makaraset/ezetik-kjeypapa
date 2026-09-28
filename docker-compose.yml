@@ -24,6 +24,9 @@ services:
     # nginx fronts this now. The port stays bound to the host loopback so the
     # healthcheck and local curl still work, and nothing reaches the plain-HTTP
     # port from the network.
+    # Default is loopback. SBF UAT overrides it to the host's DMZ address so
+    # their load balancer can reach the container; there is no host firewall
+    # there, so the bind address is the only reachability control.
     ports:
       - "${BIND_ADDR:-127.0.0.1}:8080:8080"
 
@@ -98,7 +101,12 @@ services:
   # certificate is self-signed and only has to satisfy the gateway, not a
   # browser's trust store.
   # ---------------------------------------------------------------------
+  # NOT used on SBF UAT — their nginx-lb (NGXLB-DMZ, 10.32.6.80/.81) terminates
+  # TLS and proxies to 10.32.8.99:8080. Kept for any environment that has no
+  # load balancer of its own; opt in with:
+  #   docker compose --profile own-tls up -d
   proxy:
+    profiles: ["own-tls"]
     image: nginx:1.27-alpine
     container_name: kjeypapa-proxy
     restart: unless-stopped

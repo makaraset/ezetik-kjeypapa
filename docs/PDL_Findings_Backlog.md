@@ -49,35 +49,40 @@ same way as the rest.
 Proxy internals appear in API responses. Cosmetic until something downstream
 tries to parse them strictly.
 
-### F15 — once SBF's gateway is in front, consents will record the gateway's IP
-**Severity:** medium · **Status:** open, needs an answer from SBF · **Found:**
-2026-09-25, setting up TLS
+### F15 — client IP behind SBF's load balancer
+**Severity:** was high in effect · **Status:** ~~open~~ **RESOLVED 2026-09-28**
 
-`ClientAddress` takes the **right-most** entry of `X-Forwarded-For` — the hop our
-own proxy appended. That is correct with one proxy and it is proven working: with
-nginx in front, eight requests carrying eight different spoofed
-`X-Forwarded-For` values were all counted as one client and rate-limited at the
-seventh, so the spoofed values were properly ignored.
+Anticipated as a design concern; turned out to be a live misconfiguration, and
+the cause was not the one predicted.
 
-It stops being correct with two. The chain becomes
+SBF replaced our nginx container with their own load balancer
+(`NGXLB-DMZ`, `kjeypapa-uat.sambatfinance.com.kh`). Their LB is configured
+correctly — a packet capture shows it appends the true client to
+`X-Forwarded-For` and also sets `X-Real-IP`, so our right-most-entry logic is
+right and needs no change.
 
-    customer -> SBF gateway -> our nginx -> application
+What broke was `TRUSTED_PROXIES`, still pointing at `172.28.0.10` — the static
+address of the nginx container they had removed. Nothing matched it, so
+`ClientAddress` fell back to the socket peer and attributed **every** request to
+the load balancer. Two consequences, neither of which announces itself:
 
-and the right-most entry is then the **gateway's** address, not the customer's.
-Every consent would record SBF's own infrastructure, which tells an auditor
-nothing.
+- every consent would record the LB's address rather than the customer's;
+- the anonymous OCR rate limiter shared **one bucket across all customers** —
+  six signups a minute in total, and the seventh person fails.
 
-Two ways out, and the choice depends on what their gateway actually sends:
+**The trap worth remembering:** the correct value is the address connections
+*arrive from*, not the address the hostname *resolves to*. DNS gives the VIP
+`10.32.6.80`; connections come from the node `10.32.6.81`. Setting the DNS
+address looks right and fixes nothing. Now `10.32.6.80,10.32.6.81`.
 
-1. If the gateway forwards the customer in `X-Forwarded-For`, extend
-   `ClientAddress` to walk leftwards past each address in `trusted-proxies` —
-   the standard approach, and a small change.
-2. If it uses a different header (`X-Real-IP`, `CF-Connecting-IP`, something of
-   their own), read that instead, and only from a trusted peer.
+Verified after the fix: two different clients through the same LB get separate
+rate-limit buckets, and eight forged `X-Forwarded-For` values from one client
+are still ignored.
 
-**Ask SBF which headers their gateway sets, and its source address.** Until then
-the field is honest but not very useful — it records the last hop we can vouch
-for, which is what it claims to do.
+**Ask SBF** for the full set of LB node addresses — an HA pair may add more, and
+a new node would silently reintroduce this. Their LB also sets `X-Real-IP`,
+which would be simpler and less positional than parsing `X-Forwarded-For`;
+worth considering if the node list proves unstable.
 
 ### F14 — `Note.requestAmount` is a `Double` over a `numeric(38,2)` money column
 **Severity:** high · **Status:** open · **Found:** 2026-09-25, by replaying our
