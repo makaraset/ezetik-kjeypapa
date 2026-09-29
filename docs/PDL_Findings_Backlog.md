@@ -12,6 +12,50 @@ it was found, so a reader can judge how much it has actually been checked.
 
 ## Open findings
 
+### F16 — the LOS webhooks are unauthenticated and reachable from the public internet
+**Severity: HIGH — close before the first real application exists on UAT**
+**Status:** open · **Found:** 2026-09-29, while building the simulator against UAT
+
+`kjeypapa-uat.sambatfinance.com.kh` is **not** internal. It resolves publicly to
+`103.118.45.11` and `203.189.133.141`, and answers from the open internet —
+verified from a machine with no VPN route to `10.32.x` at all.
+
+Authentication holds everywhere it is supposed to: every admin route returns 403
+anonymously. But `/api/v1/pdl/los/**` is on the security whitelist by design,
+because Sambat call it server-to-server, and
+`pdl.webhook.auth.enabled=false` — so there is no IP allowlist and no shared
+secret in front of it.
+
+From the public internet, without credentials, these are all reachable and all
+act on the loan they match:
+
+| Endpoint | What an anonymous caller could do |
+|---|---|
+| `/pdl/los/approved` | Approve a loan, and set its terms, fee set and repayment schedule |
+| `/pdl/los/reject` | Reject an application |
+| `/pdl/los/disbursement` | Mark a loan disbursed |
+| `/pdl/los/loan-update` | Rewrite balances, arrears and paid installments |
+
+The identifier is guessable: Sambat's `AppId` is a 4-digit sequential number.
+
+**Not exploitable today** — `pdl_payday_loan` is empty on UAT, so every call
+answers `NOT_FOUND`. That is the only thing standing between this and a real
+problem, and it stops being true with the first filed application.
+
+**Fix, in order of speed:**
+1. **Ask SBF to restrict `/api/v1/pdl/los/**` at the load balancer** to Tricube's
+   source addresses. No code change, no deploy, effective immediately.
+2. Set `PDL_WEBHOOK_SECRET` and enable `PDL_WEBHOOK_AUTH_ENABLED=true`, then give
+   Sambat the secret. Note enabling the flag with both the secret and the
+   allowlist empty does **nothing** — the filter skips both checks.
+3. Longer term, the mechanism Sambat prefer (HMAC over the body, or mTLS), which
+   is already an open question with them.
+
+This also retires the premise behind **D8**: Swagger was left enabled on the
+argument that UAT sits on a private network. It does not. `/swagger-ui` and
+`/v3/api-docs` are both served to the public internet, publishing all 132
+endpoints.
+
 ### F1 — FCM token travels in a URL query string
 **Severity:** low · **Status:** open · **Found:** 2026-09-05, in an access log
 enabled to verify the Step-5 headers
