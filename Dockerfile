@@ -66,7 +66,18 @@ ENV JAVA_OPTS="-XX:MaxRAMPercentage=65 -XX:+ExitOnOutOfMemoryError -Djava.securi
 # Hits a whitelisted endpoint that reads the dictionary, so a pass means the
 # application is up AND the database is answering. /actuator/health is not on
 # the security whitelist and would report 403 as "unhealthy".
+# Tries HTTPS first, then plain HTTP, so one image works whether or not the
+# application terminates TLS itself. SBF enabled server.ssl on this port after
+# the image was built, and an http-only probe then reported the container
+# unhealthy for two days while it was serving perfectly — the endpoint answered
+# "This combination of host and port requires TLS" and nothing read it.
+#
+# -k because the keystore is self-signed: this probe asks "is the app up", not
+# "is the certificate trustworthy". 127.0.0.1 rather than localhost, which can
+# resolve to ::1 where nothing listens.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
-  CMD curl -fsS http://localhost:8080/api/v1/pdl/dictionary/version || exit 1
+  CMD curl -fsSk https://127.0.0.1:8080/api/v1/pdl/dictionary/version \
+   || curl -fsS  http://127.0.0.1:8080/api/v1/pdl/dictionary/version \
+   || exit 1
 
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/app.jar"]

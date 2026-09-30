@@ -12,6 +12,51 @@ it was found, so a reader can judge how much it has actually been checked.
 
 ## Open findings
 
+### F18 — UAT DNS has a bad A record pointing at SBF's Exchange server
+**Severity: HIGH — blocks all device testing** · **Status:** open, SBF's to fix ·
+**Found:** 2026-09-30
+
+`kjeypapa-uat.sambatfinance.com.kh` resolves to **two** addresses, and only one
+of them is ours:
+
+| Address | Server | Certificate | Result |
+|---|---|---|---|
+| `203.189.133.141` | nginx/1.30.5 | `*.sambatfinance.com.kh` | **200** — correct |
+| `103.118.45.11` | Microsoft-IIS/10.0, `x-owa-version`, `x-feserver: DC-EXCH01` | `*.sambatfinance.com` | **401** — Outlook Web App |
+
+The second is their Exchange server. Its wildcard covers `*.sambatfinance.com`,
+which does **not** match a `.com.kh` host, so a client doing ordinary strict TLS
+— which every mobile app does — fails outright rather than degrading.
+
+Measured from one machine: **10 of 10** strict-TLS attempts failed, because the
+resolver kept landing on `.11`. Pinned to `.141` everything works, including
+strict TLS with no `-k`.
+
+`.11` was serving this correctly on 2026-09-29, so something moved on their side
+today.
+
+**Ask SBF to remove the `103.118.45.11` A record** for this hostname. Nothing on
+our side can work around it: round-robin DNS means roughly half of all clients
+get a TLS failure, and an app cannot choose its A record.
+
+### F17 — an expired token broke the whole unauthenticated signup flow
+**Severity:** high · **Status:** ~~open~~ **FIXED 2026-09-30** (`9a3db88`)
+
+`JwtAuthenticationFilter` called `extractUsername` with no try/catch, and the
+filter runs on **every** request including whitelisted ones. A device holding an
+old token therefore got 403 on the NID scan and on the account-request probe —
+paths that need no authentication at all.
+
+Found on a real device: the phone still held a token from 2026-09-06 in the iOS
+keychain, which survives app reinstalls, so reinstalling would not have cleared
+it. The log said `ExpiredJwtException`; the user saw "cannot read OCR".
+
+A token the server cannot use means *not authenticated*, never *fail the
+request*. The filter now continues the chain unauthenticated, so whitelisted
+endpoints serve normally and protected ones are refused downstream with a proper
+403 from the authorization layer rather than an exception thrown inside a
+filter. Three regression tests cover expired, malformed, and absent tokens.
+
 ### F16 — the LOS webhooks are unauthenticated and reachable from the public internet
 **Severity: HIGH — close before the first real application exists on UAT**
 **Status:** open · **Found:** 2026-09-29, while building the simulator against UAT
