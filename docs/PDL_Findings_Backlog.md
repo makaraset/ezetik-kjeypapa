@@ -357,6 +357,28 @@ type.
 
 ---
 
+## Requested, not yet built
+
+### R1 — CamDigi NID image + liveness verification
+**Requested by SBF 2026-10-03 · for the next implementation, explicitly not now**
+
+Sambat want the national-ID image checked for liveness. The endpoint is already
+in the swagger we hold (`docs/sbf_tricube_uat_api_docs.json`), so no new spec is
+needed to scope it:
+
+    POST /verified-info-idimage-liveness          tag: 18-CamDigi
+    request   UserInfoLivenessRequest { actions[], doneBy, idImage, liveness, userInfo }
+    response  ResponseInfo            { data, error, message }
+
+Two things to carry over when it is built:
+
+- **`doneBy` takes the constant `KjeyPapa`, not a username.** The same field with
+  a username in it is what produced their opaque HTTP 500s on
+  `/new-loan-application` in September and cost a day to find.
+- It pairs with the existing NID OCR call in `NidOcrService`, which already
+  handles the image capture and the SBF gateway auth — liveness is an addition
+  to that path, not a new integration.
+
 ## Before first deployment
 
 These are not bugs. They are steps that must happen once, in this order, and
