@@ -39,6 +39,14 @@ public final class PersonalInfoValidator {
 			DateTimeFormatter.ofPattern("d/M/uuuu").withResolverStyle(ResolverStyle.STRICT) };
 	private static final ZoneId KH = ZoneId.of("Asia/Phnom_Penh");
 
+	/**
+	 * The one country an address can be in. Sambat's gazetteer, which every
+	 * stored province/district/commune/village code comes from, is Cambodia
+	 * only, and the loan application files every country slot as KHM. This is
+	 * the canonical label the app stores and localises (km កម្ពុជា).
+	 */
+	public static final String CAMBODIA = "Cambodia";
+
 	/** Canonical forms: dd/MM/yyyy dates, M/F gender, trimmed, blank -> null. */
 	public static void normalise(PersonalInfoRequest r) {
 		if (r == null)
@@ -53,6 +61,12 @@ public final class PersonalInfoValidator {
 		r.setLatinFamilyName(trimToNull(r.getLatinFamilyName()));
 		r.setLatinFirstName(trimToNull(r.getLatinFirstName()));
 		r.setIdType(canonIdType(r.getIdType()));
+		// Signup never sent corr/perm country (2026-10-27): every account SBF's
+		// testers created showed "Country: -" under both home addresses. The
+		// server fills it, so no client build can leave it blank again.
+		r.setCorrCountry(defaultCountry(r.getCorrCountry()));
+		r.setPermCountry(defaultCountry(r.getPermCountry()));
+		r.setBirthCountry(defaultCountry(r.getBirthCountry()));
 	}
 
 	/** Human-readable problems; empty means acceptable. */
@@ -84,6 +98,11 @@ public final class PersonalInfoValidator {
 		tooLong(e, "permanent house/street", r.getPermHouseStreetNo(), 200);
 		if (r.getMobilePhone() == null || !r.getMobilePhone().matches("0\\d{8,9}"))
 			e.add("mobile phone must be a Cambodian number (0 followed by 8-9 digits)");
+		// An address is not identity, so a verified row is still held to this.
+		missingAddress(e, "correspondence", r.getCorrProvinceCode(), r.getCorrDistrictCode(),
+				r.getCorrCommuneCode(), r.getCorrVillageCode());
+		missingAddress(e, "permanent", r.getPermProvinceCode(), r.getPermDistrictCode(),
+				r.getPermCommuneCode(), r.getPermVillageCode());
 		if (identityLocked)
 			return e;
 
@@ -129,6 +148,35 @@ public final class PersonalInfoValidator {
 	private static void tooLong(List<String> e, String what, String v, int max) {
 		if (v != null && v.length() > max)
 			e.add(what + " is too long (max " + max + ")");
+	}
+
+	/**
+	 * Sambat's loan application requires all four NCDD codes of every address
+	 * (Appendix 2 #4-8 correspondence, #59-63 permanent, #24-28 work). The app
+	 * let any level be skipped, so a gap only surfaced as their MissingData
+	 * after the customer had already applied. Every level of their gazetteer
+	 * has children (checked 2026-10-27), so requiring all four never strands a
+	 * customer whose commune happens to have no villages.
+	 */
+	static void missingAddress(List<String> e, String which, String province, String district, String commune,
+			String village) {
+		List<String> gaps = new ArrayList<>();
+		if (trimToNull(province) == null)
+			gaps.add("province");
+		if (trimToNull(district) == null)
+			gaps.add("district");
+		if (trimToNull(commune) == null)
+			gaps.add("commune");
+		if (trimToNull(village) == null)
+			gaps.add("village");
+		if (!gaps.isEmpty())
+			e.add(which + " address is incomplete (" + String.join(", ", gaps) + ")");
+	}
+
+	/** Blank becomes {@link #CAMBODIA}; anything else is kept as sent. */
+	static String defaultCountry(String s) {
+		String t = trimToNull(s);
+		return t == null ? CAMBODIA : t;
 	}
 
 	/** Same value after canonicalisation — so 1990-01-03 and 03/01/1990 agree. */

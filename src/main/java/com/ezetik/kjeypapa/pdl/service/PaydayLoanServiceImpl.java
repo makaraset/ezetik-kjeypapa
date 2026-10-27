@@ -822,6 +822,10 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 	public ResponseEntity<Message<PdlEmploymentInfo>> saveEmploymentInfo(EmploymentInfoRequest req) {
 		try {
 			User user = getCurrentUser();
+			EmploymentInfoValidator.normalise(req);
+			List<String> problems = EmploymentInfoValidator.validate(req);
+			if (!problems.isEmpty())
+				return resp("INVALID", String.join("; ", problems), null, HttpStatus.EXPECTATION_FAILED);
 			// Upsert the single current row per user (POST creates if none, else updates).
 			List<PdlEmploymentInfo> existing = employmentRepo.findByUser(user.getId());
 			PdlEmploymentInfo e = existing.isEmpty() ? new PdlEmploymentInfo() : existing.get(0);

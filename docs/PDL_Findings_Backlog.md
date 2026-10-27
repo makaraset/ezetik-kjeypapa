@@ -12,6 +12,45 @@ it was found, so a reader can judge how much it has actually been checked.
 
 ## Open findings
 
+### F20 — OTP verification matches on the code alone, across every user
+**Severity:** medium · **Status:** open · **Found:** 2026-10-27, designing the
+CamDigi step, which gates on "OTP done"
+
+`POST /auth/verifyOTP?otp=NNNN` looks the code up by its value alone
+(`UserServiceImpl.validateOTP`, `:355`) and enables whichever user it belongs
+to (`:370`). Nothing ties the code to the phone number being verified, and the
+codes are four digits drawn from one space shared by every account. Codes do
+expire (`:365`), but a valid one is not deleted when used (the delete at `:372`
+is commented out), so it stays usable until it expires.
+
+So anyone can enable a disabled account by cycling through the 10,000 codes
+while some are unexpired, without knowing whose they are. For a PDL account the
+damage is bounded, because the request status, not `enabled`, is what gates
+login — but `enabled` is exactly what "the phone was verified" means to the
+CamDigi step, and the TFF flow relies on it directly.
+
+Also: `:357` prints the OTP record to stdout, so live codes land in the
+container log.
+
+Fix: verify `{username, otp}` together, delete the code on use, cap attempts
+per user, and drop the print.
+
+### F19 — the signup response handed back the customer's SBF CIF
+**Severity:** high · **Status:** ~~open~~ **FIXED 2026-10-27** · **Found:**
+2026-10-27, by the CamDigi design review
+
+`POST /api/v1/pdl/account-request` is anonymous, and returned the whole saved
+`PdlAccountRequest`. Its eager `user` serialised `registedId` — which, unlike
+the password and roles, is not `WRITE_ONLY` (`User.java:65`) — and the request
+had just filled `registedId` by looking the submitted NID number up at SBF.
+
+So submitting a bundle with a stranger's 9-digit NID answered whether they bank
+with SBF, and their CIF: the same oracle that was deliberately removed from the
+OCR endpoint (`NidOcrService.java:98-102`). The app never read the field.
+
+It now answers `{requestId, status}` only (`PdlAccountRequestCreated`), and
+`PdlAccountRequestServiceTest` pins that shape.
+
 ### F18 — UAT DNS has a bad A record pointing at SBF's Exchange server
 **Severity: HIGH — blocks all device testing** · **Status:** open, SBF's to fix ·
 **Found:** 2026-09-30
@@ -360,24 +399,44 @@ type.
 ## Requested, not yet built
 
 ### R1 — CamDigi NID image + liveness verification
-**Requested by SBF 2026-10-03 · for the next implementation, explicitly not now**
-
-Sambat want the national-ID image checked for liveness. The endpoint is already
-in the swagger we hold (`docs/sbf_tricube_uat_api_docs.json`), so no new spec is
-needed to scope it:
+**Requested by SBF 2026-10-03 · re-requested 2026-10-27 · Stage 1 BUILT
+2026-10-27, behind `pdl.liveness.enabled=false` · Stage 2 waits on SBF**
 
     POST /verified-info-idimage-liveness          tag: 18-CamDigi
     request   UserInfoLivenessRequest { actions[], doneBy, idImage, liveness, userInfo }
     response  ResponseInfo            { data, error, message }
 
-Two things to carry over when it is built:
+**Where it runs: after OTP, against what was submitted** — SBF's own journey
+order (`Customer_Journey_V21_Review.md:12`). The backend builds `idImage` from
+the stored NID front and `userInfo` from the stored, customer-confirmed
+identity; the app uploads only the capture. CamDigi therefore checks exactly
+what the LPO approves, and the endpoint cannot be used to test a stranger's
+identity. `PdlIdentityVerificationService` has the detail.
 
-- **`doneBy` takes the constant `KjeyPapa`, not a username.** The same field with
-  a username in it is what produced their opaque HTTP 500s on
-  `/new-loan-application` in September and cost a day to find.
-- It pairs with the existing NID OCR call in `NidOcrService`, which already
-  handles the image capture and the SBF gateway auth — liveness is an addition
-  to that path, not a new integration.
+- **Who may call it.** A PENDING customer cannot log in, so
+  `POST /pdl/account-request/liveness/challenge` checks the request's own
+  password. It is the one way in, both straight after OTP and on any resume
+  from the login screen. The challenge id it returns is single-use, valid 10
+  minutes, and stored only as a hash.
+- **`doneBy` is `los.done-by` (`KjeyPapa`)**, refused locally if blank — never
+  `""`, never a username (September's opaque 500s), never the legacy `Kjey_PAPA`.
+- **Attempts.** At most 5 that may have been charged, per request, in a rolling
+  24 hours; one that never left us does not count. A pass is final.
+- **Approval gate** in `decide()`, off until `required-for-approval` is set.
+- **The earlier note that this "pairs with the OCR path" held only for the
+  backend.** The signup selfie cannot serve as the capture: it comes from the
+  rear-default system camera with the gallery allowed, which proves nothing
+  about who holds the phone. The app has a new front-camera screen
+  (`pdl_liveness_page.dart`) with the capture behind a swappable interface.
+
+**Stage 2 waits on SBF** (questions drafted in
+`docs/SBF_UAT_Feedback_2026-10-27.md`, not yet sent): what `liveness` holds — a still, a video, or a vendor SDK
+package — the action names, the `userInfo` date and gender formats, what
+`data` and `error` mean (an info mismatch is not a face mismatch), retention,
+and whether the endpoint is provisioned at all — the CamDigi group returned 500s
+on 2026-08-27 and nobody has re-checked. Until then `classify()` is a
+fail-safe placeholder, and `CamDigiUserInfoMapper` holds the two format
+constants to change.
 
 ## Before first deployment
 
@@ -405,6 +464,22 @@ columns wherever ddl-auto is off.
 Drops `UNIQUE (user_id)` from `ez_notification`. Without it, every LOS webhook
 to a customer who already has one notification fails with an opaque 403 and the
 status update is lost. See F13.
+
+### D1e — apply `docs/migrations/007_pdl_address_country.sql` and `008_pdl_identity_verification.sql`
+007 fills the blank correspondence and permanent countries that every SBF UAT
+account was created with (SBF's "addresses are missing country"); without it
+they keep showing "Country: -" until each customer re-saves. 008 creates the
+CamDigi attempts table. SBF UAT runs with ddl-auto off, so without 008 every
+verification fails on a missing table. Apply both **before** deploying.
+
+### D1f — the CamDigi switches
+`pdl.liveness.enabled` stays `false` until SBF has answered the R1 questions
+and a real capture has passed against their UAT. `pdl.liveness.mock` must be
+`false` everywhere but a developer's machine: it passes every capture. A mock
+pass stops counting once the mock is off, and the LPO sees it marked MOCK, but
+neither makes it safe to leave on. Set `required-for-approval` only after real
+passes have been seen; turning it on blocks every PENDING request that has not
+verified, until each customer signs in and does.
 
 ### D2 — apply `docs/migrations/003_pdl_cbc_consent_ledger.sql`
 `ddl-auto` creates the consent table but never its indexes, CHECK constraints or

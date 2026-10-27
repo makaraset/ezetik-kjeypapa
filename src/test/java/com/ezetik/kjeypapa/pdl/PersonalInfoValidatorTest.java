@@ -27,6 +27,15 @@ class PersonalInfoValidatorTest {
 		r.setIdIssuedDate("17/03/2025");
 		r.setIdExpiryDate("16/03/2035");
 		r.setMobilePhone("010849001");
+		// Sambat's own sample codes: Phnom Penh / Saensokh / Krang Thnong / a village.
+		r.setCorrProvinceCode("12");
+		r.setCorrDistrictCode("1214");
+		r.setCorrCommuneCode("121402");
+		r.setCorrVillageCode("12140204");
+		r.setPermProvinceCode("12");
+		r.setPermDistrictCode("1214");
+		r.setPermCommuneCode("121402");
+		r.setPermVillageCode("12140204");
 		return r;
 	}
 
@@ -142,5 +151,51 @@ class PersonalInfoValidatorTest {
 	@DisplayName("a null request is one clear error, not an NPE")
 	void nullRequest() {
 		assertThat(PersonalInfoValidator.validate(null)).hasSize(1);
+	}
+
+	@Test
+	@DisplayName("a blank country is Cambodia — signup never sent corr/perm country (SBF, 2026-10-27)")
+	void blankCountryIsCambodia() {
+		PersonalInfoRequest r = good();
+		r.setCorrCountry(null);
+		r.setPermCountry("");
+		r.setBirthCountry("  ");
+		assertThat(check(r)).isEmpty();
+		assertThat(r.getCorrCountry()).isEqualTo("Cambodia");
+		assertThat(r.getPermCountry()).isEqualTo("Cambodia");
+		assertThat(r.getBirthCountry()).isEqualTo("Cambodia");
+
+		// A value the client did send is kept (trimmed), not replaced.
+		PersonalInfoRequest sent = good();
+		sent.setCorrCountry(" KHM ");
+		check(sent);
+		assertThat(sent.getCorrCountry()).isEqualTo("KHM");
+	}
+
+	@Test
+	@DisplayName("every address level is required, and the error names the gaps")
+	void addressLevelsRequired() {
+		PersonalInfoRequest r = good();
+		r.setCorrVillageCode("");
+		r.setCorrCommuneCode(null);
+		assertThat(check(r)).containsExactly("correspondence address is incomplete (commune, village)");
+
+		PersonalInfoRequest perm = good();
+		perm.setPermProvinceCode(null);
+		perm.setPermDistrictCode(null);
+		perm.setPermCommuneCode(null);
+		perm.setPermVillageCode(null);
+		assertThat(check(perm))
+				.containsExactly("permanent address is incomplete (province, district, commune, village)");
+	}
+
+	@Test
+	@DisplayName("an address is not identity: a verified row is still held to it")
+	void addressCheckedWhenIdentityLocked() {
+		PersonalInfoRequest r = good();
+		r.setCorrDistrictCode(" ");
+		PersonalInfoValidator.normalise(r);
+		assertThat(PersonalInfoValidator.validate(r, true))
+				.containsExactly("correspondence address is incomplete (district)");
 	}
 }

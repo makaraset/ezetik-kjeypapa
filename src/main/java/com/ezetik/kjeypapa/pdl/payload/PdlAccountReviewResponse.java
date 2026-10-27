@@ -22,4 +22,7 @@ public class PdlAccountReviewResponse {
 	private PdlPersonalInfo personalInfo;
 	private PdlEmploymentInfo employmentInfo;
 	private PdlBankInfo bankInfo;
+
+	/** CamDigi identity verification (2026-10-27): state, attempts, SBF's message. */
+	private IdentityVerificationSummary identityVerification;
 }

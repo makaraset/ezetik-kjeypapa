@@ -21,6 +21,8 @@
 --   004_pdl_loan_dates.sql
 --   005_sbf_note_dates.sql        <- the only one that touches an SBF table
 --   006_notification_many_per_user.sql
+--   007_pdl_address_country.sql   (2026-10-27, data only)
+--   008_pdl_identity_verification.sql (2026-10-27)
 --
 -- Verified 2026-09-25: the whole sequence applies with zero errors to a copy of
 -- their schema, and the application then boots against it in 16 seconds and

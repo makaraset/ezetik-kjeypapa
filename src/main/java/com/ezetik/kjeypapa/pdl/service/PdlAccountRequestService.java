@@ -19,6 +19,7 @@ import com.ezetik.kjeypapa.pdl.model.PdlEmploymentInfo;
 import com.ezetik.kjeypapa.pdl.model.PdlPersonalInfo;
 import com.ezetik.kjeypapa.pdl.payload.BankInfoRequest;
 import com.ezetik.kjeypapa.pdl.payload.EmploymentInfoRequest;
+import com.ezetik.kjeypapa.pdl.payload.PdlAccountRequestCreated;
 import com.ezetik.kjeypapa.pdl.payload.PdlAccountRequestPayload;
 import com.ezetik.kjeypapa.pdl.payload.PdlAccountRequestPayload.DocFile;
 import com.ezetik.kjeypapa.pdl.payload.PersonalInfoRequest;
@@ -86,10 +87,13 @@ public class PdlAccountRequestService {
 	@Autowired
 	private SMSService sms;
 
+	@Autowired
+	private PdlIdentityVerificationService verification;
+
 	private final FileNameHelper fileHelper = new FileNameHelper();
 
 	@Transactional
-	public ResponseEntity<Message<PdlAccountRequest>> create(PdlAccountRequestPayload p) {
+	public ResponseEntity<Message<PdlAccountRequestCreated>> create(PdlAccountRequestPayload p) {
 		try {
 			if (p == null || isBlank(p.getUsername()) || isBlank(p.getPassword()))
 				return resp("INVALID", "Username and password are required", null, HttpStatus.EXPECTATION_FAILED);
@@ -120,6 +124,12 @@ public class PdlAccountRequestService {
 					dup.setIdNo(null);
 					personalRepo.save(dup);
 				}
+			}
+			if (p.getEmployment() != null) {
+				EmploymentInfoValidator.normalise(p.getEmployment());
+				List<String> problems = EmploymentInfoValidator.validate(p.getEmployment());
+				if (!problems.isEmpty())
+					return resp("INVALID", String.join("; ", problems), null, HttpStatus.EXPECTATION_FAILED);
 			}
 
 			// --- user (disabled until OTP; login gated on the LPO decision) ---
@@ -235,8 +245,8 @@ public class PdlAccountRequestService {
 				smsEx.printStackTrace(); // OTP delivery failure must not lose the request
 			}
 
-			return resp("SUCCESS", "Account request submitted — verify the OTP sent to your phone", req,
-					HttpStatus.OK);
+			return resp("SUCCESS", "Account request submitted — verify the OTP sent to your phone",
+					new PdlAccountRequestCreated(req.getId(), req.getStatus().name()), HttpStatus.OK);
 		} catch (Exception e) {
 			log.warn("PDL account request failed: {}", e.toString(), e);
 			return resp("INTERNAL_SERVER_ERROR", "Something went wrong. Please try again.", null, HttpStatus.INTERNAL_SERVER_ERROR);
@@ -265,6 +275,11 @@ public class PdlAccountRequestService {
 			return resp2("NOT_FOUND", "Account request not found: " + requestId, null, HttpStatus.OK);
 		if (req.getStatus() != PdlAccountStatusEnum.PENDING)
 			return resp2("INVALID", "Already decided: " + req.getStatus(), req.getStatus().name(), HttpStatus.OK);
+		// Here rather than in the admin controller, so every path to an approval
+		// is gated. Refusing is never gated: an LPO can always reject.
+		if (approve && verification.blocksApproval(req))
+			return resp2("IDENTITY_NOT_VERIFIED", "This customer has not passed CamDigi identity verification. "
+					+ "They can complete it by signing in to the app.", req.getStatus().name(), HttpStatus.OK);
 		req.setStatus(approve ? PdlAccountStatusEnum.APPROVED : PdlAccountStatusEnum.REJECTED);
 		req.setDecisionReason(reason);
 		req.setDecidedBy(decidedBy);
@@ -339,7 +354,8 @@ public class PdlAccountRequestService {
 		var ei = employmentRepo.findByUser(uid);
 		var bi = bankRepo.findByUser(uid);
 		var out = new com.ezetik.kjeypapa.pdl.payload.PdlAccountReviewResponse(req,
-				pi.isEmpty() ? null : pi.get(0), ei.isEmpty() ? null : ei.get(0), bi.isEmpty() ? null : bi.get(0));
+				pi.isEmpty() ? null : pi.get(0), ei.isEmpty() ? null : ei.get(0), bi.isEmpty() ? null : bi.get(0),
+				verification.summary(requestId));
 		return new ResponseEntity<>(new Message<>("SUCCESS", "Account request detail", out), HttpStatus.OK);
 	}
 
@@ -441,8 +457,8 @@ public class PdlAccountRequestService {
 		return s == null || s.isBlank();
 	}
 
-	private static ResponseEntity<Message<PdlAccountRequest>> resp(String t, String m, PdlAccountRequest d,
-			HttpStatus st) {
+	private static ResponseEntity<Message<PdlAccountRequestCreated>> resp(String t, String m,
+			PdlAccountRequestCreated d, HttpStatus st) {
 		return new ResponseEntity<>(new Message<>(t, m, d), st);
 	}
 

@@ -56,6 +56,24 @@ public class SbfGatewayClient {
 	@Value("${pdl.dictionary.timeout-seconds:180}")
 	private int dictionaryTimeoutSeconds;
 
+	/**
+	 * Seconds allowed for NID OCR. It answers in about 3 s, but had no read
+	 * timeout at all, so a stalled SBF held the request thread long after the
+	 * app had given up at 30 s. Token (10 s) plus this stays under that.
+	 */
+	@Value("${pdl.ocr.timeout-seconds:18}")
+	private int ocrTimeoutSeconds;
+
+	/** Seconds allowed for the CamDigi check: a face match plus a registry lookup. */
+	@Value("${pdl.liveness.timeout-seconds:45}")
+	private int livenessTimeoutSeconds;
+
+	/**
+	 * The token request had no timeout, and {@link #token()} is synchronized:
+	 * one hung token call blocked every SBF caller in the application.
+	 */
+	private static final Duration TOKEN_TIMEOUT = Duration.ofSeconds(10);
+
 	// A connect timeout matters: this client runs inside the request thread,
 	// and a submit runs inside an open transaction, so a hung SBF would pin a
 	// pool connection indefinitely while the app gives up at 30s.
@@ -67,6 +85,7 @@ public class SbfGatewayClient {
 			HttpRequest req = HttpRequest.newBuilder().uri(new URI(tokenEndpoint))
 					.header("Content-Type", "application/x-www-form-urlencoded")
 					.header("Authorization", basicAuth)
+					.timeout(TOKEN_TIMEOUT)
 					.POST(HttpRequest.BodyPublishers.ofString(urlencodedToken)).build();
 			HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
 			if (resp.statusCode() != 200)
@@ -84,11 +103,77 @@ public class SbfGatewayClient {
 		HttpRequest req = HttpRequest.newBuilder().uri(new URI(urlApi + "/ocr-id-card"))
 				.header("Content-Type", "application/json")
 				.header("Authorization", "Bearer " + token())
+				.timeout(Duration.ofSeconds(ocrTimeoutSeconds))
 				.POST(HttpRequest.BodyPublishers.ofString(body)).build();
 		HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
 		if (resp.statusCode() != 200)
 			throw new IllegalStateException("SBF /ocr-id-card returned " + resp.statusCode());
 		return mapper.readTree(resp.body());
+	}
+
+	/**
+	 * {@code POST /verified-info-idimage-liveness} (tag 18-CamDigi): CamDigi
+	 * checks an identity against the national registry, the ID card image, and
+	 * a liveness capture of the person.
+	 *
+	 * <p>Unlike the rest of this class, every failure comes back as an
+	 * {@link SbfCallException} saying how far the call got. The caller records
+	 * each attempt, and must not count our outage or SBF's as the customer's
+	 * failed verification. It never retries: a verification is likely charged
+	 * per call.
+	 */
+	public JsonNode verifiedInfoIdImageLiveness(Object body) throws SbfCallException {
+		String json;
+		try {
+			json = mapper.writeValueAsString(body);
+		} catch (Exception e) {
+			throw new IllegalStateException("could not serialise the CamDigi request", e);
+		}
+		String bearer;
+		try {
+			bearer = token();
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new SbfCallException(SbfCallException.Kind.UNREACHABLE, null, "interrupted getting a token");
+		} catch (Exception e) {
+			throw new SbfCallException(SbfCallException.Kind.UNREACHABLE, null, "no token: " + e);
+		}
+		HttpRequest req = HttpRequest.newBuilder().uri(URI.create(urlApi + "/verified-info-idimage-liveness"))
+				.header("Content-Type", "application/json")
+				.header("Authorization", "Bearer " + bearer)
+				.timeout(Duration.ofSeconds(livenessTimeoutSeconds))
+				.POST(HttpRequest.BodyPublishers.ofString(json)).build();
+		HttpResponse<String> resp;
+		try {
+			resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+		} catch (java.net.http.HttpConnectTimeoutException | java.net.ConnectException e) {
+			throw new SbfCallException(SbfCallException.Kind.UNREACHABLE, null, e.toString());
+		} catch (java.io.IOException e) {
+			throw new SbfCallException(SbfCallException.Kind.NO_REPLY, null, e.toString());
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new SbfCallException(SbfCallException.Kind.NO_REPLY, null, "interrupted");
+		}
+		int status = resp.statusCode();
+		String text = resp.body() == null ? "" : resp.body();
+		if (status >= 500)
+			throw new SbfCallException(SbfCallException.Kind.SERVER_ERROR, status, head(text));
+		if (status != 200)
+			throw new SbfCallException(SbfCallException.Kind.REJECTED, status, head(text));
+		JsonNode node;
+		try {
+			node = mapper.readTree(text);
+		} catch (Exception e) {
+			throw new SbfCallException(SbfCallException.Kind.BAD_REPLY, status, head(text));
+		}
+		if (node == null || !node.isObject())
+			throw new SbfCallException(SbfCallException.Kind.BAD_REPLY, status, head(text));
+		return node;
+	}
+
+	/** The first 512 characters: enough to say why, too short to carry an image. */
+	private static String head(String s) {
+		return s.length() <= 512 ? s : s.substring(0, 512);
 	}
 
 	/**
