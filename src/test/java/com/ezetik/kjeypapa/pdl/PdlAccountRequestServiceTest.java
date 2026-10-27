@@ -27,6 +27,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import com.ezetik.kjeypapa.image.repository.ImageRepository;
 import com.ezetik.kjeypapa.pdl.model.PdlAccountRequest;
 import com.ezetik.kjeypapa.pdl.model.PdlAccountStatusEnum;
+import com.ezetik.kjeypapa.pdl.model.PdlPersonalInfo;
 import com.ezetik.kjeypapa.pdl.payload.EmploymentInfoRequest;
 import com.ezetik.kjeypapa.pdl.payload.PdlAccountRequestCreated;
 import com.ezetik.kjeypapa.pdl.payload.PdlAccountRequestPayload;
@@ -141,8 +142,21 @@ class PdlAccountRequestServiceTest {
 	}
 
 	@Test
-	@DisplayName("a blank employment status is refused before any user is created or SMS sent")
+	@DisplayName("a blank employment status is refused before anything is written — even a rejected row's ID release")
 	void employmentValidatedFirst() throws Exception {
+		// A rejected earlier request holds this ID number. A valid retry would
+		// release it; an invalid one must leave it exactly as it is, because
+		// create() is transactional and a refusal returns rather than throws.
+		User earlier = new User();
+		earlier.setUsername("010849777");
+		PdlPersonalInfo dead = new PdlPersonalInfo();
+		dead.setUser(earlier);
+		dead.setIdNo("110553867");
+		PdlAccountRequest rejected = new PdlAccountRequest();
+		rejected.setStatus(PdlAccountStatusEnum.REJECTED);
+		when(personalRepo.findByIdNo("110553867")).thenReturn(List.of(dead));
+		when(requestRepo.findByUser_Username("010849777")).thenReturn(Optional.of(rejected));
+
 		PdlAccountRequestPayload p = signup();
 		p.getEmployment().setEmploymentStatus("");
 
@@ -150,6 +164,8 @@ class PdlAccountRequestServiceTest {
 
 		assertThat(body.getType()).isEqualTo("INVALID");
 		assertThat(body.getMessage()).contains("employment status is required");
+		assertThat(dead.getIdNo()).isEqualTo("110553867");
+		verify(personalRepo, never()).save(any());
 		verify(userRepository, never()).save(any());
 		verify(sms, never()).sendSms(anyString(), anyString());
 	}

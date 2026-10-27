@@ -107,6 +107,18 @@ public class PdlAccountRequestService {
 				List<String> problems = PersonalInfoValidator.validate(p.getPersonal());
 				if (!problems.isEmpty())
 					return resp("INVALID", String.join("; ", problems), null, HttpStatus.EXPECTATION_FAILED);
+			}
+			// Every section is validated before anything is written. The duplicate
+			// check below can write (it releases a rejected row's ID number), and
+			// this method is transactional, so a refusal returned after it would
+			// still commit that write.
+			if (p.getEmployment() != null) {
+				EmploymentInfoValidator.normalise(p.getEmployment());
+				List<String> problems = EmploymentInfoValidator.validate(p.getEmployment());
+				if (!problems.isEmpty())
+					return resp("INVALID", String.join("; ", problems), null, HttpStatus.EXPECTATION_FAILED);
+			}
+			if (p.getPersonal() != null) {
 				// A second account on the same ID number would resolve to the same
 				// SBF CIF and let one person hold two loans. Rejected accounts do
 				// not block a retry.
@@ -124,12 +136,6 @@ public class PdlAccountRequestService {
 					dup.setIdNo(null);
 					personalRepo.save(dup);
 				}
-			}
-			if (p.getEmployment() != null) {
-				EmploymentInfoValidator.normalise(p.getEmployment());
-				List<String> problems = EmploymentInfoValidator.validate(p.getEmployment());
-				if (!problems.isEmpty())
-					return resp("INVALID", String.join("; ", problems), null, HttpStatus.EXPECTATION_FAILED);
 			}
 
 			// --- user (disabled until OTP; login gated on the LPO decision) ---
