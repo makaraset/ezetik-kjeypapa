@@ -299,6 +299,68 @@ Swagger (the framework logs a warning about it on every boot); and a TFF
 regression pass by someone who can log in — we altered six `sbf_note` date
 columns, so that is not a formality.
 
+## 6c. Deployed — 2026-10-27
+
+Backend `000a236` is live on `10.32.8.99`. Docker reports it **healthy**, with
+0 restarts and a 17.1 s boot.
+
+The release answers SBF's first round of UAT feedback:
+- every address carries a country;
+- work status and the other Appendix-2 employment fields are required;
+- the CamDigi face check is built but switched off.
+
+It also stops the signup reply exposing the customer's CIF (F19).
+
+| | |
+|---|---|
+| Backup taken first | `/root/backups/kjey_papa_db-pre007-20261027-092936.dump`, with the IDs of the rows 007 touched in `pre007-personal-ids-20261027-092936.txt` |
+| `007` | filled 18 correspondence and 18 permanent countries; birth and work had no blanks |
+| `008` | created `pdl_identity_verification`, with no CHECK |
+| Flags | `pdl.liveness.enabled`, `mock` and `required-for-approval` all `false` |
+| Rollback image | `kjeypapa-api:rollback-20261027`, the 2026-09-30 build |
+| Previous source | `src.prev-20261027-1401` and `pom.xml.prev-20261027-1401` in `/opt/kjeypapa` |
+| Errors since boot | none, and only the five framework WARNs every boot prints |
+
+Checked through the public URL, `https://kjeypapa-uat.sambatfinance.com.kh`:
+
+| Probe | Result |
+|---|---|
+| `GET /api/v1/pdl/dictionary/version` | 200 |
+| `POST /api/v1/pdl/account-request/liveness/challenge` | 200, `NOT_REQUIRED` |
+| `POST /api/v1/pdl/account-request`, work status blank | 417 `INVALID`, "employment status is required"; nothing written |
+
+**The healthcheck works again.** The previous image's probe used plain HTTP,
+which gets a 400 once the application serves TLS. Docker therefore reported a
+working container as unhealthy from then on. The HTTPS-first probe from
+`e29306f` reached the host's Dockerfile on 2026-09-30, but no image had been
+built from it until this one. That commit's token fix was already live: it was
+deployed and verified before it was committed.
+
+**This host no longer matches 6b.**
+- The application terminates TLS itself: SBF's compose sets `SERVER_SSL_*`, and
+  Tomcat reports `8080 (https)`.
+- The public name resolves to SBF's front end at `10.32.6.80`.
+
+**The swap changed exactly `e29306f..000a236`:** 9 files modified and 22
+added. It dropped six untracked items from the old source, none of which was in
+use:
+- `.DS_Store` and three empty folders;
+- `application-local.properties`: the `local` profile is never active here;
+- a copy of `firebase-service-account.json`: the application reads the mounted
+  `./secrets/firebase-service-account.json` through
+  `FIREBASE_CREDENTIALS_PATH`, an identical file, and would not boot without it.
+
+**Client addresses are still right behind the front end.** F15 was resolved on
+2026-09-28; this re-checks it after the rebuild. SBF trust forwarded addresses
+only from their three front-end nodes, at both layers:
+- Tomcat: `SERVER_FORWARD_HEADERS_STRATEGY=native` with
+  `SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES=10\.32\.6\.(80|81|82)`;
+- our check: `TRUSTED_PROXIES=10.32.6.80,10.32.6.81,10.32.6.82`.
+
+Verified through the public URL: seven requests carrying seven forged
+`X-Forwarded-For` values counted as one client, and the seventh got 429. So the
+per-IP limits on OCR and liveness see each customer's own address.
+
 ## 7. Verify after deploy
 
 1. `docker compose ps` — healthy, not just running.
