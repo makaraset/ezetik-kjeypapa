@@ -4,7 +4,7 @@
 |---|---|
 | **For** | Sambat Finance / Tricube LOS — integration developers |
 | **From** | Kjey PAPA (Ezetik) |
-| **Date** | 2026-09-07 |
+| **Date** | 2026-10-28 (first issued 2026-09-07) |
 | **Subject** | The seven endpoints you push to, their exact bodies, and how we answer |
 
 This is the reverse direction of `LOS_Integration_API_Spec.md`: everything here
@@ -17,7 +17,7 @@ than typing the bodies out:
 | File | What it is |
 |---|---|
 | `api/kjeypapa-los-webhooks.openapi.json` | OpenAPI 3.1, these seven endpoints and their schemas only. Imports into Swagger UI, Postman or Insomnia. |
-| `api/kjeypapa-los-webhooks.postman_collection.json` | Postman collection with a working example body for each. Set the `base` variable to the host we give you. |
+| `api/kjeypapa-los-webhooks.postman_collection.json` | Postman collection with a working example body for each. `base` is set to our UAT host; set `secret` to the value we send you. |
 
 Every example body in the collection was sent against our UAT and accepted. They
 use `appId: 999999`, which deliberately matches no application, so running the
@@ -29,15 +29,15 @@ with the AppId from your own submit response.
 ## 1. Where to send
 
 ```
-POST  {base}/api/v1/pdl/los/{event}
+POST  https://kjeypapa-uat.sambatfinance.com.kh/api/v1/pdl/los/{event}
 Content-Type: application/json
+X-LOS-Signature: <the shared secret we send you>
 ```
 
-`{base}` is the Kjey PAPA backend host — we will confirm the UAT and production
-hostnames with you separately, as they are not fixed in this document.
+That is our UAT host. We will confirm the production host with you before go-live.
 
-Server-to-server. **No customer JWT.** These paths are on our security
-whitelist, which is why the authentication in section 3 matters.
+Server-to-server. **No customer JWT**: the shared secret in section 3 is what
+authenticates you.
 
 ## 2. How we answer
 
@@ -51,8 +51,14 @@ Every response is the same envelope, always `application/json`:
 |---|---|---|---|
 | `SUCCESS` | 200 | Applied. | No |
 | `SUCCESS`, message starts `Ignored —` | 200 | Understood, no action taken — a transition that no longer applies to the loan's state, or a feature switched off. The message says which. | No |
-| `NOT_FOUND` | 200 | No loan matches the identifier you sent. | Not automatically — see §4 |
-| `BAD_REQUEST` | 400 | We could not read the body. The message names the field. | No, fix and resend |
+| `NOT_FOUND` | 200 | No loan matches the identifier you sent. The message names it. | Not automatically — see §4 |
+| `BAD_REQUEST` | 400 | We could not read the body, or it names no application. The message says which. | No, fix and resend |
+| `UNAUTHORIZED` | 401 | `X-LOS-Signature` missing or wrong. Nothing was processed. | No, fix the header |
+| `FORBIDDEN` | 403 | Only once we allowlist your addresses (§3): the call came from another one. | No, tell us |
+| `INTERNAL_SERVER_ERROR` | 500 | Failed on our side. | Yes, later |
+| `SERVICE_UNAVAILABLE` | 503 | Our authentication is misconfigured. Nothing was processed. | Yes, later, and tell us |
+
+No response at all, or a timeout: retry.
 
 Note the second row: a no-op is a **success**, not a separate status. Your queue
 should treat any 200 as delivered; the message is for a human reading a log, not
@@ -63,37 +69,48 @@ loan's current status: re-sending an `approved` you already sent does not create
 a second schedule, and a message that no longer applies to the loan's state
 is acknowledged and ignored rather than corrupting it. Retry freely on a network failure.
 
-## 3. Authentication — needs your decision
+## 3. Authentication
 
-Built and **currently disabled** (`pdl.webhook.auth.enabled=false`), because we
-do not want to guess the mechanism and lock you out. Two layers are ready:
+**Required on every call.** Send the shared secret we give you, unchanged, in
+the `X-LOS-Signature` header. We send the value separately, never in this
+document or the files that come with it.
 
-| Layer | Config | Behaviour |
-|---|---|---|
-| Source-IP allowlist | `pdl.webhook.allowed-ips` | Requests from other addresses are rejected |
-| Shared secret header | `pdl.webhook.secret`, header name `X-LOS-Signature` | Constant-time comparison |
+Without it, or with a wrong one, you get HTTP 401:
 
-> **We need from you:** the source addresses your LOS calls from, and whether
-> you prefer a static shared secret, an HMAC over the body, or mTLS. Every
-> payload below already carries an unused `signature` field if you want to sign
-> per-message. **This must be switched on before we go live** — until it is,
-> these endpoints are reachable by anyone who knows the URL.
+```json
+{ "type": "UNAUTHORIZED", "message": "Missing or wrong X-LOS-Signature header.", "data": null }
+```
+
+We check the header before reading the body, so a refused call never reaches a
+loan.
+
+**Optional, on request:** a source-address allowlist on top of the secret. Send
+us the addresses your LOS calls from and we will add it; calls from anywhere
+else then get HTTP 403. If you would rather sign each message (an HMAC over the
+body) or use mutual TLS, tell us. Every payload still carries an unused
+`signature` field for the HMAC case.
 
 ## 4. How we find the loan
 
-You send one identifier; we try three things in order:
+**Send `appId`**: the AppId your `/new-loan-application` returned. You confirmed
+on 2026-09-03 that it is the id you identify an application by.
 
-1. `losApplicationNo` — matched against the reference we stored at submit
-2. `appId` — matched against the `AppId` you returned from `/new-loan-application`
-3. `loanRefNo` — your own loan reference, once the loan exists
-
-**Prefer `appId`.** You confirmed on 2026-09-03 that it is the id you identify an
-application by, and it is the one we key on.
+Two others are accepted, for older callers: `losApplicationNo` (your AppRefId,
+used only when there is no `appId`) and `loanRefNo` (your loan reference, tried
+last).
 
 If nothing matches we answer `NOT_FOUND` with HTTP 200 rather than an error, so
-your queue does not treat it as a transport failure. Investigate rather than
-retry — it usually means the application was filed but our record of the id is
-wrong, which is worth a look on both sides.
+your queue does not treat it as a transport failure, and name what we looked for:
+
+```json
+{ "type": "NOT_FOUND", "message": "Application not found: appId 999999", "data": null }
+```
+
+Investigate rather than retry — it usually means the application was filed but
+our record of the id is wrong, which is worth a look on both sides.
+
+A body with none of the three is malformed, not missing, and gets HTTP 400. Field
+names are case-sensitive, so `AppId` for `appId` lands here too.
 
 ## 5. Date and number formats — please read
 
@@ -138,14 +155,23 @@ the most.
 | `schedule[]` | array | `installmentNo` (int), `dueDate` (instant), `principalDue`, `interestDue`, `feeDue`, `otherDue`, `totalDue` (numbers) |
 | `signature` | string | Unused today, see §3 |
 
-Applied only to a loan awaiting a decision; anything else is acknowledged with
-an `Ignored — application is <status>` message.
+**A field you leave out keeps the value we hold.** That includes `currency`,
+which comes from the customer's application. Send it anyway: the customer's
+acceptance screen shows the amounts in it.
+
+Applied to a loan awaiting a decision. Sent again before the customer accepts,
+it replaces the terms and the schedule. Anything else is acknowledged with an
+`Ignored — application is <status>` message.
 
 ### 6.2 `POST /api/v1/pdl/los/reject`
 
 Same body as `approved`; only the identifier, `statusCode` and `message` are
-read. The message reaches the customer, so please send something a person can
-act on.
+read. The message reaches the customer as the reason, exactly as you send it,
+so please send something a person can act on. For `R-LPO` and `R-AO` the
+customer sees our standard wording instead.
+
+Applied while the application awaits a decision, or is approved but not yet
+accepted by the customer. Once accepted, a reject is acknowledged and ignored.
 
 ### 6.3 `POST /api/v1/pdl/los/rework`
 
@@ -220,13 +246,13 @@ it freely and we will follow.
 
 ## 7. What we need back from you
 
-1. **The source IP addresses** your LOS calls from.
-2. **The authentication mechanism** — shared secret, HMAC, or mTLS (§3).
+1. **Confirmation that you send `X-LOS-Signature`** on every call, or which
+   alternative you need instead (HMAC or mTLS, §3).
+2. **Your source IP addresses**, if you want the allowlist on top of the secret.
 3. **Confirmation that rework = reject** for PDL (§6.3).
 4. **The bank-verification body**, once that contract exists (§6.6).
 5. Whether `/payday-disbursement` is a call **we** make after disbursement, or
    entirely yours.
 
-Nothing above is blocked on these: all seven endpoints accept traffic today, and
-turning authentication on is a configuration change on our side once you tell us
-what to expect.
+Nothing above is blocked on these: all seven endpoints accept authenticated
+traffic today.

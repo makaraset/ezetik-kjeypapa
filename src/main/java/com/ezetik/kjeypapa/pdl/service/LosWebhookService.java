@@ -1,6 +1,7 @@
 package com.ezetik.kjeypapa.pdl.service;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,8 +39,8 @@ import jakarta.transaction.Transactional;
  * {@link PaydayLoan} status, stores LOS-pushed documents/schedule, then notifies
  * the customer. Endpoints are exposed by {@code LosWebhookController}.
  *
- * NOTE: signature verification is TBD (BRS Appendix); until then these run on a
- * security whitelist. Add the real verification once the LOS contract lands.
+ * Callers are authenticated before they get here, by
+ * {@code LosWebhookAuthInterceptor} (shared secret and/or address allowlist).
  */
 @Service
 public class LosWebhookService {
@@ -77,6 +78,8 @@ public class LosWebhookService {
 	@Transactional
 	public ResponseEntity<Message<String>> handleReject(LosNotificationPayload p) {
 		try {
+			if (!identified(p))
+				return noIdentifier();
 			PaydayLoan loan = find(p);
 			if (loan == null)
 				return notFound(p);
@@ -101,6 +104,8 @@ public class LosWebhookService {
 	@Transactional
 	public ResponseEntity<Message<String>> handleRework(LosNotificationPayload p) {
 		try {
+			if (!identified(p))
+				return noIdentifier();
 			PaydayLoan loan = find(p);
 			if (loan == null)
 				return notFound(p);
@@ -125,6 +130,8 @@ public class LosWebhookService {
 	@Transactional
 	public ResponseEntity<Message<String>> handleApproved(LosNotificationPayload p) {
 		try {
+			if (!identified(p))
+				return noIdentifier();
 			PaydayLoan loan = find(p);
 			if (loan == null)
 				return notFound(p);
@@ -137,16 +144,29 @@ public class LosWebhookService {
 			loan.setApprovedDate(Instant.now()); // starts the acceptance cut-off clock (V21)
 			loan.setLosStatusCode(p.getStatusCode());
 			loan.setLosMessage(p.getMessage());
-			loan.setLoanFormRef(p.getLoanFormRef());
-			loan.setLoanContractFileRef(p.getLoanContractFileRef());
-			loan.setRepaymentScheduleRef(p.getRepaymentScheduleRef());
+			// A field the body leaves out keeps what we hold, like the fee set
+			// below. Above all the currency: it is the application's own, and
+			// the acceptance page shows anything but KHR as dollars, so an
+			// approve without it put riel amounts on screen as USD.
+			if (sent(p.getLoanFormRef()))
+				loan.setLoanFormRef(p.getLoanFormRef());
+			if (sent(p.getLoanContractFileRef()))
+				loan.setLoanContractFileRef(p.getLoanContractFileRef());
+			if (sent(p.getRepaymentScheduleRef()))
+				loan.setRepaymentScheduleRef(p.getRepaymentScheduleRef());
 			// Active-loan detail (My Loan card).
-			loan.setLoanRefNo(p.getLoanRefNo());
-			loan.setSettlementAccountNo(p.getSettlementAccountNo());
-			loan.setCurrency(p.getCurrency());
-			loan.setTenor(p.getTenor());
-			loan.setOutstandingAmount(p.getOutstandingAmount());
-			loan.setLoanDocRef(p.getLoanDocRef());
+			if (sent(p.getLoanRefNo()))
+				loan.setLoanRefNo(p.getLoanRefNo());
+			if (sent(p.getSettlementAccountNo()))
+				loan.setSettlementAccountNo(p.getSettlementAccountNo());
+			if (sent(p.getCurrency()))
+				loan.setCurrency(p.getCurrency());
+			if (p.getTenor() != null)
+				loan.setTenor(p.getTenor());
+			if (p.getOutstandingAmount() != null)
+				loan.setOutstandingAmount(p.getOutstandingAmount());
+			if (sent(p.getLoanDocRef()))
+				loan.setLoanDocRef(p.getLoanDocRef());
 			// Quote/fee detail: LOS-pushed values override the create-time quote (QC1.3).
 			if (p.getRepaymentAmount() != null)
 				loan.setRepaymentAmount(p.getRepaymentAmount());
@@ -208,9 +228,11 @@ public class LosWebhookService {
 	@Transactional
 	public ResponseEntity<Message<String>> handleDisbursement(LosDisbursementPayload p) {
 		try {
+			if (!identified(reference(p), p.getLoanRefNo()))
+				return noIdentifier();
 			PaydayLoan loan = findLoan(reference(p), p.getLoanRefNo());
 			if (loan == null)
-				return notFoundRef(reference(p), p.getLoanRefNo());
+				return notFound(p.getAppId(), p.getLosApplicationNo(), p.getLoanRefNo());
 
 			if ("DISBURSED".equalsIgnoreCase(p.getDisbursementStatus())) {
 				loan.setDisbursementTxnId(p.getDisbursementTxnId());
@@ -249,9 +271,11 @@ public class LosWebhookService {
 			if (!bankVerificationEnabled)
 				return ok("Ignored — bank-verification hand-off not enabled (pending Sambat contract, Q4)");
 
+			if (!identified(reference(p), p.getLoanRefNo()))
+				return noIdentifier();
 			PaydayLoan loan = findLoan(reference(p), p.getLoanRefNo());
 			if (loan == null)
-				return notFoundRef(reference(p), p.getLoanRefNo());
+				return notFound(p.getAppId(), p.getLosApplicationNo(), p.getLoanRefNo());
 
 			String status = p.getVerificationStatus();
 			if ("SUCCESS".equalsIgnoreCase(status)) {
@@ -290,9 +314,11 @@ public class LosWebhookService {
 	@Transactional
 	public ResponseEntity<Message<String>> handleLoanUpdate(LosLoanUpdatePayload p) {
 		try {
+			if (!identified(reference(p), p.getLoanRefNo()))
+				return noIdentifier();
 			PaydayLoan loan = findLoan(reference(p), p.getLoanRefNo());
 			if (loan == null)
-				return notFoundRef(reference(p), p.getLoanRefNo());
+				return notFound(p.getAppId(), p.getLosApplicationNo(), p.getLoanRefNo());
 
 			if (p.getOutstandingAmount() != null)
 				loan.setOutstandingAmount(p.getOutstandingAmount());
@@ -421,10 +447,48 @@ public class LosWebhookService {
 		return null;
 	}
 
-	private ResponseEntity<Message<String>> notFoundRef(String losApplicationNo, String loanRefNo) {
-		return new ResponseEntity<>(new Message<>("NOT_FOUND",
-				"Loan not found: " + (losApplicationNo != null ? losApplicationNo : loanRefNo), null),
+	private static boolean identified(LosNotificationPayload p) {
+		return p != null && identified(reference(p), p.getLoanRefNo());
+	}
+
+	private static boolean identified(String reference, String loanRefNo) {
+		return sent(reference) || sent(loanRefNo);
+	}
+
+	private static boolean sent(String value) {
+		return value != null && !value.isBlank();
+	}
+
+	/**
+	 * A body that names no application is malformed, not a missing loan: a 400
+	 * tells their queue to fix the body rather than go looking for the loan.
+	 */
+	private ResponseEntity<Message<String>> noIdentifier() {
+		return new ResponseEntity<>(new Message<>("BAD_REQUEST",
+				"No application identifier in the body. Send appId: the AppId /new-loan-application returned.",
+				null), HttpStatus.BAD_REQUEST);
+	}
+
+	/**
+	 * Says which identifier we looked for. This used to print losApplicationNo
+	 * whatever was sent, so a miss on an appId-only body read "Application not
+	 * found: null" and looked as if we had ignored the AppId.
+	 */
+	private ResponseEntity<Message<String>> notFound(Long appId, String losApplicationNo, String loanRefNo) {
+		List<String> tried = new ArrayList<>();
+		if (appId != null)
+			tried.add("appId " + appId);
+		else if (sent(losApplicationNo))
+			tried.add("losApplicationNo " + losApplicationNo);
+		if (sent(loanRefNo))
+			tried.add("loanRefNo " + loanRefNo);
+		return new ResponseEntity<>(
+				new Message<>("NOT_FOUND", "Application not found: " + String.join(", ", tried), null),
 				HttpStatus.OK);
+	}
+
+	private ResponseEntity<Message<String>> notFound(LosNotificationPayload p) {
+		return notFound(p.getAppId(), p.getLosApplicationNo(), p.getLoanRefNo());
 	}
 
 	/** Map the LOS status code to the user-facing message (BRS 2.4/2.5). */
@@ -463,12 +527,5 @@ public class LosWebhookService {
 		e.printStackTrace();
 		return new ResponseEntity<>(new Message<>("INTERNAL_SERVER_ERROR", e.getMessage(), null),
 				HttpStatus.INTERNAL_SERVER_ERROR);
-	}
-
-	private ResponseEntity<Message<String>> notFound(LosNotificationPayload p) {
-		return new ResponseEntity<>(
-				new Message<>("NOT_FOUND", "Application not found: " + (p != null ? p.getLosApplicationNo() : null),
-						null),
-				HttpStatus.OK);
 	}
 }

@@ -1,13 +1,18 @@
 {
   "info": {
     "name": "Kjey PAPA — LOS inbound webhooks",
-    "description": "The seven endpoints Sambat LOS calls on Kjey PAPA.\n\nSet the `base` variable to the host we give you. Every body here is a working example — each was sent against our UAT and accepted.\n\nTimestamps must be full ISO-8601 instants; a bare date is rejected with HTTP 400 naming the field.\n\n**appId 999999 is a deliberate placeholder that matches no application.** Every request will answer NOT_FOUND until you replace it with the AppId from your own submit response — which is intentional, so running the collection as-is cannot alter a real loan.",
+    "description": "The seven endpoints Sambat LOS calls on Kjey PAPA.\n\n`base` is set to our UAT host. **Set the `secret` variable** to the shared secret we send you separately: every request sends it in X-LOS-Signature, and without it the answer is HTTP 401. Every body here is a working example — each was sent against our UAT and accepted.\n\nTimestamps must be full ISO-8601 instants; a bare date is rejected with HTTP 400 naming the field.\n\n**appId 999999 is a deliberate placeholder that matches no application.** Every request will answer NOT_FOUND until you replace it with the AppId from your own submit response — which is intentional, so running the collection as-is cannot alter a real loan.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     {
       "key": "base",
-      "value": "https://uat.example"
+      "value": "https://kjeypapa-uat.sambatfinance.com.kh"
+    },
+    {
+      "key": "secret",
+      "value": "",
+      "description": "The shared secret we send you separately. Never commit it."
     }
   ],
   "item": [
@@ -19,6 +24,10 @@
           {
             "key": "Content-Type",
             "value": "application/json"
+          },
+          {
+            "key": "X-LOS-Signature",
+            "value": "{{secret}}"
           }
         ],
         "url": {
@@ -54,6 +63,10 @@
           {
             "key": "Content-Type",
             "value": "application/json"
+          },
+          {
+            "key": "X-LOS-Signature",
+            "value": "{{secret}}"
           }
         ],
         "url": {
@@ -89,6 +102,10 @@
           {
             "key": "Content-Type",
             "value": "application/json"
+          },
+          {
+            "key": "X-LOS-Signature",
+            "value": "{{secret}}"
           }
         ],
         "url": {
@@ -124,6 +141,10 @@
           {
             "key": "Content-Type",
             "value": "application/json"
+          },
+          {
+            "key": "X-LOS-Signature",
+            "value": "{{secret}}"
           }
         ],
         "url": {
@@ -159,6 +180,10 @@
           {
             "key": "Content-Type",
             "value": "application/json"
+          },
+          {
+            "key": "X-LOS-Signature",
+            "value": "{{secret}}"
           }
         ],
         "url": {
@@ -194,6 +219,10 @@
           {
             "key": "Content-Type",
             "value": "application/json"
+          },
+          {
+            "key": "X-LOS-Signature",
+            "value": "{{secret}}"
           }
         ],
         "url": {
@@ -229,6 +258,10 @@
           {
             "key": "Content-Type",
             "value": "application/json"
+          },
+          {
+            "key": "X-LOS-Signature",
+            "value": "{{secret}}"
           }
         ],
         "url": {

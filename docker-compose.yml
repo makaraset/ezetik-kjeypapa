@@ -58,8 +58,9 @@ services:
       # looks entirely healthy and files nothing with Sambat.
       LOS_MOCK_ENABLED: "false"
 
-      # Sambat's webhooks are unauthenticated until both of these are set.
-      PDL_WEBHOOK_AUTH_ENABLED: ${PDL_WEBHOOK_AUTH_ENABLED:-false}
+      # Sambat's webhooks. On by default: with no secret in .env every webhook
+      # is refused, rather than served to anyone who finds the URL.
+      PDL_WEBHOOK_AUTH_ENABLED: ${PDL_WEBHOOK_AUTH_ENABLED:-true}
       PDL_WEBHOOK_ALLOWED_IPS: ${PDL_WEBHOOK_ALLOWED_IPS:-}
       PDL_WEBHOOK_SECRET: ${PDL_WEBHOOK_SECRET:-}
 

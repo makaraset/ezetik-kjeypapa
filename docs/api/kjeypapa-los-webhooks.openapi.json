@@ -2,21 +2,16 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Kjey PAPA — inbound webhooks for Sambat LOS",
-    "version": "2026-09-07",
-    "description": "The seven endpoints Sambat LOS calls on Kjey PAPA. This file contains ONLY those endpoints; the rest of our API is not part of this integration.\n\n**Every timestamp must be a full ISO-8601 instant** (2026-08-21T09:00:00Z). A bare date is rejected with HTTP 400 naming the field.\n\nAll responses use the envelope {type, message, data}. A 200 means delivered — including a no-op, whose message begins \"Ignored —\". Handlers are idempotent, so re-delivery after a network failure is safe.\n\nSee PDL_Our_Webhook_Endpoints_for_LOS.docx for the narrative version.",
+    "version": "2026-10-28",
+    "description": "The seven endpoints Sambat LOS calls on Kjey PAPA. This file contains ONLY those endpoints; the rest of our API is not part of this integration.\n\n**Every timestamp must be a full ISO-8601 instant** (2026-08-21T09:00:00Z). A bare date is rejected with HTTP 400 naming the field.\n\nAll responses use the envelope {type, message, data}. A 200 means delivered — including a no-op, whose message begins \"Ignored —\". Handlers are idempotent, so re-delivery after a network failure is safe.\n\n**Every call must carry the shared secret** in the X-LOS-Signature header; it is sent to you separately. Without it, or with a wrong one, the answer is HTTP 401 and nothing is processed.\n\nIdentify the application by appId. A miss answers NOT_FOUND naming what was looked for; a body naming no application answers HTTP 400.\n\nSee PDL_Our_Webhook_Endpoints_for_LOS.docx for the narrative version.",
     "contact": {
       "name": "Kjey PAPA (Ezetik)"
     }
   },
   "servers": [
     {
-      "url": "{base}",
-      "description": "Kjey PAPA backend — host supplied separately",
-      "variables": {
-        "base": {
-          "default": "https://uat.example"
-        }
-      }
+      "url": "https://kjeypapa-uat.sambatfinance.com.kh",
+      "description": "Kjey PAPA UAT. The production host will be confirmed before go-live."
     }
   ],
   "tags": [
@@ -44,7 +39,7 @@
         },
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "SUCCESS (applied, or a no-op whose message starts \"Ignored —\"), or NOT_FOUND naming the identifier looked for.",
             "content": {
               "*/*": {
                 "schema": {
@@ -52,6 +47,21 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
           }
         }
       }
@@ -74,7 +84,7 @@
         },
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "SUCCESS (applied, or a no-op whose message starts \"Ignored —\"), or NOT_FOUND naming the identifier looked for.",
             "content": {
               "*/*": {
                 "schema": {
@@ -82,6 +92,21 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
           }
         }
       }
@@ -104,7 +129,7 @@
         },
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "SUCCESS (applied, or a no-op whose message starts \"Ignored —\"), or NOT_FOUND naming the identifier looked for.",
             "content": {
               "*/*": {
                 "schema": {
@@ -112,6 +137,21 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
           }
         },
         "description": "Accepted and logged, but the product configuration is NOT yet stored — our pricing tiers remain configuration on our side. Send it if convenient; we will wire it to real product config when you want the catalogue to drive our tiers."
@@ -135,7 +175,7 @@
         },
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "SUCCESS (applied, or a no-op whose message starts \"Ignored —\"), or NOT_FOUND naming the identifier looked for.",
             "content": {
               "*/*": {
                 "schema": {
@@ -143,6 +183,21 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
           }
         }
       }
@@ -165,7 +220,7 @@
         },
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "SUCCESS (applied, or a no-op whose message starts \"Ignored —\"), or NOT_FOUND naming the identifier looked for.",
             "content": {
               "*/*": {
                 "schema": {
@@ -173,6 +228,21 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
           }
         }
       }
@@ -195,7 +265,7 @@
         },
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "SUCCESS (applied, or a no-op whose message starts \"Ignored —\"), or NOT_FOUND naming the identifier looked for.",
             "content": {
               "*/*": {
                 "schema": {
@@ -203,6 +273,21 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
           }
         }
       }
@@ -225,7 +310,7 @@
         },
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "SUCCESS (applied, or a no-op whose message starts \"Ignored —\"), or NOT_FOUND naming the identifier looked for.",
             "content": {
               "*/*": {
                 "schema": {
@@ -233,6 +318,21 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
           }
         }
       }
@@ -569,8 +669,65 @@
         "type": "apiKey",
         "in": "header",
         "name": "X-LOS-Signature",
-        "description": "Shared secret. Currently DISABLED on our side pending your choice of mechanism (static secret, HMAC over the body, or mTLS) and your source IP addresses. Must be enabled before production."
+        "description": "Shared secret, sent to you separately. Required on every call; missing or wrong answers HTTP 401 UNAUTHORIZED."
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "BAD_REQUEST: the body could not be read, or names no application. The message says which.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MessageString"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "UNAUTHORIZED: X-LOS-Signature missing or wrong. Nothing was processed.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MessageString"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "FORBIDDEN: only once your addresses are allowlisted; the call came from another address.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MessageString"
+            }
+          }
+        }
+      },
+      "ServerError": {
+        "description": "INTERNAL_SERVER_ERROR: failed on our side. Retry later; re-delivery is safe.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MessageString"
+            }
+          }
+        }
+      },
+      "Unavailable": {
+        "description": "SERVICE_UNAVAILABLE: our authentication is misconfigured. Nothing was processed. Retry later, and tell us.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MessageString"
+            }
+          }
+        }
       }
     }
-  }
+  },
+  "security": [
+    {
+      "LosSharedSecret": []
+    }
+  ]
 }

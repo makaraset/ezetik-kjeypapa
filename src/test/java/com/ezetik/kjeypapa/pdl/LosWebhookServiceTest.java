@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -23,6 +24,7 @@ import com.ezetik.kjeypapa.notification.config.NotificationService;
 import com.ezetik.kjeypapa.pdl.model.PaydayLoan;
 import com.ezetik.kjeypapa.pdl.model.PdlStatusEnum;
 import com.ezetik.kjeypapa.pdl.payload.LosBankVerificationPayload;
+import com.ezetik.kjeypapa.pdl.payload.LosLoanUpdatePayload;
 import com.ezetik.kjeypapa.pdl.payload.LosNotificationPayload;
 import com.ezetik.kjeypapa.pdl.payload.LosNotificationPayload.ScheduleRow;
 import com.ezetik.kjeypapa.pdl.repository.PaydayLoanRepository;
@@ -99,8 +101,63 @@ class LosWebhookServiceTest {
 		assertThat(loan.getStatus()).isEqualTo(PdlStatusEnum.Approved);
 		assertThat(loan.getLoanRefNo()).isEqualTo("PDL-2026-003");
 		assertThat(loan.getTenor()).isEqualTo(3);
+		assertThat(loan.getCurrency()).isEqualTo("USD");
 		assertThat(loan.getDaysPastDue()).isZero();
 		verify(scheduleRepo, times(2)).save(any()); // one per installment
+	}
+
+	@Test
+	void handleApproved_keepsWhatTheBodyLeavesOut() {
+		// An approve without currency used to erase the application's own, and
+		// the acceptance page shows anything but KHR as dollars: a riel loan
+		// would have been offered to the customer in USD.
+		PaydayLoan loan = loanFor("LOS-4");
+		loan.setCurrency("KHR");
+		loan.setLoanRefNo("PDL-2026-004");
+
+		service.handleApproved(payload("LOS-4", null, "Approved"));
+
+		assertThat(loan.getStatus()).isEqualTo(PdlStatusEnum.Approved);
+		assertThat(loan.getCurrency()).isEqualTo("KHR");
+		assertThat(loan.getLoanRefNo()).isEqualTo("PDL-2026-004");
+
+		LosNotificationPayload blank = payload("LOS-4", null, "Approved");
+		blank.setCurrency(" ");
+		service.handleApproved(blank); // a re-delivery, with a blank currency
+		assertThat(loan.getCurrency()).isEqualTo("KHR");
+	}
+
+	@Test
+	void notFound_namesTheIdentifierItLookedFor() {
+		// It used to print losApplicationNo whatever was sent, so an appId-only
+		// body read "Application not found: null" — as if the AppId was ignored.
+		LosNotificationPayload p = new LosNotificationPayload();
+		p.setAppId(999999L);
+
+		ResponseEntity<Message<String>> r = service.handleApproved(p);
+
+		assertThat(r.getStatusCode().value()).isEqualTo(200);
+		assertThat(r.getBody().getType()).isEqualTo("NOT_FOUND");
+		assertThat(r.getBody().getMessage()).isEqualTo("Application not found: appId 999999");
+
+		LosLoanUpdatePayload u = new LosLoanUpdatePayload();
+		u.setAppId(999999L);
+		u.setLoanRefNo("PDL-X");
+		assertThat(service.handleLoanUpdate(u).getBody().getMessage())
+				.isEqualTo("Application not found: appId 999999, loanRefNo PDL-X");
+	}
+
+	@Test
+	void aBodyNamingNoApplicationIsABadRequest() {
+		ResponseEntity<Message<String>> r = service.handleReject(new LosNotificationPayload());
+
+		assertThat(r.getStatusCode().value()).isEqualTo(400);
+		assertThat(r.getBody().getType()).isEqualTo("BAD_REQUEST");
+		assertThat(r.getBody().getMessage()).contains("appId");
+
+		assertThat(service.handleLoanUpdate(new LosLoanUpdatePayload()).getStatusCode().value()).isEqualTo(400);
+		assertThat(service.handleReject(null).getStatusCode().value()).isEqualTo(400);
+		verifyNoInteractions(repo);
 	}
 
 	@Test

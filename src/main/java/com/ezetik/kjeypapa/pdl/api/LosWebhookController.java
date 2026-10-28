@@ -19,8 +19,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * Inbound webhooks from Sambat LOS (server-to-server). These are on the security
- * whitelist (no customer JWT); signature verification is TBD per the LOS contract.
- * Maps to BRS 2.2 / 2.4 / 2.5 / 2.6.
+ * whitelist (no customer JWT); {@code LosWebhookAuthInterceptor} authenticates
+ * every call to this controller. Maps to BRS 2.2 / 2.4 / 2.5 / 2.6.
  */
 @RestController
 @RequestMapping("/api/v1/pdl/los")

@@ -12,6 +12,37 @@ it was found, so a reader can judge how much it has actually been checked.
 
 ## Open findings
 
+### F22 — the OCR and liveness rate limits can be skipped by encoding the path
+**Severity:** medium · **Status:** open · **Found:** 2026-10-28, fixing F16
+
+`OcrRateLimitFilter` picks its budget with `limitFor(request.getRequestURI())`,
+and the raw URI keeps any percent-encoding while Spring MVC matches the decoded
+path. So `/api/v1/pdl/%6fcr-nid` should reach the OCR handler with no budget
+at all, the way `/api/v1/pdl/%6cos/reject` reached the reject handler past the old
+webhook filter (verified on UAT for F16). Not exercised against OCR itself,
+because every OCR call goes to SBF.
+
+Fix: decide by handler, as `LosWebhookAuthInterceptor` now does, or match on the
+decoded path.
+
+### F21 — an approve without `currency` erased the application's own
+**Severity:** high · **Status:** ~~open~~ **FIXED 2026-10-28, not yet deployed** ·
+**Found:** 2026-10-28, answering SBF's "how do we send approve/reject"
+
+`LosWebhookService.handleApproved` copied nine fields from the body
+unconditionally, so a field Sambat left out overwrote what we held with null.
+For `currency` that was the application's own, and `pdl_accept_page.dart:84`
+shows anything that is not `KHR` as dollars: a riel application approved
+without `currency` would have been offered to the customer in USD, on the
+screen where they accept the contract. A field left out now keeps its value,
+the same rule the fee set already followed.
+
+Found alongside: every `NOT_FOUND` on an approve, reject or rework body read
+`Application not found: null` when only `appId` was sent, because it printed
+`losApplicationNo` — so Sambat's first test would have looked as if we ignored
+the AppId. It now names the identifier looked for, and a body naming no
+application at all answers 400 instead of `NOT_FOUND`.
+
 ### F20 — OTP verification matches on the code alone, across every user
 **Severity:** medium · **Status:** open · **Found:** 2026-10-27, designing the
 CamDigi step, which gates on "OTP done"
@@ -98,7 +129,8 @@ filter. Three regression tests cover expired, malformed, and absent tokens.
 
 ### F16 — the LOS webhooks are unauthenticated and reachable from the public internet
 **Severity: HIGH — close before the first real application exists on UAT**
-**Status:** open · **Found:** 2026-09-29, while building the simulator against UAT
+**Status:** open — fix built 2026-10-28, closes when UAT runs it with a secret and
+Sambat send it · **Found:** 2026-09-29, while building the simulator against UAT
 
 `kjeypapa-uat.sambatfinance.com.kh` is **not** internal. It resolves publicly to
 `103.118.45.11` and `203.189.133.141`, and answers from the open internet —
@@ -130,10 +162,29 @@ problem, and it stops being true with the first filed application.
 1. **Ask SBF to restrict `/api/v1/pdl/los/**` at the load balancer** to Tricube's
    source addresses. No code change, no deploy, effective immediately.
 2. Set `PDL_WEBHOOK_SECRET` and enable `PDL_WEBHOOK_AUTH_ENABLED=true`, then give
-   Sambat the secret. Note enabling the flag with both the secret and the
-   allowlist empty does **nothing** — the filter skips both checks.
+   Sambat the secret.
 3. Longer term, the mechanism Sambat prefer (HMAC over the body, or mTLS), which
    is already an open question with them.
+
+**Re-checked 2026-10-28:** still open from the internet — `approved` and
+`reject` both answered an anonymous call. Building item 2 turned up three
+defects in the filter itself, any one of which would have left it open after
+being switched on:
+
+- **An encoded path skipped it.** It ran only when the raw URI started with
+  `/api/v1/pdl/los/`, while Spring matches the decoded path.
+  `/api/v1/pdl/%6cos/reject` and `/%61pi/v1/pdl/los/reject` both reached the
+  reject handler on UAT, through SBF's load balancer.
+- **The allowlist believed a forged address.** It read the left-most
+  `X-Forwarded-For` entry, which the caller writes.
+- **On but unconfigured passed everything**, the note this item used to carry.
+
+All three are fixed by `LosWebhookAuthInterceptor`, which replaces the filter:
+it checks every request that will run a `LosWebhookController` method, however
+the path is spelled; resolves the address through `ClientAddress`; refuses every
+call (503) when switched on without a secret of at least 32 characters or an
+allowlist; and answers 401 in the webhook envelope instead of `sendError`. The
+compose file now defaults it on.
 
 This also retires the premise behind **D8**: Swagger was left enabled on the
 argument that UAT sits on a private network. It does not. `/swagger-ui` and
