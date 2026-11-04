@@ -125,13 +125,15 @@ The scheduler is unit-tested; this exercises it live. It needs a backend restart
 near-future cron, so it's **optional**.
 
 13. [ ] Leave an **Approved (un-accepted)** loan (approve another via step 10, don't Accept).
-14. [ ] **Reminder:** during 08:00–17:00 Phnom-Penh time, at the next :00/:30 tick →
+14. [ ] **Reminder:** between 08:00 and 16:30 Phnom-Penh time, at the next :00/:30 tick →
     **Expect** a push: *"Please review and confirm your loan offer before 5 PM today."*
 15. [ ] **Cut-off (fast recipe):** set in `application.properties`
     `pdl.acceptance.cutoff-cron=0 <now+2min> * * * *` and `pdl.acceptance.grace-minutes=0`,
     restart the backend, wait for the tick.
     - **Expect:** the Approved-un-accepted loan → **Rejected** ("Not confirmed before the daily
       cut-off"), a push arrives, and the mock LOS receives an `"N"` decision (backend log).
+    - **Expect:** the **Accepted** loan from step 12 is untouched: it waits for the disbursement
+      in G. Only with `pdl.bank-verification.enabled=true` does an Accepted loan expire too (F23).
     - **Restore** the cron/grace afterwards.
 
 ---

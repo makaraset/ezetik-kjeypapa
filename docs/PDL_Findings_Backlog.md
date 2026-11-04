@@ -12,6 +12,38 @@ it was found, so a reader can judge how much it has actually been checked.
 
 ## Open findings
 
+### F23 — the 17:00 cut-off expired loans the customer had already accepted
+**Severity:** high · **Status:** ~~open~~ **FIXED 2026-11-04, not yet deployed** ·
+**Found:** 2026-11-04, writing SBF's approve-and-reject guide
+
+`PdlAcceptanceScheduler.enforceCutoff` swept `Accepted` loans along with
+`Approved` ones. That is right for the V26 bank hand-off, where an accepted loan
+whose hand-off has not succeeded by 17:00 expires (QB4.1). But the hand-off is
+off in the app (`PdlFeatureFlags.bankAppHandoffEnabled`), so accepting goes
+straight to Sambat as `/customer-accepted` and the loan only waits for their
+disbursement. A loan accepted in the morning and not disbursed by 17:00 was
+marked Rejected `R-CUTOFF` and the customer told the offer had expired, while
+Sambat, who cannot be told (their API has no decline call), went on to disburse
+it. Our disbursement webhook then moved it to Disbursed, after the "expired"
+notification. Read from the code; not yet checked against UAT's data.
+
+The sweep now takes `Accepted` loans only while `pdl.bank-verification.enabled`
+is on, and that flag is off again, as its own comment and test script §H
+already said it should be. Turn it on only together with the app's flag; a
+test pins the scheduler and the webhook to the same switch and default.
+Loans already expired this way on UAT stay Rejected.
+
+Found alongside:
+- The dashboard's Accepted card offered "Next: verify bank" into the SAMPLE
+  bank screen whatever the app flag said. The flag was meant to keep that
+  screen away from testers. The card now offers the schedule while the
+  hand-off is off. Build 18 still shows the old button, which after the F16
+  deploy answers 401, because the app does not hold the webhook secret.
+- The reminder cron ran to 17:30. The 17:00 reminder landed on the expiry
+  itself, and the 17:30 one told offers approved after the cut-off to confirm
+  "before 5 PM today". The last reminder is now 16:30, and a test keeps every
+  reminder before the cut-off.
+
 ### F22 — the OCR and liveness rate limits can be skipped by encoding the path
 **Severity:** medium · **Status:** open · **Found:** 2026-10-28, fixing F16
 

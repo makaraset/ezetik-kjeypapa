@@ -43,8 +43,17 @@ public class PdlAcceptanceScheduler {
 	@Value("${pdl.acceptance.grace-minutes:30}")
 	private long graceMinutes;
 
+	/**
+	 * Whether accepting is followed by the bank hand-off (V26 page 3). Only then
+	 * does an Accepted loan still wait on the customer. Without it, accepting
+	 * goes straight to Sambat as /customer-accepted, and the loan waits for
+	 * their disbursement. The same switch as the bank-verification webhook's.
+	 */
+	@Value("${pdl.bank-verification.enabled:false}")
+	private boolean bankHandoffEnabled;
+
 	/** Remind applicants with an Approved (un-accepted) offer to confirm before cut-off. */
-	@Scheduled(cron = "${pdl.acceptance.reminder-cron:0 0/30 8-17 * * *}",
+	@Scheduled(cron = "${pdl.acceptance.reminder-cron:0 0/30 8-16 * * *}",
 			zone = "${pdl.acceptance.timezone:Asia/Phnom_Penh}")
 	@Transactional
 	public void sendReminders() {
@@ -60,12 +69,16 @@ public class PdlAcceptanceScheduler {
 	@Transactional
 	public void enforceCutoff() {
 		Instant threshold = Instant.now().minus(graceMinutes, ChronoUnit.MINUTES);
-		// Approved = never confirmed; Accepted = confirmed but the bank hand-off
-		// never succeeded — both expire at the daily cut-off (QB4.1: Re-Attempt
-		// is disabled once the cut-off passes). Pending_Bank_Verification is
-		// in-flight at the bank and is left alone.
+		// Approved = never confirmed, so it expires. Accepted expires only while
+		// the bank hand-off is on: then it means confirmed but the hand-off never
+		// succeeded (QB4.1: Re-Attempt is disabled once the cut-off passes).
+		// Without the hand-off, accepting already told Sambat, who disburse it,
+		// and their API has no call to tell them we expired it, so it waits for
+		// their disbursement webhook. Pending_Bank_Verification is in-flight at
+		// the bank and is left alone.
 		java.util.List<PaydayLoan> sweep = new java.util.ArrayList<>(repo.findByStatus(PdlStatusEnum.Approved));
-		sweep.addAll(repo.findByStatus(PdlStatusEnum.Accepted));
+		if (bankHandoffEnabled)
+			sweep.addAll(repo.findByStatus(PdlStatusEnum.Accepted));
 		for (PaydayLoan loan : sweep) {
 			// Skip offers approved within the grace window (e.g. just before the cut-off).
 			if (loan.getApprovedDate() != null && loan.getApprovedDate().isAfter(threshold))
