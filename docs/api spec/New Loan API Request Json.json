@@ -1,0 +1,18 @@
+{
+    "ErrorMessage": null,
+    "IsSuccess": "Success",
+    "Result": [
+        {
+            "AppId": 8032,
+            "AppRefId": 254906
+        }
+    ],
+    "MissingData": null
+}
+
+{
+    "ErrorMessage": "Application invalid, required data is missing",
+    "IsSuccess": "False",
+    "Result": [],
+    "MissingData": "CustP_CAddCBCommune | "
+}

@@ -29,7 +29,7 @@ public class SMSService {
 
 		try {
 			String uri = basedUrl + smsUrl + "?mgsStr=" + UriUtils.encodePath(message, "UTF-8") + "&sendToNumber="
-					+ phoneNumber;
+					+ UriUtils.encodeQueryParam(phoneNumber, "UTF-8");
 
 			HttpRequest request = HttpRequest.newBuilder().uri(new URI(uri))
 					.header("Authorization", "Bearer " + auth.getAccessToken())

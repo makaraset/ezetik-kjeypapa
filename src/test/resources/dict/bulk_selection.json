@@ -1,0 +1,21 @@
+{
+  "province": [
+    {"id": 12, "description": "Phnom Penh", "ctryId": 1, "deleted": "false"},
+    {"id": 1,  "description": "Banteay Meanchey", "ctryId": 1, "deleted": "false"},
+    {"id": 99, "description": "Retired Province", "ctryId": 1, "deleted": "true"}
+  ],
+  "district": [
+    {"id": 1214, "description": "Sen Sok", "proId": 12, "deleted": "false"},
+    {"id": 1208, "description": "Chamkar Mon", "proId": 12, "deleted": "false"}
+  ],
+  "commune": [
+    {"id": 121402, "description": "Krang Thnong", "disId": 1214, "deleted": "false"}
+  ],
+  "occupation":    [{"id": 7, "description": "IT Staff", "descriptionKh": "បុគ្គលិកព័ត៌មានវិទ្យា"}],
+  "maritalStatus": [{"id": 2, "cbcCode": "M", "description": "Married", "deleted": "false"}],
+  "natoinality":   [{"id": 1, "code": "KHM", "description": "KHMER"}],
+  "countryCode":   [{"id": 1, "code": "KHM", "description": "Cambodia", "deleted": "false"}],
+  "idType":        [{"id": 3, "idCode": "N", "regDescription": "National ID", "deleted": "false"}],
+  "idIssuer":      [{"id": 1, "description": "Ministry of Interior"}],
+  "businessActivity": [{"id": 20301081, "description": "Software"}]
+}

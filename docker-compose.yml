@@ -1,0 +1,155 @@
+# Kjey PAPA backend on SBF's API host (10.32.8.99).
+#
+# The database is NOT here — it is a separate server (10.32.2.33) outside
+# Docker, so there is no db service and no depends_on. The container reaches it
+# over the network like any other client.
+#
+#   cp .env.example .env     # then fill it in — .env is gitignored
+#   docker compose up -d --build
+#   docker compose logs -f api
+services:
+  api:
+    build: .
+    image: kjeypapa-api:0.0.1
+    container_name: kjeypapa-api
+    restart: unless-stopped
+
+    # Localhost by default, on purpose: this application speaks plain HTTP, so
+    # anything public belongs behind a reverse proxy that terminates TLS.
+    #
+    # BIND_ADDR=0.0.0.0 opens it to whatever can route to the host — acceptable
+    # on SBF's private UAT network so the team can reach Swagger and test, and
+    # NOT acceptable once this is internet-facing. There is no host firewall on
+    # 10.32.8.99, so the bind address is the only thing deciding reachability.
+    # nginx fronts this now. The port stays bound to the host loopback so the
+    # healthcheck and local curl still work, and nothing reaches the plain-HTTP
+    # port from the network.
+    # Default is loopback. SBF UAT overrides it to the host's DMZ address so
+    # their load balancer can reach the container; there is no host firewall
+    # there, so the bind address is the only reachability control.
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:8080:8080"
+
+    networks:
+      kjeypapa:
+
+    env_file: .env
+
+    environment:
+      # Everything the image must not contain. Values come from .env.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+
+      # NEVER update: against SBF's live TFF tables Hibernate would convert
+      # sbf_note.request_amount from numeric(38,2) to double precision — exact
+      # decimal money to binary floating point, on 383 real rows, silently.
+      #
+      # `none` rather than `validate` only because validate correctly refuses to
+      # start over that same column: our entity says Double where their schema
+      # says numeric, and theirs is right. Move to `validate` once F14 lands —
+      # it is the setting we want, and a schema mismatch should stop a boot.
+      SPRING_JPA_HIBERNATE_DDL_AUTO: ${DDL_AUTO:-none}
+
+      # Noisy and slow in production, and it prints parameter values.
+      SPRING_JPA_SHOW_SQL: "false"
+
+      # The single most dangerous default we ship. Left true, the application
+      # looks entirely healthy and files nothing with Sambat.
+      LOS_MOCK_ENABLED: "false"
+
+      # Sambat's webhooks. On by default: with no secret in .env every webhook
+      # is refused, rather than served to anyone who finds the URL.
+      PDL_WEBHOOK_AUTH_ENABLED: ${PDL_WEBHOOK_AUTH_ENABLED:-true}
+      PDL_WEBHOOK_ALLOWED_IPS: ${PDL_WEBHOOK_ALLOWED_IPS:-}
+      PDL_WEBHOOK_SECRET: ${PDL_WEBHOOK_SECRET:-}
+
+      # Whose X-Forwarded-For we believe. Empty behind a proxy means every
+      # consent records the proxy's own address instead of the customer's.
+      PDL_OCR_RATELIMIT_TRUSTEDPROXIES: ${TRUSTED_PROXIES:-}
+
+      # Firebase credentials are mounted, not baked in; point the app at the
+      # mount rather than the placeholder copy inside the jar.
+      FIREBASE_CREDENTIALS_PATH: file:/app/firebase-service-account.json
+
+      # Behind a TLS-terminating proxy. `native` is Tomcat's RemoteIpValve,
+      # which trusts the forwarded headers only from internal-proxies; the
+      # `framework` alternative honours the forgeable left-most entry and
+      # rewrites remoteAddr, which would undo ClientAddress.
+      SERVER_FORWARD_HEADERS_STRATEGY: ${SERVER_FORWARD_HEADERS_STRATEGY:-}
+      SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES: ${SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES:-}
+
+      JAVA_OPTS: "-XX:MaxRAMPercentage=65 -XX:+ExitOnOutOfMemoryError"
+
+    volumes:
+      # Mounted, not baked in: the image is built from a public source tree.
+      - ./secrets/firebase-service-account.json:/app/firebase-service-account.json:ro
+      - uploads:/app/uploads
+      - ./logs:/app/logs
+
+    # 2 CPUs and 4 GB on this host, shared with everything else.
+    deploy:
+      resources:
+        limits:
+          memory: 2560M
+
+    logging:
+      driver: json-file
+      options:
+        # The consent ledger's nightly head hash lives in these logs and is the
+        # only tamper evidence that survives someone editing the database.
+        # Ship them off this host; until then, do not let them roll away quickly.
+        max-size: "50m"
+        max-file: "10"
+
+  # ---------------------------------------------------------------------
+  # TLS termination.
+  #
+  # SBF terminate real SSL at their gateway; this is the hop behind it, so the
+  # certificate is self-signed and only has to satisfy the gateway, not a
+  # browser's trust store.
+  # ---------------------------------------------------------------------
+  # NOT used on SBF UAT — their nginx-lb (NGXLB-DMZ, 10.32.6.80/.81) terminates
+  # TLS and proxies to 10.32.8.99:8080. Kept for any environment that has no
+  # load balancer of its own; opt in with:
+  #   docker compose --profile own-tls up -d
+  proxy:
+    profiles: ["own-tls"]
+    image: nginx:1.27-alpine
+    container_name: kjeypapa-proxy
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/kjeypapa.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./secrets/certs:/etc/nginx/certs:ro
+      - ./logs/nginx:/var/log/nginx
+    networks:
+      kjeypapa:
+        # Static, because ClientAddress compares the peer address by exact
+        # string equality rather than by CIDR. A DHCP-assigned container IP
+        # would silently stop matching TRUSTED_PROXIES after any recreate, and
+        # every consent would start recording the proxy instead of the customer.
+        ipv4_address: 172.28.0.10
+    healthcheck:
+      # 127.0.0.1, not localhost: the config is mounted read-only, so nginx's
+      # entrypoint cannot add its usual IPv6 listener, and localhost resolves
+      # to ::1 first — where nothing is listening. Connection refused, forever.
+      test: ["CMD", "wget", "-q", "--spider", "--no-check-certificate", "https://127.0.0.1/api/v1/pdl/dictionary/version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+networks:
+  kjeypapa:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+
+volumes:
+  uploads:

@@ -69,6 +69,9 @@ public class UserServiceImpl implements UserService {
 	@Autowired
 	private RoleRepository roleRepo;
 
+	@Autowired
+	private com.ezetik.kjeypapa.pdl.repository.PdlAccountRequestRepository pdlAccountRequestRepository;
+
 	@Override
 	public ResponseEntity<Message<User>> registerUser(RegisterModel u) {
 
@@ -323,6 +326,17 @@ public class UserServiceImpl implements UserService {
 
 	@Override
 	public AuthenticationResponse authenticate(AuthenticationRequest request) {
+
+		// G7: a pre-login PDL account request gates sign-in until the LPO
+		// decision approves it (OTP verification alone re-enables the user,
+		// so the request status is the authoritative gate).
+		pdlAccountRequestRepository.findByUser_Username(request.getUsername()).ifPresent(r -> {
+			switch (r.getStatus()) {
+			case PENDING -> throw new org.springframework.security.authentication.DisabledException("ACCOUNT_PENDING");
+			case REJECTED -> throw new org.springframework.security.authentication.DisabledException("ACCOUNT_REJECTED");
+			default -> { /* APPROVED — proceed */ }
+			}
+		});
 
 		authenticationManager
 				.authenticate(new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword()));

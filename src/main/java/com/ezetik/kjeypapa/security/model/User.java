@@ -99,6 +99,7 @@ public class User implements UserDetails {
 
 	private String profilePhoto;
 
+	@JsonProperty(access = Access.WRITE_ONLY)
 	String fcmToken;
 
 	@ManyToMany

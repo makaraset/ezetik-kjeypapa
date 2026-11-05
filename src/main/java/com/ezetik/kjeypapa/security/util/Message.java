@@ -1,8 +1,10 @@
 package com.ezetik.kjeypapa.security.util;
 
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Data
+@NoArgsConstructor
 public class Message<T> {
 	private String type;
 	private String message;

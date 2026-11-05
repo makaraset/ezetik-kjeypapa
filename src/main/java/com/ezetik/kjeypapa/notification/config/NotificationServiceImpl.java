@@ -162,13 +162,18 @@ public class NotificationServiceImpl implements NotificationService {
 						)
 				.build();
 		
-		com.google.firebase.messaging.Message msg = 
+		com.google.firebase.messaging.Message.Builder msgBuilder = 
 				com.google.firebase.messaging.Message.builder()
 				.setToken(message.getToken())
 				.setNotification(notification)
 				.putData("data", message.getData())
-				.setAndroidConfig(android)
-				.build();
+				.setAndroidConfig(android);
+		// G19: machine type + entity id for app-side severity mapping and deep links.
+		if (message.getType() != null)
+			msgBuilder.putData("type", message.getType());
+		if (message.getRefId() != null)
+			msgBuilder.putData("refId", message.getRefId());
+		com.google.firebase.messaging.Message msg = msgBuilder.build();
 		String id = fcm.send(msg);
 		
 		NotificationModel nd = new NotificationModel();

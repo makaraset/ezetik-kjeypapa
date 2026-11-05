@@ -18,6 +18,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.ezetik.kjeypapa.security.service.JwtService;
 
+@lombok.extern.slf4j.Slf4j
 @Component
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -39,7 +40,27 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
       return;
     }
     jwt = authHeader.substring(7);
-    userEmail = jwtService.extractUsername(jwt);
+    try {
+      userEmail = jwtService.extractUsername(jwt);
+    } catch (Exception e) {
+      // Expired, malformed, or signed with a key we no longer use. That means
+      // the caller is NOT AUTHENTICATED — it does not mean the request is
+      // invalid, and it must not throw out of the filter.
+      //
+      // This filter runs on every request, whitelisted paths included, so an
+      // uncaught exception here broke the whole unauthenticated signup flow
+      // for anyone whose phone still held an old token: the NID scan and the
+      // account-request probe both answered 403, which reads as a permissions
+      // problem and was really a stale value in the keychain. Found on a real
+      // device against a token six days expired, 2026-09-30.
+      //
+      // Carry on unauthenticated. Whitelisted endpoints serve the request;
+      // protected ones are refused downstream with a proper 403 from the
+      // authorization layer rather than a 500 raised inside a filter.
+      log.debug("Ignoring unusable bearer token: {}", e.getClass().getSimpleName());
+      filterChain.doFilter(request, response);
+      return;
+    }
     if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
       UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
       if (jwtService.isTokenValid(jwt, userDetails)) {

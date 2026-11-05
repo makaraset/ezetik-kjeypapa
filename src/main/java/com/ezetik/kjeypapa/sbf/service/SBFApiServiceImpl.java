@@ -352,11 +352,11 @@ public class SBFApiServiceImpl implements SBFApiService {
 				resp = new ResponseEntity<>(data, HttpStatus.OK);
 
 			} else {
-				resp = new ResponseEntity<>(null, HttpStatus.BAD_REQUEST);
+				resp = ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
 			}
 
 		} catch (Exception e) {
-			resp = new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+			resp = ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
 			e.printStackTrace();
 		}
 
