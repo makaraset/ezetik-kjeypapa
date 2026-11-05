@@ -70,7 +70,7 @@ public class PdlAccountRequestService {
 	private PdlPersonalInfoRepository personalRepo;
 
 	@Autowired
-	private SbfGatewayClient sbfGateway;
+	private SbfCifResolver cifResolver;
 
 	@Autowired
 	private PdlEmploymentInfoRepository employmentRepo;
@@ -162,16 +162,14 @@ public class PdlAccountRequestService {
 			user.setPassword(passwordEncoder.encode(p.getPassword()));
 			user.setPasswordNeverExpires(true);
 			user.setEnabled(false);
-			// Resolve the SBF CIF from the KYC ID number (server-authoritative,
-			// Makara 2026-08-26: custId = CIF or 0 at loan submit; backs the
-			// profile "CIF No" row). Best-effort — signup never fails on SBF.
+			// The customer's Sambat CIF, when Sambat hold them under the same
+			// identity (SbfCifResolver). Signup never fails on Sambat: a new
+			// customer, a mismatch or an outage stores nothing, and the loan
+			// submit settles the CIF before anything is filed.
 			if (per != null && per.getIdNo() != null && !per.getIdNo().isBlank()) {
-				try {
-					Integer cif = sbfGateway.findCifByIdNo(per.getIdNo());
-					if (cif != null)
-						user.setRegistedId(String.valueOf(cif));
-				} catch (Exception ignore) {
-				}
+				SbfCifResolver.CifCheck cif = cifResolver.check(SbfCustomerMatch.Applicant.of(per), "a signup");
+				if (cif.outcome() == SbfCifResolver.Outcome.MATCHED)
+					user.setRegistedId(String.valueOf(cif.cif()));
 			}
 			Role customer = roleRepository.findById(CUSTOMER_ROLE_ID).orElse(null);
 			if (customer == null)
@@ -359,9 +357,10 @@ public class PdlAccountRequestService {
 		var pi = personalRepo.findByUser(uid);
 		var ei = employmentRepo.findByUser(uid);
 		var bi = bankRepo.findByUser(uid);
+		PdlPersonalInfo personal = pi.isEmpty() ? null : pi.get(0);
 		var out = new com.ezetik.kjeypapa.pdl.payload.PdlAccountReviewResponse(req,
-				pi.isEmpty() ? null : pi.get(0), ei.isEmpty() ? null : ei.get(0), bi.isEmpty() ? null : bi.get(0),
-				verification.summary(requestId));
+				personal, ei.isEmpty() ? null : ei.get(0), bi.isEmpty() ? null : bi.get(0),
+				verification.summary(requestId), cifResolver.status(req.getUser(), personal));
 		return new ResponseEntity<>(new Message<>("SUCCESS", "Account request detail", out), HttpStatus.OK);
 	}
 

@@ -12,6 +12,52 @@ it was found, so a reader can judge how much it has actually been checked.
 
 ## Open findings
 
+### F27 — a failed CIF lookup filed an existing customer as new
+**Severity:** high · **Status:** ~~open~~ **FIXED 2026-11-05, not yet deployed** ·
+**Found:** 2026-11-05, reviewing how we get and store the CIF, at Sambat's request
+
+Sambat's answers decide the severity: `custId` 0 for an ID number they already
+hold earns a second CIF or an automatic reject. A new customer's CIF is created
+on approval, one ID number has one CIF, a CIF never changes, and the match must
+be the full identity.
+- **A failed lookup read as a new customer.** Signup and the profile reload
+  dropped any Sambat error without a log line, and the submit sent 0 for any
+  blank CIF.
+- **The match was the ID number alone.** We took the first record and never
+  compared the date of birth, sex or name. A mistyped number belonging to
+  someone else stored their CIF, and My Profile's settlement-account fallback
+  would then have shown their account and balance.
+- **The LPO approved without seeing the CIF.**
+- **The lookup had no read timeout**, and at signup it runs inside the
+  database transaction. The two saving-account lookups had none either.
+
+Now (`SbfCifResolver`, `SbfCustomerMatch`):
+- The submit settles the CIF first: a stored one, a full match it then
+  stores, or a confirmed new customer (0). A Sambat outage holds the
+  application (`SBF_CUSTOMER_UNAVAILABLE`); different details hold it too
+  (`SBF_CUSTOMER_MISMATCH`, with the hotline).
+- The check: ID number, date of birth and sex must agree, and the name in
+  Khmer or Latin script. A blank or unreadable field counts as different.
+- Signup and the profile reload store a CIF only on a full match. A stored CIF
+  is final.
+- The LPO review shows the CIF, "new to Sambat", what differs, or that Sambat
+  could not be reached.
+- `pdl.sbf.lookup-timeout-seconds` (10 s) on all three lookups.
+
+Not done:
+- the ID type is not compared (their `regisType` codes are unknown);
+- the field formats of their record are unverified;
+- CIFs stored before this change were matched on the ID number alone. Every row
+  is a fixture before the first deployment, so none is re-checked.
+
+Still open, not for Sambat: `registedId` also holds TFF CIFs, merchant codes and
+staff usernames, and is not unique. A TFF customer who signs up for PDL ends up
+as two users with one CIF. Whether one person may hold both accounts is a
+product decision.
+
+Unit-tested; not yet run against Sambat. `docs/probe-sbf-customer-shape.sh`
+shows the forms their record uses.
+
 ### F26 — three ids for one application, and the customer saw two of them
 **Severity:** medium · **Status:** ~~open~~ **FIXED 2026-11-05, not yet deployed** ·
 **Found:** 2026-11-05, reviewing every id that crosses to Sambat

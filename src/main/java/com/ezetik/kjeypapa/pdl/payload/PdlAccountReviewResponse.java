@@ -4,6 +4,7 @@ import com.ezetik.kjeypapa.pdl.model.PdlAccountRequest;
 import com.ezetik.kjeypapa.pdl.model.PdlBankInfo;
 import com.ezetik.kjeypapa.pdl.model.PdlEmploymentInfo;
 import com.ezetik.kjeypapa.pdl.model.PdlPersonalInfo;
+import com.ezetik.kjeypapa.pdl.service.SbfCifResolver;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -25,4 +26,10 @@ public class PdlAccountReviewResponse {
 
 	/** CamDigi identity verification (2026-10-27): state, attempts, SBF's message. */
 	private IdentityVerificationSummary identityVerification;
+
+	/**
+	 * The customer at Sambat: their stored CIF, or what Sambat's lookup finds
+	 * now (new customer, a mismatch and on which fields, or unreachable).
+	 */
+	private SbfCifResolver.CifCheck sbfCustomer;
 }

@@ -1033,23 +1033,13 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 			pr.setPersonalInfo(pl.isEmpty() ? null : pl.get(0));
 			pr.setUserId(user.getId());
 			pr.setUsername(user.getUsername());
-			// Self-heal: resolve + persist the SBF CIF from the KYC ID number
-			// when missing (accounts signed up before CIF persistence existed,
-			// or created while SBF was unreachable). Best-effort, one SBF call
-			// only while empty.
-			if ((user.getRegistedId() == null || user.getRegistedId().isBlank())
-					&& !pl.isEmpty() && pl.get(0).getIdNo() != null
-					&& !pl.get(0).getIdNo().isBlank()) {
-				try {
-					Integer cif = sbfGateway.findCifByIdNo(pl.get(0).getIdNo());
-					if (cif != null) {
-						user.setRegistedId(String.valueOf(cif));
-						userRepository.save(user);
-					}
-				} catch (Exception ignore) {
-					// SBF hiccup must not break the profile screen
-				}
-			}
+			// A blank CIF is looked up again: Sambat create a new customer's
+			// CIF only when they approve the application, and a signup made
+			// while they were unreachable has none. A stored one is final.
+			// Never fails the profile; the app loads it as each application
+			// starts.
+			if (!pl.isEmpty())
+				cifResolver.ensure(user, pl.get(0));
 			pr.setCif(user.getRegistedId());
 			pr.setFirstname(user.getFirstname());
 			pr.setLastname(user.getLastname());
@@ -1071,7 +1061,7 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 	private SbfGatewayClient sbfGateway;
 
 	@org.springframework.beans.factory.annotation.Autowired
-	private com.ezetik.kjeypapa.security.repository.UserRepository userRepository;
+	private SbfCifResolver cifResolver;
 
 	private static boolean same(String a, String b) {
 		return PersonalInfoValidator.sameIdentityValue(a, b);

@@ -38,7 +38,7 @@ import com.ezetik.kjeypapa.pdl.repository.PdlEmploymentInfoRepository;
 import com.ezetik.kjeypapa.pdl.repository.PdlPersonalInfoRepository;
 import com.ezetik.kjeypapa.pdl.service.PdlAccountRequestService;
 import com.ezetik.kjeypapa.pdl.service.PdlIdentityVerificationService;
-import com.ezetik.kjeypapa.pdl.service.SbfGatewayClient;
+import com.ezetik.kjeypapa.pdl.service.SbfCifResolver;
 import com.ezetik.kjeypapa.sbf.service.SMSService;
 import com.ezetik.kjeypapa.security.model.Role;
 import com.ezetik.kjeypapa.security.model.User;
@@ -56,7 +56,7 @@ class PdlAccountRequestServiceTest {
 	@Mock PasswordEncoder passwordEncoder;
 	@Mock PdlAccountRequestRepository requestRepo;
 	@Mock PdlPersonalInfoRepository personalRepo;
-	@Mock SbfGatewayClient sbfGateway;
+	@Mock SbfCifResolver cifResolver;
 	@Mock PdlEmploymentInfoRepository employmentRepo;
 	@Mock PdlBankInfoRepository bankRepo;
 	@Mock ImageRepository imageRepo;
@@ -89,7 +89,9 @@ class PdlAccountRequestServiceTest {
 		when(roleRepository.findById(2L)).thenReturn(Optional.of(new Role()));
 		when(passwordEncoder.encode(anyString())).thenReturn("$hash");
 		when(personalRepo.findByIdNo(anyString())).thenReturn(List.of());
-		when(sbfGateway.findCifByIdNo(anyString())).thenReturn(70); // a real CIF, which must not come back
+		// A real CIF, which must not come back.
+		when(cifResolver.check(any(), anyString())).thenReturn(
+				new SbfCifResolver.CifCheck(SbfCifResolver.Outcome.MATCHED, 70L, List.of()));
 		when(requestRepo.save(any(PdlAccountRequest.class))).thenAnswer(i -> {
 			PdlAccountRequest r = i.getArgument(0);
 			if (r.getId() == null)

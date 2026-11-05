@@ -69,6 +69,13 @@ public class SbfGatewayClient {
 	private int livenessTimeoutSeconds;
 
 	/**
+	 * Seconds allowed for a customer or account lookup. They had no read
+	 * timeout, and the signup lookup runs inside the signup's transaction.
+	 */
+	@Value("${pdl.sbf.lookup-timeout-seconds:10}")
+	private int lookupTimeoutSeconds;
+
+	/**
 	 * The token request had no timeout, and {@link #token()} is synchronized:
 	 * one hung token call blocked every SBF caller in the application.
 	 */
@@ -213,7 +220,8 @@ public class SbfGatewayClient {
 		String url = urlApi + "/customer-balance?accountNo="
 				+ URLEncoder.encode(accountNo, StandardCharsets.UTF_8);
 		HttpRequest req = HttpRequest.newBuilder().uri(new URI(url))
-				.header("Authorization", "Bearer " + token()).GET().build();
+				.header("Authorization", "Bearer " + token())
+				.timeout(Duration.ofSeconds(lookupTimeoutSeconds)).GET().build();
 		HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
 		if (resp.statusCode() != 200)
 			throw new IllegalStateException("SBF /customer-balance returned " + resp.statusCode());
@@ -230,18 +238,14 @@ public class SbfGatewayClient {
 	public JsonNode savingsByCif(int cifNo) throws Exception {
 		String url = urlApi + "/saving-info-by-cid?cifNo=" + cifNo;
 		HttpRequest req = HttpRequest.newBuilder().uri(new URI(url))
-				.header("Authorization", "Bearer " + token()).GET().build();
+				.header("Authorization", "Bearer " + token())
+				.timeout(Duration.ofSeconds(lookupTimeoutSeconds)).GET().build();
 		HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
 		if (resp.statusCode() != 200)
 			throw new IllegalStateException("SBF /saving-info-by-cid returned " + resp.statusCode());
 		return mapper.readTree(resp.body());
 	}
 
-	/**
-	 * {@code GET /customer-information/by-idno} — resolve the SBF CIF
-	 * (custKeyNum) for an ID number. Returns null when the customer is new to
-	 * SBF (loan submits then carry {@code custId: 0}).
-	 */
 	/**
 	 * {@code POST /new-loan-application} — file a loan application with LOS.
 	 *
@@ -386,20 +390,28 @@ public class SbfGatewayClient {
 		return mapper.readTree(resp.body());
 	}
 
-	public Integer findCifByIdNo(String idNo) throws Exception {
+	/**
+	 * {@code GET /customer-information/by-idno}: Sambat's customer record for
+	 * an ID number, whose {@code custKeyNum} is the CIF. One ID number has one
+	 * CIF (Sambat, 2026-11-05), so the first record is the only one.
+	 *
+	 * <p>Null only when Sambat answered and hold no customer with that number.
+	 * Anything else throws: a wrongly "new" customer is filed with custId 0,
+	 * which Sambat answer with a second CIF or an automatic reject.
+	 */
+	public JsonNode customerByIdNo(String idNo) throws Exception {
 		String url = urlApi + "/customer-information/by-idno?idNo="
 				+ URLEncoder.encode(idNo, StandardCharsets.UTF_8) + "&page=0&size=1";
 		HttpRequest req = HttpRequest.newBuilder().uri(new URI(url))
-				.header("Authorization", "Bearer " + token()).GET().build();
+				.header("Authorization", "Bearer " + token())
+				.timeout(Duration.ofSeconds(lookupTimeoutSeconds)).GET().build();
 		HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
 		if (resp.statusCode() != 200)
 			throw new IllegalStateException("SBF /customer-information/by-idno returned " + resp.statusCode());
-		JsonNode page = mapper.readTree(resp.body());
-		JsonNode content = page.path("content");
-		if (content.isArray() && content.size() > 0) {
-			JsonNode cif = content.get(0).path("custKeyNum");
-			return cif.isNumber() ? cif.asInt() : null;
-		}
-		return null;
+		JsonNode content = resp.body() == null || resp.body().isBlank() ? null
+				: mapper.readTree(resp.body()).get("content");
+		if (content == null || !content.isArray())
+			throw new IllegalStateException("SBF /customer-information/by-idno returned no page of customers");
+		return content.isEmpty() ? null : content.get(0);
 	}
 }

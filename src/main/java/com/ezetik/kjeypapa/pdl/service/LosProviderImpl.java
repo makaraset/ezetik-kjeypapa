@@ -49,8 +49,14 @@ public class LosProviderImpl implements LosProvider {
 	@Autowired
 	private LosSubmitConfig submitConfig;
 
+	@Autowired
+	private SbfCifResolver cifResolver;
+
 	@Value("${los.mock.enabled:true}")
 	private boolean mockEnabled;
+
+	@Value("${pdl.customer.hotline:023 9977 22 or 093 99 77 22}")
+	private String hotline;
 
 	/**
 	 * Optional extras on {@code /customer-accepted}. Their swagger types both
@@ -69,6 +75,20 @@ public class LosProviderImpl implements LosProvider {
 		if (mockEnabled) {
 			return "LOS-MOCK-" + loan.getId();
 		}
+
+		// Settle the CIF before filing. custId 0 for a customer Sambat already
+		// hold earns a second CIF or an automatic reject (Sambat, 2026-11-05),
+		// so 0 goes only to someone they have looked for and not found. Nothing
+		// is filed while they cannot be asked, or hold the ID number under
+		// other details. The mapper reads the CIF this stores on the user.
+		SbfCifResolver.CifCheck cif = cifResolver.ensure(loan.getUser());
+		if (cif.outcome() == SbfCifResolver.Outcome.UNAVAILABLE)
+			throw new LosSubmitException("SBF_CUSTOMER_UNAVAILABLE",
+					"We could not check your details with Sambat just now. Please try again in a few minutes.");
+		if (cif.outcome() == SbfCifResolver.Outcome.MISMATCH)
+			throw new LosSubmitException("SBF_CUSTOMER_MISMATCH",
+					"Your details do not match Sambat's records for this ID number. Please call us on "
+							+ hotline + ".");
 
 		NewApplicationParam param = mapper.toParam(loan, consentPdf);
 		JsonNode raw;

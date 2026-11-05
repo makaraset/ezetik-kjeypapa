@@ -70,7 +70,7 @@ class PaydayLoanServiceImplTest {
 	@Mock com.ezetik.kjeypapa.pdl.service.CbcConsentFormRenderer consentForm;
 	@Mock com.ezetik.kjeypapa.pdl.service.PdlCbcConsentLedger consentLedger;
 	@Mock com.ezetik.kjeypapa.pdl.service.SbfGatewayClient sbfGateway;
-	@Mock com.ezetik.kjeypapa.security.repository.UserRepository userRepository;
+	@Mock com.ezetik.kjeypapa.pdl.service.SbfCifResolver cifResolver;
 
 	@InjectMocks PaydayLoanServiceImpl service;
 

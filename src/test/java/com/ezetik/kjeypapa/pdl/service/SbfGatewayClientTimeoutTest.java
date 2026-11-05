@@ -53,6 +53,7 @@ class SbfGatewayClientTimeoutTest {
 		ReflectionTestUtils.setField(client, "mapper", new ObjectMapper());
 		ReflectionTestUtils.setField(client, "livenessTimeoutSeconds", 1);
 		ReflectionTestUtils.setField(client, "ocrTimeoutSeconds", 1);
+		ReflectionTestUtils.setField(client, "lookupTimeoutSeconds", 1);
 	}
 
 	@AfterEach
@@ -147,6 +148,41 @@ class SbfGatewayClientTimeoutTest {
 		long t0 = System.nanoTime();
 		assertThatThrownBy(() -> client.ocrIdCard("aWQ=")).isInstanceOf(IOException.class);
 		assertThat((System.nanoTime() - t0) / 1_000_000L).isLessThan(3_000);
+	}
+
+	private void customers(String body, long delayMs) {
+		server.createContext("/api/customer-information/by-idno", ex -> {
+			sleep(delayMs);
+			respond(ex, 200, body);
+		});
+	}
+
+	@Test
+	@DisplayName("the customer lookup times out too — it waited as long as SBF did, inside the signup's transaction")
+	void customerLookupTimesOut() {
+		customers("{\"content\":[]}", 4_000);
+		long t0 = System.nanoTime();
+		assertThatThrownBy(() -> client.customerByIdNo("012345678")).isInstanceOf(IOException.class);
+		assertThat((System.nanoTime() - t0) / 1_000_000L).isLessThan(3_000);
+	}
+
+	@Test
+	@DisplayName("only an empty page of customers means none: a blank or odd reply throws, never reads as new")
+	void onlyAnEmptyPageIsNoCustomer() throws Exception {
+		customers("{\"content\":[],\"totalElements\":0}", 0);
+		assertThat(client.customerByIdNo("012345678")).isNull();
+		server.removeContext("/api/customer-information/by-idno");
+
+		customers("{\"content\":[{\"custKeyNum\":70,\"idNo\":\"012345678\"}]}", 0);
+		assertThat(client.customerByIdNo("012345678").path("custKeyNum").asLong()).isEqualTo(70L);
+		server.removeContext("/api/customer-information/by-idno");
+
+		customers("", 0);
+		assertThatThrownBy(() -> client.customerByIdNo("012345678")).isInstanceOf(IllegalStateException.class);
+		server.removeContext("/api/customer-information/by-idno");
+
+		customers("{\"error\":\"maintenance\"}", 0);
+		assertThatThrownBy(() -> client.customerByIdNo("012345678")).isInstanceOf(IllegalStateException.class);
 	}
 
 	private static void respond(HttpExchange ex, int status, String body) throws IOException {

@@ -67,9 +67,15 @@ screen 6 blank for manual entry, which is the accepted behaviour.
 
 **→ Sambat** `GET /customer-information/by-idno?idNo=`
 
-Returns the CIF number if this person already banks with SBF. Stored on the user
-and self-heals on later profile reads. It is what links a PDL applicant to their
-existing core-banking record.
+Returns the CIF number if this person already banks with SBF. It is stored on the
+user only when the record matches the applicant in full: ID number, date of
+birth, sex, and the name in Khmer or Latin script. A stored CIF is final. A new
+customer's CIF is created on approval, so while none is stored it is looked up
+again when the profile loads and at submit.
+
+`custId` 0 goes only to someone this lookup has not found. When SBF cannot be
+reached, or holds the ID number under other details, the application waits
+rather than filing a duplicate customer (2026-11-05).
 
 ### 1c. Capture and submit the account request — screens 7–10
 

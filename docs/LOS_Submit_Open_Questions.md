@@ -700,3 +700,49 @@ Still to confirm with Sambat:
    need their LOS AppId at all.
 3. The date their callbacks start sending `mobileAppId`, so we can stop
    reading `appId`.
+
+---
+
+## The customer's CIF (2026-11-05)
+
+Sambat asked how we get and store the CIF. We look it up with
+`GET /customer-information/by-idno` using the ID number the customer confirmed,
+store it on the customer's account (`User.registedId`), and send it as `custId`
+and `CustP_CIFNo`. The customer sees it on My Profile.
+
+Their answers, relayed by Makara:
+1. **When is a new customer's CIF created?** On approval.
+2. **What if we send `custId` 0 for an ID number they already hold?** They
+   create a new CIF or reject the application automatically.
+3. **Can one ID number have several CIFs?** No: one ID, one CIF.
+4. **Match on the ID number alone?** No: check the full identity.
+5. **Can a CIF change?** No.
+
+What changed (backlog F27, built, not yet deployed):
+- **A failed lookup no longer files a customer as new.** It used to be dropped
+  silently, and the submit sent 0 for any blank CIF. Now the submit looks the
+  CIF up itself while none is stored, and 0 goes only when Sambat answered and
+  hold no one with that ID number. If Sambat cannot be reached, the application
+  waits (`SBF_CUSTOMER_UNAVAILABLE`) and the customer is asked to try again.
+- **The full identity is checked before a CIF is stored.** The ID number, date
+  of birth and sex must agree, and the name in Khmer or in Latin script.
+  Spacing, case and romanisation never count. If the details differ, nothing is
+  stored and nothing is filed (`SBF_CUSTOMER_MISMATCH`); the customer is given
+  the hotline.
+- **A stored CIF is final.** It is never looked up again or overwritten.
+- **A new customer's CIF is picked up after approval.** While none is stored, it
+  is looked up again whenever the profile loads, which the app does as each
+  application starts, and again at submit.
+- **The LPO sees it.** The review page shows the CIF, "new to Sambat", what
+  differs, or that Sambat could not be reached.
+- **The lookup has a read timeout** (`pdl.sbf.lookup-timeout-seconds`, 10 s),
+  as do the two saving-account lookups. None had one.
+
+Not compared yet: the ID type. Their record gives it as a number (`regisType`)
+whose codes we have not seen.
+
+To confirm before relying on it: the forms their record uses for `dob`, `sex`
+and the names. We read ISO dates, date-times, `dd/MM/yyyy`, epoch milliseconds
+and `[y, m, d]`; M/F, Male/Female and ប្រុស/ស្រី. Run
+`docs/probe-sbf-customer-shape.sh <your ID number>` on the VPN: it prints each
+field's form, never its value.

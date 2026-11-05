@@ -27,7 +27,7 @@ Generated 2026-08-30 from a real fixture (loan 18, a USD 40 payday application o
 | Field | Our value | Status | Note |
 |---|---|---|---|
 | `appId` | `0` | Awaiting Sambat code | Appendix 2 calls this “Mobile App ID”. A channel id you issue us, or our application id? We send our config value (0) until told. |
-| `custId` | `0` | From customer record | Your CIF from GET /customer-information/by-idno at signup; 0 = new to Sambat. This fixture has none; the real-card account carries 70. |
+| `custId` | `0` | From customer record | Your CIF from GET /customer-information/by-idno, stored only when your record matches the applicant in full. 0 only when that lookup finds no one with the ID number; when it fails or the details differ, nothing is filed (2026-11-05). This fixture has none; the real-card account carries 70. |
 | `doneBy` | `010849009` | From customer record | Our login id = the customer's phone number. |
 ### Integration
 

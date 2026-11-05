@@ -373,3 +373,9 @@ per-IP limits on OCR and liveness see each customer's own address.
    is not a formality.
 5. File **one** application against Sambat UAT and confirm a real AppId comes
    back — not `LOS-MOCK-nn`.
+6. Before relying on the CIF check (F27), run
+   `docs/probe-sbf-customer-shape.sh <your ID number>` on the VPN. It prints
+   the form of each field in Sambat's customer record, never the values.
+   Confirm `dob`, `sex` and the names use forms `SbfCustomerMatch` reads. If one
+   does not, every existing customer's application waits with
+   `SBF_CUSTOMER_MISMATCH`.
