@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Kjey PAPA — LOS inbound webhooks",
-    "description": "The seven endpoints Sambat LOS calls on Kjey PAPA.\n\n`base` is set to our UAT host. **Set the `secret` variable** to the shared secret we send you separately: every request sends it in X-LOS-Signature, and without it the answer is HTTP 401. Every body here is a working example — each was sent against our UAT and accepted.\n\nTimestamps must be full ISO-8601 instants; a bare date is rejected with HTTP 400 naming the field.\n\n**appId 999999 is a deliberate placeholder that matches no application.** Every request will answer NOT_FOUND until you replace it with the AppId from your own submit response — which is intentional, so running the collection as-is cannot alter a real loan.",
+    "description": "The seven endpoints Sambat LOS calls on Kjey PAPA.\n\n`base` is set to our UAT host. **Set the `secret` variable** to the shared secret we send you separately: every request sends it in X-LOS-Signature, and without it the answer is HTTP 401. Every body here is a working example. Our UAT reads mobileAppId from our next deploy; until then it still names the application by appId.\n\nTimestamps must be full ISO-8601 instants; a bare date is rejected with HTTP 400 naming the field.\n\n**mobileAppId 999999 is a deliberate placeholder that matches no application.** Every request will answer NOT_FOUND until you replace it with the mobileAppId of a real application — which is intentional, so running the collection as-is cannot alter a real loan.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -45,7 +45,7 @@
         },
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"appId\": 999999,\n  \"losApplicationNo\": \"257861\",\n  \"loanRefNo\": \"PDL-2026-0042\",\n  \"statusCode\": \"A-APPROVED\",\n  \"message\": \"Approved\",\n  \"loanFormRef\": \"form-999999.pdf\",\n  \"loanContractFileRef\": \"contract-999999.pdf\",\n  \"repaymentScheduleRef\": \"schedule-999999.pdf\",\n  \"loanDocRef\": \"docs-999999.zip\",\n  \"settlementAccountNo\": \"1122334\",\n  \"currency\": \"USD\",\n  \"tenor\": 1,\n  \"outstandingAmount\": 50.0,\n  \"repaymentAmount\": 50.0,\n  \"interestAmount\": 0.37,\n  \"interestRatePercent\": 1.5,\n  \"processingFee\": 3.0,\n  \"cbcEnquiryFee\": 1.0,\n  \"netDisbursedAmount\": 45.63,\n  \"loanPeriodDays\": 15,\n  \"schedule\": [\n    {\n      \"installmentNo\": 1,\n      \"dueDate\": \"2026-09-21T00:00:00Z\",\n      \"principalDue\": 49.63,\n      \"interestDue\": 0.37,\n      \"feeDue\": 0.0,\n      \"otherDue\": 0.0,\n      \"totalDue\": 50.0\n    }\n  ]\n}",
+          "raw": "{\n  \"mobileAppId\": 999999,\n  \"loanRefNo\": \"PDL-2026-0042\",\n  \"statusCode\": \"A-AO\",\n  \"message\": \"Approved\",\n  \"loanFormRef\": \"form-999999.pdf\",\n  \"loanContractFileRef\": \"contract-999999.pdf\",\n  \"repaymentScheduleRef\": \"schedule-999999.pdf\",\n  \"loanDocRef\": \"docs-999999.zip\",\n  \"settlementAccountNo\": \"1122334\",\n  \"currency\": \"USD\",\n  \"tenor\": 1,\n  \"outstandingAmount\": 50.0,\n  \"repaymentAmount\": 50.0,\n  \"interestAmount\": 0.37,\n  \"interestRatePercent\": 1.5,\n  \"processingFee\": 3.0,\n  \"cbcEnquiryFee\": 1.0,\n  \"netDisbursedAmount\": 45.63,\n  \"loanPeriodDays\": 15,\n  \"schedule\": [\n    {\n      \"installmentNo\": 1,\n      \"dueDate\": \"2026-09-21T00:00:00Z\",\n      \"principalDue\": 49.63,\n      \"interestDue\": 0.37,\n      \"feeDue\": 0.0,\n      \"otherDue\": 0.0,\n      \"totalDue\": 50.0\n    }\n  ]\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -84,7 +84,7 @@
         },
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"appId\": 999999,\n  \"statusCode\": \"R-CBC\",\n  \"message\": \"Credit bureau check did not pass.\"\n}",
+          "raw": "{\n  \"mobileAppId\": 999999,\n  \"statusCode\": \"R-AO\"\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -123,7 +123,7 @@
         },
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"appId\": 999999,\n  \"statusCode\": \"RW-LPO\",\n  \"message\": \"Employment document is not readable.\"\n}",
+          "raw": "{\n  \"mobileAppId\": 999999,\n  \"statusCode\": \"R-LPO\"\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -162,7 +162,7 @@
         },
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"appId\": 999999,\n  \"loanRefNo\": \"PDL-2026-0042\",\n  \"eventId\": \"evt-0001\",\n  \"disbursementStatus\": \"DISBURSED\",\n  \"disbursementTxnId\": \"TXN-99001\",\n  \"disbursedAmount\": 45.63,\n  \"disbursedDate\": \"2026-09-08T03:15:00Z\"\n}",
+          "raw": "{\n  \"mobileAppId\": 999999,\n  \"eventId\": \"evt-0001\",\n  \"disbursementStatus\": \"DISBURSED\",\n  \"disbursementTxnId\": \"TXN-99001\",\n  \"disbursedAmount\": 45.63,\n  \"disbursedDate\": \"2026-09-08T03:15:00Z\"\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -201,7 +201,7 @@
         },
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"appId\": 999999,\n  \"loanRefNo\": \"PDL-2026-0042\",\n  \"eventId\": \"evt-0002\",\n  \"status\": \"Closed\",\n  \"outstandingAmount\": 0.0,\n  \"overduePayment\": 0.0,\n  \"daysPastDue\": 0,\n  \"lastPaidAmount\": 50.0,\n  \"lastTransactionDate\": \"2026-09-21T04:00:00Z\",\n  \"schedule\": [\n    {\n      \"installmentNo\": 1,\n      \"principalPaid\": 49.63,\n      \"interestPaid\": 0.37,\n      \"feePaid\": 0.0,\n      \"penaltyPaid\": 0.0,\n      \"otherPaid\": 0.0,\n      \"totalPaid\": 50.0,\n      \"amountPaid\": 50.0,\n      \"paidDate\": \"2026-09-21T04:00:00Z\",\n      \"transactionDate\": \"2026-09-21T04:00:00Z\",\n      \"status\": \"PAID\"\n    }\n  ]\n}",
+          "raw": "{\n  \"mobileAppId\": 999999,\n  \"eventId\": \"evt-0002\",\n  \"status\": \"Closed\",\n  \"outstandingAmount\": 0.0,\n  \"overduePayment\": 0.0,\n  \"daysPastDue\": 0,\n  \"lastPaidAmount\": 50.0,\n  \"lastTransactionDate\": \"2026-09-21T04:00:00Z\",\n  \"schedule\": [\n    {\n      \"installmentNo\": 1,\n      \"principalPaid\": 49.63,\n      \"interestPaid\": 0.37,\n      \"feePaid\": 0.0,\n      \"penaltyPaid\": 0.0,\n      \"otherPaid\": 0.0,\n      \"totalPaid\": 50.0,\n      \"amountPaid\": 50.0,\n      \"paidDate\": \"2026-09-21T04:00:00Z\",\n      \"transactionDate\": \"2026-09-21T04:00:00Z\",\n      \"status\": \"PAID\"\n    }\n  ]\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -240,7 +240,7 @@
         },
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"appId\": 999999,\n  \"loanRefNo\": \"PDL-2026-0042\",\n  \"eventId\": \"evt-0003\",\n  \"verificationStatus\": \"SUCCESS\",\n  \"disbursementTxnId\": \"TXN-99001\",\n  \"verificationDate\": \"2026-09-07T08:00:00Z\"\n}",
+          "raw": "{\n  \"mobileAppId\": 999999,\n  \"eventId\": \"evt-0003\",\n  \"verificationStatus\": \"SUCCESS\",\n  \"disbursementTxnId\": \"TXN-99001\",\n  \"verificationDate\": \"2026-09-07T08:00:00Z\"\n}",
           "options": {
             "raw": {
               "language": "json"

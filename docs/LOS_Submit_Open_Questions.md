@@ -21,7 +21,7 @@ read straight from our store as base64.
 | Field | Your sample | What we need |
 |---|---|---|
 | `hidCurrentUserId` | `541` | The LOS user id our integration should file applications as. We have no safe default: `0` either bounces or attributes every Kjey PAPA application to whoever user 0 is. |
-| `appId` | `0` | Appendix 2 calls this "Mobile App ID". Is it a registered channel id you issue us, or our own application id? We currently send our loan id, which is wrong if it means the former. |
+| `appId` | `0` | Appendix 2 calls this "Mobile App ID". Is it a registered channel id you issue us, or our own application id? We currently send our loan id, which is wrong if it means the former. **Answered 2026-09-03 and 2026-11-05, see the last section.** |
 
 ## 2. Master-list codes (blocking — 10 values)
 
@@ -128,7 +128,8 @@ they are mandatory, this is a change to our signup screens, not a mapping fix.
   `AppRefId` (int32). `/customer-accepted` takes `appId` as int32, and
   `/payday-disbursement` carries no application identifier at all. Which one
   will your status callbacks quote? We store both, but getting this wrong
-  orphans every callback.
+  orphans every callback. *Answered 2026-11-05: neither; they quote our id,
+  `mobileAppId`.*
 
 ---
 
@@ -490,7 +491,8 @@ AppRefId we previously passed is not what that endpoint accepts.
    missed, or should the application simply lapse on your side?
 3. **`/payday-disbursement`** — is that ours to call after disbursement, or
    yours to call us? We currently receive disbursement on our own webhook
-   (`/pdl/los/disbursement`) and do not call theirs.
+   (`/pdl/los/disbursement`) and do not call theirs. *Answered 2026-11-05:
+   their own step, not ours to call.*
 
 ---
 
@@ -662,3 +664,39 @@ Two consequences worth knowing:
 Verified live: application 258061 (AppId 8306) filed with the reordered flow,
 its document re-renders byte-identically, and the payload is unchanged at 102
 fields with the same key set.
+
+---
+
+## One application id, `mobileAppId` (2026-11-05)
+
+Sambat are renaming the ids. An application is known by **our** id, as
+`mobileAppId`; their own id is `losAppId`, which we keep only where a call
+still needs it. They will carry `mobileAppId` on every callback. The loan ref
+is not an application identifier, `/payday-disbursement` is their own step,
+and a customer is shown only the `mobileAppId`. This replaces the 2026-09-04
+decision to show customers the LOS App ID.
+
+Built, not yet deployed (backlog F26):
+- `/new-loan-application` carries `mobileAppId` beside `appId`, which stays
+  their LOS AppId: 0 creates an application, an existing one updates it.
+  `los.app-id` is gone. 0 is now a constant, because any other value would make
+  every first submit an update of that one application.
+- `/customer-accepted` carries `mobileAppId` beside `appId`.
+- Their AppId is read from the submit response under either name, `AppId` or
+  `LosAppId`.
+- Our callbacks find the application by `mobileAppId` only. `appId` is still
+  read from a body without `mobileAppId` until Sambat have switched.
+  `losApplicationNo` (their AppRefId) and `loanRefNo` are no longer read.
+- "Mark as filed" requires their LOS AppId, which the acceptance call needs.
+- The app shows our id as the App ID on every screen and no longer reads the
+  LOS ids.
+
+Still to confirm with Sambat:
+1. In `/new-loan-application`, does their AppId stay in `appId` (0 creates, an
+   existing one updates), or move to a `losAppId` field? Or does a resubmit
+   with the same `mobileAppId` update the application by itself? Until we
+   know, a resubmit sends both `mobileAppId` and the stored `appId`.
+2. Does `/customer-accepted` key on `mobileAppId` now? If so, we no longer
+   need their LOS AppId at all.
+3. The date their callbacks start sending `mobileAppId`, so we can stop
+   reading `appId`.

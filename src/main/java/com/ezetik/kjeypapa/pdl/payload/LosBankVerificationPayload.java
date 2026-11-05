@@ -11,28 +11,25 @@ import lombok.NoArgsConstructor;
  * (after Accept). PROPOSED shape — the strawman sent to Sambat (Q4). Wiring is
  * gated off by {@code pdl.bank-verification.enabled} until the contract lands.
  *
- * Correlation keys mirror the other LOS callbacks (loan ref no, falling back to
- * the LOS application no). {@code verificationDate} timezone/format TBD (Q5.4).
+ * The application is named like on every other callback, by {@code mobileAppId}.
+ * {@code verificationDate} timezone/format TBD (Q5.4).
  */
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
 public class LosBankVerificationPayload {
 
-	/**
-	 * Sambat's LOS AppId — the id they identify an application by, and the
-	 * field name their callbacks use (confirmed 2026-09-03). Preferred over
-	 * {@code losApplicationNo} (their AppRefId) when both are present.
-	 */
+	/** The application, by our own id (see {@link LosNotificationPayload#getMobileAppId}). */
+	private Long mobileAppId;
+
+	/** Sambat's LOS AppId. Read only until their callbacks send {@code mobileAppId}. */
 	private Long appId;
 
-	private String loanRefNo;
-	private String losApplicationNo;
 	private String eventId;
 
 	private String verificationStatus; // SUCCESS / FAILED / PENDING
 	private String disbursementTxnId;
-	private String failureReason; // machine code on FAILED (maps via messageForCode)
+	private String failureReason; // read nowhere: Sambat have no failure codes (QB4.3)
 	private Instant verificationDate;
 
 	private String signature;

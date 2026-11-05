@@ -18,14 +18,12 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class PdlTransaction {
 
-	private Integer id;
-	private String losApplicationNo;
-
 	/**
-	 * Sambat's LOS App ID — the number they identify an application by
-	 * (2026-09-04), and so the one the application cards show a customer.
+	 * The application's id, and the only one a customer is shown: Sambat
+	 * know it as mobileAppId and quote it on every callback (2026-11-05).
+	 * Their own LOS ids stay off the customer's screens.
 	 */
-	private Long losAppId;
+	private Integer id;
 	private Double requestAmount;
 	private Instant applicationDate;
 	private PdlStatusEnum status;
@@ -46,8 +44,6 @@ public class PdlTransaction {
 
 	public PdlTransaction(PaydayLoan p) {
 		this.id = p.getId();
-		this.losApplicationNo = p.getLosApplicationNo();
-		this.losAppId = p.getLosAppId();
 		this.requestAmount = p.getRequestAmount();
 		this.applicationDate = p.getApplicationDate();
 		this.status = p.getStatus();

@@ -173,13 +173,13 @@ class LosWebhookAuthInterceptorTest {
 		MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).addInterceptors(auth).build();
 		URI encoded = URI.create("/api/v1/pdl/%6cos/reject");
 
-		mvc.perform(post(encoded).contentType(MediaType.APPLICATION_JSON).content("{\"appId\":999999}"))
+		mvc.perform(post(encoded).contentType(MediaType.APPLICATION_JSON).content("{\"mobileAppId\":999999}"))
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.type").value("UNAUTHORIZED"));
 		verifyNoInteractions(service);
 
 		mvc.perform(post(encoded).header("X-LOS-Signature", SECRET).contentType(MediaType.APPLICATION_JSON)
-				.content("{\"appId\":999999}"))
+				.content("{\"mobileAppId\":999999}"))
 				.andExpect(status().isOk());
 		verify(service).handleReject(any());
 	}

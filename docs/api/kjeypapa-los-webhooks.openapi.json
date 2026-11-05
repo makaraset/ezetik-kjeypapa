@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Kjey PAPA — inbound webhooks for Sambat LOS",
-    "version": "2026-10-28",
-    "description": "The seven endpoints Sambat LOS calls on Kjey PAPA. This file contains ONLY those endpoints; the rest of our API is not part of this integration.\n\n**Every timestamp must be a full ISO-8601 instant** (2026-08-21T09:00:00Z). A bare date is rejected with HTTP 400 naming the field.\n\nAll responses use the envelope {type, message, data}. A 200 means delivered — including a no-op, whose message begins \"Ignored —\". Handlers are idempotent, so re-delivery after a network failure is safe.\n\n**Every call must carry the shared secret** in the X-LOS-Signature header; it is sent to you separately. Without it, or with a wrong one, the answer is HTTP 401 and nothing is processed.\n\nIdentify the application by appId. A miss answers NOT_FOUND naming what was looked for; a body naming no application answers HTTP 400.\n\nSee PDL_Our_Webhook_Endpoints_for_LOS.docx for the narrative version.",
+    "version": "2026-11-05",
+    "description": "The seven endpoints Sambat LOS calls on Kjey PAPA. This file contains ONLY those endpoints; the rest of our API is not part of this integration.\n\n**Every timestamp must be a full ISO-8601 instant** (2026-08-21T09:00:00Z). A bare date is rejected with HTTP 400 naming the field.\n\nAll responses use the envelope {type, message, data}. A 200 means delivered — including a no-op, whose message begins \"Ignored —\". Handlers are idempotent, so re-delivery after a network failure is safe.\n\n**Every call must carry the shared secret** in the X-LOS-Signature header; it is sent to you separately. Without it, or with a wrong one, the answer is HTTP 401 and nothing is processed.\n\nIdentify the application by mobileAppId, our id for it, which we send in /new-loan-application. Until your callbacks switch, a body without it may name the application by your LOS AppId in appId. A miss answers NOT_FOUND naming what was looked for; a body naming no application answers HTTP 400.\n\nSee PDL_Our_Webhook_Endpoints_for_LOS.docx for the narrative version.",
     "contact": {
       "name": "Kjey PAPA (Ezetik)"
     }
@@ -357,12 +357,15 @@
       "LosNotificationPayload": {
         "type": "object",
         "properties": {
+          "mobileAppId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The application, by our id: the mobileAppId we send in /new-loan-application. The one identifier (agreed 2026-11-05)."
+          },
           "appId": {
             "type": "integer",
-            "format": "int64"
-          },
-          "losApplicationNo": {
-            "type": "string"
+            "format": "int64",
+            "description": "Your LOS AppId. Read only while a body carries no mobileAppId; dropped once you have switched."
           },
           "statusCode": {
             "type": "string"
@@ -386,7 +389,8 @@
             }
           },
           "loanRefNo": {
-            "type": "string"
+            "type": "string",
+            "description": "Your loan reference, for the customer's My Loan screen. Not an identifier."
           },
           "settlementAccountNo": {
             "type": "string"
@@ -496,15 +500,15 @@
       "LosLoanUpdatePayload": {
         "type": "object",
         "properties": {
+          "mobileAppId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The application, by our id: the mobileAppId we send in /new-loan-application. The one identifier (agreed 2026-11-05)."
+          },
           "appId": {
             "type": "integer",
-            "format": "int64"
-          },
-          "losApplicationNo": {
-            "type": "string"
-          },
-          "loanRefNo": {
-            "type": "string"
+            "format": "int64",
+            "description": "Your LOS AppId. Read only while a body carries no mobileAppId; dropped once you have switched."
           },
           "eventId": {
             "type": "string"
@@ -594,15 +598,15 @@
       "LosDisbursementPayload": {
         "type": "object",
         "properties": {
+          "mobileAppId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The application, by our id: the mobileAppId we send in /new-loan-application. The one identifier (agreed 2026-11-05)."
+          },
           "appId": {
             "type": "integer",
-            "format": "int64"
-          },
-          "losApplicationNo": {
-            "type": "string"
-          },
-          "loanRefNo": {
-            "type": "string"
+            "format": "int64",
+            "description": "Your LOS AppId. Read only while a body carries no mobileAppId; dropped once you have switched."
           },
           "eventId": {
             "type": "string"
@@ -632,15 +636,15 @@
       "LosBankVerificationPayload": {
         "type": "object",
         "properties": {
+          "mobileAppId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The application, by our id: the mobileAppId we send in /new-loan-application. The one identifier (agreed 2026-11-05)."
+          },
           "appId": {
             "type": "integer",
-            "format": "int64"
-          },
-          "loanRefNo": {
-            "type": "string"
-          },
-          "losApplicationNo": {
-            "type": "string"
+            "format": "int64",
+            "description": "Your LOS AppId. Read only while a body carries no mobileAppId; dropped once you have switched."
           },
           "eventId": {
             "type": "string"

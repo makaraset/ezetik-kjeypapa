@@ -24,15 +24,11 @@ public interface PaydayLoanRepository extends JpaRepository<PaydayLoan, Integer>
 	@Query("select p from PaydayLoan p where p.status in (:statuses)")
 	List<PaydayLoan> findByStatusIn(List<PdlStatusEnum> statuses);
 
-	Optional<PaydayLoan> findByLosApplicationNo(String losApplicationNo);
-
 	/**
-	 * By Sambat's {@code AppId} — the id they actually identify an application
-	 * by (confirmed 2026-09-03); their AppRefId is not generally used.
+	 * By Sambat's LOS AppId, for callbacks that still name an application by it
+	 * rather than by our id ({@code mobileAppId}, agreed 2026-11-05).
 	 */
 	Optional<PaydayLoan> findByLosAppId(Long losAppId);
-
-	Optional<PaydayLoan> findByLoanRefNo(String loanRefNo);
 
 	@Query("select new com.ezetik.kjeypapa.pdl.payload.PdlTransaction(p) from PaydayLoan p where p.user.id = :userId order by p.id desc")
 	List<PdlTransaction> findTransactionByUserId(int userId);

@@ -52,6 +52,14 @@ public class PdlAcceptanceScheduler {
 	@Value("${pdl.bank-verification.enabled:false}")
 	private boolean bankHandoffEnabled;
 
+	/**
+	 * Sambat's wording for an offer that lapsed unconfirmed (Mobile App
+	 * Dictionary, 30 Oct 2026). It goes in the push and the record; the app
+	 * shows its own copy, in the customer's language.
+	 */
+	private static final String LAPSED = "Apologies. Your loan request is lapsed due to failure in providing "
+			+ "your final decision. Please try it again on the next working day.";
+
 	/** Remind applicants with an Approved (un-accepted) offer to confirm before cut-off. */
 	@Scheduled(cron = "${pdl.acceptance.reminder-cron:0 0/30 8-16 * * *}",
 			zone = "${pdl.acceptance.timezone:Asia/Phnom_Penh}")
@@ -85,9 +93,11 @@ public class PdlAcceptanceScheduler {
 				continue;
 
 			loan.setStatus(PdlStatusEnum.Rejected);
-			// R-CUTOFF = our proposed reason code (PDL_Proposals_to_Sambat.md, QB4.5).
+			// R-CUTOFF is our own marker, never sent to Sambat (their code for a
+			// lapse is E, which we do not send yet: backlog F25). The app words
+			// the reason from it.
 			loan.setLosStatusCode("R-CUTOFF");
-			loan.setLosMessage("Not confirmed before the daily cut-off");
+			loan.setLosMessage(LAPSED);
 			repo.save(loan);
 
 			try {
@@ -95,8 +105,7 @@ public class PdlAcceptanceScheduler {
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
-			notify(loan, "Loan offer expired",
-					"Your loan offer was not confirmed before the cut-off and has been rejected.", "loan_expired");
+			notify(loan, "Loan offer expired", LAPSED, "loan_expired");
 		}
 	}
 

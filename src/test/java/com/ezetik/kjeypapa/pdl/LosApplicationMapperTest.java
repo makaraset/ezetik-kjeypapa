@@ -344,10 +344,20 @@ class LosApplicationMapperTest {
 		// Submitting is retryable, so sending 0 again after a partial failure
 		// would file a second credit application — and a second CBC enquiry —
 		// for the same loan.
-		when(config.getAppId()).thenReturn(0L);
 		assertThat(mapper.toParam(loan, CONSENT_PDF).getAppId()).isZero();
 
 		loan.setLosAppId(8281L);
 		assertThat(mapper.toParam(loan, CONSENT_PDF).getAppId()).isEqualTo(8281L);
+	}
+
+	@Test
+	@DisplayName("the envelope names the application by our own id, the key Sambat quote back")
+	void envelopeCarriesTheMobileAppId() {
+		// Agreed 2026-11-05: mobileAppId is the one id both sides use, and it
+		// stays the same on a resubmit, whatever AppId Sambat have issued.
+		assertThat(mapper.toParam(loan, CONSENT_PDF).getMobileAppId()).isEqualTo((long) loan.getId());
+
+		loan.setLosAppId(8281L);
+		assertThat(mapper.toParam(loan, CONSENT_PDF).getMobileAppId()).isEqualTo((long) loan.getId());
 	}
 }

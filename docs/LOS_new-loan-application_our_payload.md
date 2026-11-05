@@ -2,6 +2,8 @@
 
 Generated 2026-08-30 from a real fixture (loan 18, a USD 40 payday application on a test account) through the exact code that will submit for real. `Doc_*` base64 is replaced by its byte size; nothing else is edited.
 
+> **Superseded on the envelope ids.** `appId` is Sambat's LOS AppId: 0 creates an application, an existing one updates it (2026-09-03). The envelope now also carries `mobileAppId`, our id, which is the key both sides use (2026-11-05). See `LOS_Submit_Open_Questions.md`.
+
 **Flow:** app → `POST /pdl/{id}/submit` (our backend, no body) → our backend builds this JSON → `POST https://tricube-uat.sambatfinance.com:6443/api/new-loan-application`.
 
 **Request to Sambat:** please send your reference payload for the same product so we can diff field by field. The questions below are what we cannot answer from the swagger or Appendix 2.

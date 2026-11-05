@@ -137,9 +137,10 @@ documents inline as base64:
 | `Doc_BankStatement` | request-time upload |
 | `Doc_ECBCConsentForm` | generated Khmer PDF, your wording |
 
-Their response carries `AppId` and `AppRefId`. **`AppId` is the identifier every
-later callback quotes** — we store both, and getting this wrong orphans every
-subsequent message.
+We send our own id for the application as `mobileAppId`: agreed on 2026-11-05 as
+the one identifier both sides use, and **the one every later callback quotes**.
+Their response carries their LOS `AppId` and `AppRefId`; we keep the AppId for the
+calls that still take it, and the customer is shown only the `mobileAppId`.
 
 Three things guard this call:
 
@@ -184,7 +185,7 @@ This must be on before first deployment.
 **→ Sambat** `POST /customer-accepted`
 
 The customer reads the offer, ticks the T&C gate and confirms; we relay the
-decision with their application id.
+decision with the `mobileAppId` and their AppId.
 
 ⚠ Two fields on this call, `smsText` and `trnCode`, are typed as strings in your
 swagger and documented nowhere. We send them empty. `smsText` may reach a real
@@ -215,8 +216,8 @@ available until cut-off.
 They push the outcome; we mark the loan Disbursed, store the transaction id and
 notify the customer.
 
-⚠ **Open:** whether `/payday-disbursement` is a call *we* make after
-disbursement, or purely their own step. Not built pending your answer.
+`/payday-disbursement` is their own step, not a call we make (answered
+2026-11-05).
 
 ---
 
@@ -225,7 +226,7 @@ disbursement, or purely their own step. Not built pending your answer.
 **← Sambat** `POST /api/v1/pdl/los/loan-update`
 
 Outstanding balance, days past due, last payment, and the per-installment paid
-breakdown. Matched by `losApplicationNo` or `loanRefNo`. A fully repaid loan
+breakdown. Matched by `mobileAppId`, like every callback. A fully repaid loan
 arrives here as closed, which is what moves it to the Closed tab and stamps the
 loan-file end date.
 
@@ -237,9 +238,8 @@ loan-file end date.
 |---|---|---|
 | 1 | `smsText` / `trnCode` on `/customer-accepted` | Sambat |
 | 2 | A duplicate-submission lookup or idempotency key | Sambat |
-| 3 | Whether `/payday-disbursement` is ours to call | Sambat |
-| 4 | Webhook inbound authentication mechanism | Sambat, then us |
-| 5 | The nine consent fields on `newAppRequest` | Sambat *(see `CBC_Consent_Record_Spec.md` §8)* |
+| 3 | Webhook inbound authentication mechanism | Sambat, then us |
+| 4 | The nine consent fields on `newAppRequest` | Sambat *(see `CBC_Consent_Record_Spec.md` §8)* |
 
 ## Before first deployment
 

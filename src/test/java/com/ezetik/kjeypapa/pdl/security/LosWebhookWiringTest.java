@@ -63,7 +63,7 @@ class LosWebhookWiringTest {
 	@DisplayName("an anonymous approve is refused by the registered interceptor")
 	void anonymousRefused() throws Exception {
 		mvc.perform(post("/api/v1/pdl/los/approved").contentType(MediaType.APPLICATION_JSON)
-				.content("{\"appId\":999999}"))
+				.content("{\"mobileAppId\":999999}"))
 				.andExpect(status().isUnauthorized());
 		verifyNoInteractions(service);
 	}
@@ -72,7 +72,7 @@ class LosWebhookWiringTest {
 	@DisplayName("with the secret, the approve is served")
 	void withSecretServed() throws Exception {
 		mvc.perform(post("/api/v1/pdl/los/approved").header("X-LOS-Signature", "test-only-secret-not-a-real-credential")
-				.contentType(MediaType.APPLICATION_JSON).content("{\"appId\":999999}"))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"mobileAppId\":999999}"))
 				.andExpect(status().isOk());
 		verify(service).handleApproved(any());
 	}

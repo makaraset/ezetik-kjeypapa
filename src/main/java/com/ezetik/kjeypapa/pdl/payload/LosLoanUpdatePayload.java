@@ -18,15 +18,12 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class LosLoanUpdatePayload {
 
-	/**
-	 * Sambat's LOS AppId — the id they identify an application by, and the
-	 * field name their callbacks use (confirmed 2026-09-03). Preferred over
-	 * {@code losApplicationNo} (their AppRefId) when both are present.
-	 */
+	/** The application, by our own id (see {@link LosNotificationPayload#getMobileAppId}). */
+	private Long mobileAppId;
+
+	/** Sambat's LOS AppId. Read only until their callbacks send {@code mobileAppId}. */
 	private Long appId;
 
-	private String losApplicationNo;
-	private String loanRefNo;
 	private String eventId;
 
 	private String status; // Active / Closed / Overdue

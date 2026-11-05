@@ -77,7 +77,10 @@ class PdlAcceptanceSchedulerTest {
 		scheduler.enforceCutoff();
 
 		assertThat(l.getStatus()).isEqualTo(PdlStatusEnum.Rejected);
-		assertThat(l.getLosMessage()).contains("cut-off");
+		// The app words the reason from the code; the text is Sambat's lapse wording.
+		assertThat(l.getLosStatusCode()).isEqualTo("R-CUTOFF");
+		assertThat(l.getLosMessage()).isEqualTo("Apologies. Your loan request is lapsed due to failure in "
+				+ "providing your final decision. Please try it again on the next working day.");
 		verify(losProvider).sendDecision(l, "N", null);
 	}
 

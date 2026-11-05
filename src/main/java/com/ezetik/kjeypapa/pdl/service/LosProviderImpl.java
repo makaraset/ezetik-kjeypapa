@@ -108,14 +108,14 @@ public class LosProviderImpl implements LosProvider {
 					"Sambat accepted the application but returned no reference.");
 
 		LosPostResult result = response.getResult().get(0);
-		loan.setLosAppId(result.getAppId());
+		loan.setLosAppId(result.getLosAppId());
 		return String.valueOf(result.getAppRefId());
 	}
 
 	@Override
 	public void sendDecision(PaydayLoan loan, String decision, String signedContractRef) {
 		if (mockEnabled) {
-			log.info("[LOS mock] decision {} for {}{}", decision, loan.getLosApplicationNo(),
+			log.info("[LOS mock] decision {} for mobileAppId {}{}", decision, loan.getId(),
 					signedContractRef != null ? " (contract " + signedContractRef + ")" : "");
 			return;
 		}
@@ -138,7 +138,8 @@ public class LosProviderImpl implements LosProvider {
 					"This application has no Sambat application id, so the acceptance cannot be sent.");
 
 		try {
-			sbf.customerAccepted(loan.getLosAppId(), submitConfig.getDoneBy(), acceptSmsText, acceptTrnCode);
+			sbf.customerAccepted(loan.getId(), loan.getLosAppId(), submitConfig.getDoneBy(), acceptSmsText,
+					acceptTrnCode);
 		} catch (LosSubmitException e) {
 			throw e;
 		} catch (Exception e) {

@@ -1,7 +1,6 @@
 package com.ezetik.kjeypapa.pdl.service;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -74,6 +73,10 @@ public class LosWebhookService {
 	@Value("${pdl.bank-verification.enabled:false}")
 	private boolean bankVerificationEnabled;
 
+	/** The number Sambat's rejection wording asks the customer to call. */
+	@Value("${pdl.customer.hotline:023 9977 22 or 093 99 77 22}")
+	private String hotline;
+
 	/** BRS 2.4 — reject. */
 	@Transactional
 	public ResponseEntity<Message<String>> handleReject(LosNotificationPayload p) {
@@ -93,7 +96,7 @@ public class LosWebhookService {
 			loan.setLosMessage(messageForCode(p.getStatusCode(), p.getMessage()));
 			repo.save(loan);
 
-			notify(loan, "Loan application rejected", "loan_rejected");
+			notify(loan, "Loan application rejected", rejectionNotice(loan), "loan_rejected");
 			return ok("Reject processed");
 		} catch (Exception e) {
 			return error(e);
@@ -119,7 +122,9 @@ public class LosWebhookService {
 			loan.setLosMessage(messageForCode(p.getStatusCode(), p.getMessage()));
 			repo.save(loan);
 
-			notify(loan, "Loan application needs attention", "loan_rejected");
+			// The customer is told it was rejected: Sambat's dictionary has no
+			// rework for PDL, only R-LPO / R-AO and their rejection wording.
+			notify(loan, "Loan application rejected", rejectionNotice(loan), "loan_rejected");
 			return ok("Rework processed");
 		} catch (Exception e) {
 			return error(e);
@@ -228,11 +233,11 @@ public class LosWebhookService {
 	@Transactional
 	public ResponseEntity<Message<String>> handleDisbursement(LosDisbursementPayload p) {
 		try {
-			if (!identified(reference(p), p.getLoanRefNo()))
+			if (!identified(p.getMobileAppId(), p.getAppId()))
 				return noIdentifier();
-			PaydayLoan loan = findLoan(reference(p), p.getLoanRefNo());
+			PaydayLoan loan = findLoan(p.getMobileAppId(), p.getAppId());
 			if (loan == null)
-				return notFound(p.getAppId(), p.getLosApplicationNo(), p.getLoanRefNo());
+				return notFound(p.getMobileAppId(), p.getAppId());
 
 			if ("DISBURSED".equalsIgnoreCase(p.getDisbursementStatus())) {
 				loan.setDisbursementTxnId(p.getDisbursementTxnId());
@@ -271,11 +276,11 @@ public class LosWebhookService {
 			if (!bankVerificationEnabled)
 				return ok("Ignored — bank-verification hand-off not enabled (pending Sambat contract, Q4)");
 
-			if (!identified(reference(p), p.getLoanRefNo()))
+			if (!identified(p.getMobileAppId(), p.getAppId()))
 				return noIdentifier();
-			PaydayLoan loan = findLoan(reference(p), p.getLoanRefNo());
+			PaydayLoan loan = findLoan(p.getMobileAppId(), p.getAppId());
 			if (loan == null)
-				return notFound(p.getAppId(), p.getLosApplicationNo(), p.getLoanRefNo());
+				return notFound(p.getMobileAppId(), p.getAppId());
 
 			String status = p.getVerificationStatus();
 			if ("SUCCESS".equalsIgnoreCase(status)) {
@@ -314,11 +319,11 @@ public class LosWebhookService {
 	@Transactional
 	public ResponseEntity<Message<String>> handleLoanUpdate(LosLoanUpdatePayload p) {
 		try {
-			if (!identified(reference(p), p.getLoanRefNo()))
+			if (!identified(p.getMobileAppId(), p.getAppId()))
 				return noIdentifier();
-			PaydayLoan loan = findLoan(reference(p), p.getLoanRefNo());
+			PaydayLoan loan = findLoan(p.getMobileAppId(), p.getAppId());
 			if (loan == null)
-				return notFound(p.getAppId(), p.getLosApplicationNo(), p.getLoanRefNo());
+				return notFound(p.getMobileAppId(), p.getAppId());
 
 			if (p.getOutstandingAmount() != null)
 				loan.setOutstandingAmount(p.getOutstandingAmount());
@@ -389,70 +394,33 @@ public class LosWebhookService {
 	// --- helpers ---
 
 	private PaydayLoan find(LosNotificationPayload p) {
-		return p == null ? null : findLoan(reference(p), p.getLoanRefNo());
+		return p == null ? null : findLoan(p.getMobileAppId(), p.getAppId());
 	}
 
 	/**
-	 * Their callbacks carry the AppId in a field named {@code appId}
-	 * (confirmed 2026-09-03); {@code losApplicationNo} stays supported for the
-	 * sample bank app and anything already sending an AppRefId.
-	 */
-	private static String reference(LosNotificationPayload p) {
-		return ref(p.getAppId(), p.getLosApplicationNo());
-	}
-
-	private static String reference(LosDisbursementPayload p) {
-		return ref(p.getAppId(), p.getLosApplicationNo());
-	}
-
-	private static String reference(LosBankVerificationPayload p) {
-		return ref(p.getAppId(), p.getLosApplicationNo());
-	}
-
-	private static String reference(LosLoanUpdatePayload p) {
-		return ref(p.getAppId(), p.getLosApplicationNo());
-	}
-
-	private static String ref(Long appId, String losApplicationNo) {
-		return appId != null ? String.valueOf(appId) : losApplicationNo;
-	}
-
-	/**
-	 * Resolve a loan from whichever identifier Sambat sends.
+	 * The loan a callback names. There is one key, agreed with Sambat on
+	 * 2026-11-05: {@code mobileAppId}, our own application id, which we send in
+	 * {@code /new-loan-application} and they quote on every callback.
 	 *
-	 * <p>Their submit response returns BOTH an {@code AppId} (4-digit, e.g.
-	 * 8281) and an {@code AppRefId} (6-digit, e.g. 257861), and Sambat
-	 * confirmed (2026-09-03) that <b>AppId is the id they identify an
-	 * application by</b> — AppRefId is not generally used. The inbound payload
-	 * carries one generic reference field, so a webhook keyed on AppId would
-	 * never have matched the AppRefId we store as losApplicationNo, and every
-	 * status update would have 404'd silently. Try both columns, then the loan
-	 * ref no.
+	 * <p>Until their callbacks switch over, a body without it may still name
+	 * the application by their LOS AppId in {@code appId}, the key agreed on
+	 * 2026-09-03. That fallback goes once they have switched. Their AppRefId
+	 * and the loan ref no are not identifiers and are not read.
 	 */
-	private PaydayLoan findLoan(String reference, String loanRefNo) {
-		if (reference != null && !reference.isBlank()) {
-			PaydayLoan l = repo.findByLosApplicationNo(reference).orElse(null);
-			if (l != null)
-				return l;
-			try {
-				l = repo.findByLosAppId(Long.valueOf(reference.trim())).orElse(null);
-				if (l != null)
-					return l;
-			} catch (NumberFormatException ignored) {
-				// Not an AppId-shaped value; fall through to the loan ref no.
-			}
-		}
-		if (loanRefNo != null)
-			return repo.findByLoanRefNo(loanRefNo).orElse(null);
-		return null;
+	private PaydayLoan findLoan(Long mobileAppId, Long appId) {
+		if (mobileAppId != null)
+			return mobileAppId > 0 && mobileAppId <= Integer.MAX_VALUE
+					? repo.findById(mobileAppId.intValue()).orElse(null)
+					: null;
+		return appId == null ? null : repo.findByLosAppId(appId).orElse(null);
 	}
 
 	private static boolean identified(LosNotificationPayload p) {
-		return p != null && identified(reference(p), p.getLoanRefNo());
+		return p != null && identified(p.getMobileAppId(), p.getAppId());
 	}
 
-	private static boolean identified(String reference, String loanRefNo) {
-		return sent(reference) || sent(loanRefNo);
+	private static boolean identified(Long mobileAppId, Long appId) {
+		return mobileAppId != null || appId != null;
 	}
 
 	private static boolean sent(String value) {
@@ -465,52 +433,61 @@ public class LosWebhookService {
 	 */
 	private ResponseEntity<Message<String>> noIdentifier() {
 		return new ResponseEntity<>(new Message<>("BAD_REQUEST",
-				"No application identifier in the body. Send appId: the AppId /new-loan-application returned.",
+				"No application identifier in the body. Send mobileAppId: the id we sent you in /new-loan-application.",
 				null), HttpStatus.BAD_REQUEST);
 	}
 
-	/**
-	 * Says which identifier we looked for. This used to print losApplicationNo
-	 * whatever was sent, so a miss on an appId-only body read "Application not
-	 * found: null" and looked as if we had ignored the AppId.
-	 */
-	private ResponseEntity<Message<String>> notFound(Long appId, String losApplicationNo, String loanRefNo) {
-		List<String> tried = new ArrayList<>();
-		if (appId != null)
-			tried.add("appId " + appId);
-		else if (sent(losApplicationNo))
-			tried.add("losApplicationNo " + losApplicationNo);
-		if (sent(loanRefNo))
-			tried.add("loanRefNo " + loanRefNo);
-		return new ResponseEntity<>(
-				new Message<>("NOT_FOUND", "Application not found: " + String.join(", ", tried), null),
+	/** Says which identifier we looked for, so a miss can be traced on both sides. */
+	private ResponseEntity<Message<String>> notFound(Long mobileAppId, Long appId) {
+		String tried = mobileAppId != null ? "mobileAppId " + mobileAppId : "appId " + appId;
+		return new ResponseEntity<>(new Message<>("NOT_FOUND", "Application not found: " + tried, null),
 				HttpStatus.OK);
 	}
 
 	private ResponseEntity<Message<String>> notFound(LosNotificationPayload p) {
-		return notFound(p.getAppId(), p.getLosApplicationNo(), p.getLoanRefNo());
+		return notFound(p.getMobileAppId(), p.getAppId());
 	}
 
-	/** Map the LOS status code to the user-facing message (BRS 2.4/2.5). */
+	/** Sambat's payday-loan wording for R-LPO (Mobile App Dictionary, 30 Oct 2026). */
+	private static final String INSUFFICIENT_INFO =
+			"Apologies. Your application has been rejected due to insufficient information or documents.";
+
+	/** Theirs for R-AO, which is also their rejection with no reason given. */
+	private static final String REJECTED = "Apologies. Your loan application has been rejected.";
+
+	/**
+	 * The customer-facing reason for a rejection code. Sambat send codes only,
+	 * with no text, so their two payday-loan codes get their wording here. Any
+	 * other code keeps the text sent with it, which may be none: the app then
+	 * shows the generic rejection in the customer's language.
+	 */
 	private String messageForCode(String code, String fallback) {
 		if ("R-LPO".equals(code) || "RW-LPO".equals(code))
-			return "Insufficient Information or Documents";
+			return INSUFFICIENT_INFO;
 		if ("R-AO".equals(code) || "RW-AO".equals(code))
-			return "Not eligible for the loan";
-		// V21: bank payroll-account verification failure (dormant/closed/not found).
-		// Exact code TBD — Sambat to confirm (Q5).
-		if ("R-BANK".equals(code) || "INVALID_ACCOUNT".equals(code) || "BANK_VERIFY_FAILED".equals(code))
-			return "Bank account could not be verified";
+			return REJECTED;
 		return fallback;
 	}
 
+	/** The rejection push: the reason, then the hotline, as Sambat's wording has it. */
+	private String rejectionNotice(PaydayLoan loan) {
+		String reason = sent(loan.getLosMessage()) ? loan.getLosMessage().strip() : REJECTED;
+		// Text sent with an unknown code may lack a full stop.
+		String stop = reason.matches("(?s).*[.!?។]") ? " " : ". ";
+		return reason + stop + "Please call " + hotline + " for more information.";
+	}
+
 	private void notify(PaydayLoan loan, String title, String type) {
+		notify(loan, title, loan.getId().toString(), type);
+	}
+
+	private void notify(PaydayLoan loan, String title, String body, String type) {
 		try {
 			User u = loan.getUser();
 			if (u != null && u.getFcmToken() != null) {
 				// type + refId drive app-side severity mapping and deep links (G19).
 				notificationService.postToClient(new NotificationMessage(u.getFcmToken(), title,
-						loan.getId().toString(), loan.getId().toString(), u.getUsername(),
+						body, loan.getId().toString(), u.getUsername(),
 						type, loan.getId().toString()));
 			}
 		} catch (Exception e) {

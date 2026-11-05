@@ -122,11 +122,12 @@ public class PdlSubmissionReconcileService {
 		PaydayLoan loan = loanAwaiting(loanId);
 		if (loan == null)
 			return resp("NOT_FOUND", "No loan " + loanId + " is awaiting reconciliation", null);
-		if (losAppId == null && (losApplicationNo == null || losApplicationNo.isBlank()))
+		// Callbacks find the loan by our own id, but their acceptance call still
+		// takes their LOS AppId: without it the customer could never accept.
+		if (losAppId == null)
 			return resp("INVALID",
-					"Give Sambat's application id from their console — it is what every later "
-							+ "callback quotes, and without it their decision cannot be matched "
-							+ "to this loan.",
+					"Give Sambat's LOS AppId from their console: the customer's acceptance is "
+							+ "relayed to them by it.",
 					null);
 
 		loan.setLosAppId(losAppId);

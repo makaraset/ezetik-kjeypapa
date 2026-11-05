@@ -107,8 +107,19 @@ class LosContractTest {
 	void successCarriesIds() throws Exception {
 		LosPostResponse ok = om.treeToValue(resource("response_success.json"), LosPostResponse.class);
 		assertEquals(1, ok.getResult().size());
-		assertEquals(8032L, ok.getResult().get(0).getAppId());
+		assertEquals(8032L, ok.getResult().get(0).getLosAppId());
 		assertEquals(254906, ok.getResult().get(0).getAppRefId());
 		assertEquals(null, ok.errorText());
+	}
+
+	@Test
+	@DisplayName("their AppId still lands once they rename it LosAppId")
+	void losAppIdUnderItsNewName() throws Exception {
+		// Sambat are renaming AppId to LosAppId (2026-11-05). Missing it would
+		// leave the loan unable to relay the customer's acceptance.
+		LosPostResponse renamed = om.readValue(
+				"{\"IsSuccess\":\"Success\",\"Result\":[{\"LosAppId\":8301,\"AppRefId\":257990}]}",
+				LosPostResponse.class);
+		assertEquals(8301L, renamed.getResult().get(0).getLosAppId());
 	}
 }

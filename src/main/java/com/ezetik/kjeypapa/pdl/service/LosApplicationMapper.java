@@ -70,6 +70,13 @@ public class LosApplicationMapper {
 	private static final String KHM = "KHM";
 
 	/**
+	 * The envelope appId that asks Sambat to create an application. Not a
+	 * setting: any other value would make every first submit an update of
+	 * that one application, filing each customer over the last.
+	 */
+	private static final long NEW_APPLICATION = 0;
+
+	/**
 	 * @param consentPdf the consent document as filed. Passed in rather than
 	 *        rendered here so that the bytes Sambat receive are the same object
 	 *        the caller archives and hashes — rendering twice invites two
@@ -104,7 +111,10 @@ public class LosApplicationMapper {
 		// Submitting is retryable, so once we hold an AppId we must send it
 		// back — otherwise a retry files a SECOND credit application for the
 		// same loan, with its own CBC enquiry, under the customer's name.
-		param.setAppId(loan.getLosAppId() != null ? loan.getLosAppId() : config.getAppId());
+		param.setAppId(loan.getLosAppId() != null ? loan.getLosAppId() : NEW_APPLICATION);
+		// Our own id, the one both sides key on (2026-11-05): Sambat quote it
+		// back on every callback.
+		param.setMobileAppId(loan.getId());
 		// custId is the SBF CIF, or 0 for a customer they have never seen.
 		param.setCustId(cif(loan));
 		// A constant, NEVER the customer's username: their LOS dies with a slow

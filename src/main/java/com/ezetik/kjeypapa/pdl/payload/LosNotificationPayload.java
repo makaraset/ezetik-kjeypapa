@@ -20,13 +20,15 @@ import lombok.NoArgsConstructor;
 public class LosNotificationPayload {
 
 	/**
-	 * Sambat's LOS AppId — the id they identify an application by, and the
-	 * field name they confirmed their callbacks use (2026-09-03). Preferred
-	 * over {@code losApplicationNo} (their AppRefId) when both are present.
+	 * The application, by our own id: the {@code mobileAppId} we send in
+	 * {@code /new-loan-application}. Sambat quote it on every callback
+	 * (agreed 2026-11-05); it is the one key we look an application up by.
 	 */
+	private Long mobileAppId;
+
+	/** Sambat's LOS AppId. Read only until their callbacks send {@code mobileAppId}. */
 	private Long appId;
 
-	private String losApplicationNo;
 	private String statusCode; // R-LPO / R-AO / RW-LPO / RW-AO
 	private String message; // user-facing reason / comment
 

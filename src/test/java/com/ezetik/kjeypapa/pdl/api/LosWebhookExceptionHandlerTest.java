@@ -42,7 +42,7 @@ class LosWebhookExceptionHandlerTest {
 		// The real incident: a bare yyyy-MM-dd used to answer HTTP 403 with an
 		// empty body, which reads as an authentication problem and is not one.
 		String message = describeFailureOf(
-				"{\"appId\":1,\"disbursedDate\":\"2026-08-21\"}", LosDisbursementPayload.class);
+				"{\"mobileAppId\":1,\"disbursedDate\":\"2026-08-21\"}", LosDisbursementPayload.class);
 
 		assertThat(message).contains("disbursedDate").contains("ISO-8601")
 				.contains("2026-08-21T09:00:00Z").contains("Received: '2026-08-21'");
@@ -54,7 +54,7 @@ class LosWebhookExceptionHandlerTest {
 		// The schedule rows are where most timestamps live, so a message that
 		// only reached top-level fields would miss the common case.
 		String message = describeFailureOf(
-				"{\"appId\":1,\"schedule\":[{\"installmentNo\":1,\"dueDate\":\"2026-10-01\"}]}",
+				"{\"mobileAppId\":1,\"schedule\":[{\"installmentNo\":1,\"dueDate\":\"2026-10-01\"}]}",
 				LosNotificationPayload.class);
 
 		assertThat(message).contains("dueDate").contains("ISO-8601");
@@ -64,7 +64,7 @@ class LosWebhookExceptionHandlerTest {
 	@DisplayName("a non-date field is named without the date advice")
 	void otherFieldsAreNamedPlainly() {
 		String message = describeFailureOf(
-				"{\"appId\":1,\"disbursedAmount\":\"lots\"}", LosDisbursementPayload.class);
+				"{\"mobileAppId\":1,\"disbursedAmount\":\"lots\"}", LosDisbursementPayload.class);
 
 		assertThat(message).contains("disbursedAmount").contains("Received: 'lots'")
 				.doesNotContain("ISO-8601");
@@ -73,7 +73,7 @@ class LosWebhookExceptionHandlerTest {
 	@Test
 	@DisplayName("unparseable JSON still gets an answer rather than an empty body")
 	void brokenJsonIsExplained() {
-		String message = describeFailureOf("{\"appId\":", LosDisbursementPayload.class);
+		String message = describeFailureOf("{\"mobileAppId\":", LosDisbursementPayload.class);
 
 		assertThat(message).isEqualTo("The request body could not be read as JSON.");
 	}

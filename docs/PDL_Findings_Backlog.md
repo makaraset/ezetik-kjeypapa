@@ -12,6 +12,103 @@ it was found, so a reader can judge how much it has actually been checked.
 
 ## Open findings
 
+### F26 — three ids for one application, and the customer saw two of them
+**Severity:** medium · **Status:** ~~open~~ **FIXED 2026-11-05, not yet deployed** ·
+**Found:** 2026-11-05, reviewing every id that crosses to Sambat
+
+Our id, Sambat's LOS AppId and their AppRefId all crossed the boundary, with
+the loan ref as a further fallback key.
+- **`los.app-id` made the envelope's appId a setting.** Default 0, labelled
+  "Mobile App ID" in Appendix 2. Any other value would have made every first
+  submit an update of that one LOS application, filing each customer over the
+  last.
+- **The customer saw two App IDs.** The dashboard and the confirm page showed
+  Sambat's AppId; the acceptance page and My Loan showed ours. "Loan Ref No"
+  fell back to the AppId.
+- **"Mark as filed" accepted an AppRefId alone.** That left a loan whose
+  acceptance could never be relayed.
+- **Callbacks looked an `appId` up in the AppRefId column first.** No live
+  impact while AppIds are 4-digit and AppRefIds 6-digit.
+- **Dev and UAT used different keys.** Mock mode ran on `losApplicationNo`
+  (`LOS-MOCK-n`), UAT on `appId`.
+
+Agreed with Sambat on 2026-11-05:
+- one id, **`mobileAppId` = ours**, carried on every callback
+- theirs is `losAppId`, kept only where a call needs it
+- the loan ref is not an identifier
+- `/payday-disbursement` is their own step
+- customers see only the `mobileAppId`
+
+Now:
+- **Submit:** carries `mobileAppId`, and 0 is a constant.
+- **`/customer-accepted`:** carries `mobileAppId` beside `appId`.
+- **Callbacks:** found by `mobileAppId`. `appId` is still read until Sambat
+  switch.
+- **"Mark as filed":** requires the LOS AppId.
+- **App:** shows only our id, and its models no longer hold the LOS ids. The
+  customer projection no longer carries them either.
+
+Waiting on Sambat (`LOS_Submit_Open_Questions.md`, last section):
+- whether the envelope's `appId` moves to `losAppId`
+- whether `/customer-accepted` keys on `mobileAppId`
+- the date their callbacks switch
+
+Unit-tested; not yet run on a device or against Sambat.
+
+### F25 — our decisions to Sambat do not follow their Mobile App Dictionary
+**Severity:** high · **Status:** open, waiting on Sambat · **Found:** 2026-11-05,
+reviewing their *Mobile App_Dictionary.xlsx* (30 October)
+
+The dictionary has us send the LOS one of three codes:
+- **Y**: the customer accepted and the Campu Bank transaction succeeded. It
+  carries the signed e-contract, e-schedule and e-application.
+- **N**: the customer rejected, or accepted and the bank step failed.
+- **E**: the offer lapsed unconfirmed.
+
+We send only Y, at the moment the customer accepts, with nothing attached (the
+"signed contract" is the app's placeholder `APP-SIGNED-{id}`).
+`LosProviderImpl.sendDecision` drops N, believing Sambat had no decline call.
+Their swagger describes `/customer-accepted` as "Accepted or Rejected from
+customer". The cut-off also sends N where they want E.
+
+Separately, the dictionary gives payday loans two approval codes: A-LPO, then
+A-AO from the Approving Officer. Our `/approved` treats every call as the final
+offer and ignores the code. If A-LPO reaches it, the customer can accept before
+the officer decides, and a later R-AO is ignored once accepted.
+
+Not built until Sambat answer:
+- whether Y/N/E go in `trnCode` on `/customer-accepted`
+- whether A-LPO is ever sent to us
+- whether the money moves in the Campu Bank app or by the LOS after Y
+- which field and format carry the attachments
+
+### F24 — rejection wording: wrong for R-AO, English only, blank for an unknown code
+**Severity:** medium · **Status:** ~~open~~ **FIXED 2026-11-05, not yet deployed** ·
+**Found:** 2026-11-05, reviewing Sambat's Mobile App Dictionary (F25)
+
+The dictionary says the LOS sends codes only, and gives the customer wording
+for each.
+- **R-AO** told payday-loan customers *Not eligible for the loan*, which is
+  their Micro/Personal wording. For payday loans it is *Apologies. Your loan
+  application has been rejected.* R-LPO and the cut-off's lapse message are now
+  their sentences too.
+- **Khmer users read English reasons.** The Rejected card showed the backend's
+  English text. The app's own code-to-text mapping, Khmer included, was never
+  called. The card now words the reason from the code, in the customer's
+  language. Our own rejections carry codes for this, never sent to Sambat:
+  R-CUTOFF as before, and R-CUSTOMER when the customer rejects.
+- **An unknown code with no text showed no reason.** It now shows the generic
+  rejection.
+- **The reject and rework pushes carried the loan id as their body.** They now
+  carry the reason and the hotline, as the dictionary's wording asks. A rework
+  push says rejected, not "needs attention": payday loans have no rework.
+
+The Khmer is our draft, because the dictionary is English only. The hotline
+stands in for their "XXX" and is unconfirmed (`pdl.customer.hotline`). The
+dead `R-BANK` mapping is gone, and test script §F now checks these codes in
+place of it. Build 18 keeps showing the backend's English until the next app
+build. Unit-tested; not yet run on a device.
+
 ### F23 — the 17:00 cut-off expired loans the customer had already accepted
 **Severity:** high · **Status:** ~~open~~ **FIXED 2026-11-04, not yet deployed** ·
 **Found:** 2026-11-04, writing SBF's approve-and-reject guide

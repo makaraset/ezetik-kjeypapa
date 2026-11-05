@@ -312,6 +312,8 @@ class PaydayLoanServiceImplTest {
 		PaydayLoan out = service.accept(1, new PdlAcceptDecision("N", null)).getBody().getData();
 
 		assertThat(out.getStatus()).isEqualTo(PdlStatusEnum.Rejected);
+		// Ours, not Sambat's: it lets the app word the reason in Khmer too.
+		assertThat(out.getLosStatusCode()).isEqualTo("R-CUSTOMER");
 	}
 
 	@Test

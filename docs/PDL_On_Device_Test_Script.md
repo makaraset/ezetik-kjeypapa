@@ -40,10 +40,10 @@ TOKEN=$(curl -s -X POST "$BASE/auth/authenticate" -H "Content-Type: application/
   -d '{"username":"012551101","password":"123456"}' | python3 -c "import sys,json;print(json.load(sys.stdin)['token'])")
 echo "token: ${TOKEN:0:16}..."
 
-# Helper: latest application's id / losApplicationNo / status
+# Helper: each application's id (its mobileAppId) / status
 apps(){ curl -s "$BASE/pdl/my-transactions" -H "Authorization: Bearer $TOKEN" \
-  | python3 -c "import sys,json;[print(a.get('id'),a.get('losApplicationNo'),a.get('status')) for a in (json.load(sys.stdin).get('data') or [])]"; }
-apps   # run after each app action to read id / LOS no / status
+  | python3 -c "import sys,json;[print(a.get('id'),a.get('status')) for a in (json.load(sys.stdin).get('data') or [])]"; }
+apps   # run after each app action to read id / status
 ```
 
 ---
@@ -80,7 +80,7 @@ apps   # run after each app action to read id / LOS no / status
    - **Expect (G1):** **NO** loan-period field, **NO** document pickers, **NO** bank-consent checkbox.
 8. [ ] **APP** Select **KHR**, enter an amount (e.g. `500`), tick **CBC consent**, submit.
    - **Expect:** submit is blocked until amount > 0 **and** CBC consent is ticked.
-9. [ ] **DRIVE** `apps` → note the new **id**, **losApplicationNo** (`LOS-MOCK-<id>`), status **Submitted**.
+9. [ ] **DRIVE** `apps` → note the new **id** (its `mobileAppId`), status **Submitted**.
 
 > **G2 negative check (optional):** on a profile missing the bank-statement ref, submit should
 > return **`MISSING_DOCUMENT` — "Missing document: bank statement"**. (Requires clearing
@@ -90,15 +90,16 @@ apps   # run after each app action to read id / LOS no / status
 
 ## D. LOS approve + Accept (sets up G3)
 
-Set the app number from step 9:
+Set the application id from step 9. Every callback names the application by
+it, as `mobileAppId`:
 ```bash
-LOSNO="LOS-MOCK-<id>"     # <-- from `apps`
+ID=<id>     # <-- from `apps`
 ```
 
 10. [ ] **DRIVE** push the **approved** webhook:
     ```bash
     curl -s -X POST "$BASE/pdl/los/approved" -H "Content-Type: application/json" -d '{
-      "losApplicationNo":"'"$LOSNO"'",
+      "mobileAppId":'"$ID"',
       "message":"Approved",
       "loanRefNo":"PDL-2026-TEST",
       "currency":"KHR",
@@ -130,39 +131,50 @@ near-future cron, so it's **optional**.
 15. [ ] **Cut-off (fast recipe):** set in `application.properties`
     `pdl.acceptance.cutoff-cron=0 <now+2min> * * * *` and `pdl.acceptance.grace-minutes=0`,
     restart the backend, wait for the tick.
-    - **Expect:** the Approved-un-accepted loan → **Rejected** ("Not confirmed before the daily
-      cut-off"), a push arrives, and the mock LOS receives an `"N"` decision (backend log).
+    - **Expect:** the Approved-un-accepted loan → **Rejected** with Sambat's lapse wording,
+      *"Apologies. Your loan request is lapsed due to failure in providing your final decision.
+      Please try it again on the next working day."* (in Khmer when the app is in Khmer), a push
+      arrives, and the mock LOS receives an `"N"` decision (backend log).
     - **Expect:** the **Accepted** loan from step 12 is untouched: it waits for the disbursement
       in G. Only with `pdl.bank-verification.enabled=true` does an Accepted loan expire too (F23).
     - **Restore** the cron/grace afterwards.
 
 ---
 
-## F. G5 — bank-verification reject + Re-attempt
+## F. Sambat's rejection codes (Mobile App Dictionary, 30 Oct 2026)
+
+Sambat send a code and no text, so the wording is ours to show. (This section used to test an
+`R-BANK` reject with a Re-attempt button. Sambat have no bank failure codes, QB4.3, and the
+bank re-attempt lives in the hand-off, section H.)
 
 Use a **fresh** application (reject only acts on Submitted/Approved). Submit a new loan in the
-app (steps 7–9), set `LOSNO` to its number, then:
+app (steps 7–9), set `ID` to its id, then:
 
-16. [ ] **DRIVE** push a **bank-verification reject**:
+16. [ ] **DRIVE** reject it the way Sambat will, with a code and no message:
     ```bash
     curl -s -X POST "$BASE/pdl/los/reject" -H "Content-Type: application/json" \
-      -d '{"losApplicationNo":"'"$LOSNO"'","statusCode":"R-BANK","message":"raw"}' ; echo
+      -d '{"mobileAppId":'"$ID"',"statusCode":"R-AO"}' ; echo
     ```
 17. [ ] **APP** Refresh **My Application**.
-    - **Expect (G5):** status **Rejected**, message **"Bank account could not be verified"**,
-      and a **"Re-attempt"** button on the card.
-18. [ ] **APP** Tap **Re-attempt** → reopens the loan-request flow. (G5)
+    - **Expect:** status **Rejected**, Reason *"Apologies. Your loan application has been
+      rejected."* and the hotline footer below it. The push reads the same, then *"Please call
+      023 9977 22 or 093 99 77 22 for more information."*
+    - **Expect:** switch the app to Khmer and the Reason reads
+      *សូមអភ័យទោស។ ពាក្យស្នើសុំកម្ចីរបស់អ្នកត្រូវបានបដិសេធ។*
+18. [ ] **DRIVE + APP** Repeat 16–17 on another fresh application with `"statusCode":"R-LPO"`.
+    - **Expect:** *"Apologies. Your application has been rejected due to insufficient
+      information or documents."*, and its Khmer in Khmer.
 
 ---
 
 ## G. Disbursement + repayment update (full-flow display)
 
-Use the **Accepted** loan from step 12 (`LOSNO` = its number).
+Use the **Accepted** loan from step 12 (`ID` = its id).
 
 19. [ ] **DRIVE** push **disbursement**:
     ```bash
     curl -s -X POST "$BASE/pdl/los/disbursement" -H "Content-Type: application/json" -d '{
-      "losApplicationNo":"'"$LOSNO"'","loanRefNo":"PDL-2026-TEST",
+      "mobileAppId":'"$ID"',
       "disbursementStatus":"DISBURSED","disbursementTxnId":"TXN-001","disbursedAmount":500.0}' ; echo
     ```
     - **Expect:** status **Disbursed**; the **My Loan** tab populates (ref, tenor, outstanding),
@@ -170,7 +182,7 @@ Use the **Accepted** loan from step 12 (`LOSNO` = its number).
 20. [ ] **DRIVE** push a **loan-update** (a repayment):
     ```bash
     curl -s -X POST "$BASE/pdl/los/loan-update" -H "Content-Type: application/json" -d '{
-      "losApplicationNo":"'"$LOSNO"'","loanRefNo":"PDL-2026-TEST","status":"Active",
+      "mobileAppId":'"$ID"',"status":"Active",
       "outstandingAmount":360.0,"daysPastDue":0,"lastPaidAmount":180.0,
       "schedule":[{"installmentNo":1,"principalPaid":166.66,"interestPaid":13.34,"totalPaid":180.0,"amountPaid":180.0,"status":"PAID"}]}' ; echo
     ```
@@ -183,7 +195,7 @@ Use the **Accepted** loan from step 12 (`LOSNO` = its number).
 21. [ ] **DRIVE**:
     ```bash
     curl -s -X POST "$BASE/pdl/los/bank-verification" -H "Content-Type: application/json" \
-      -d '{"loanRefNo":"PDL-2026-TEST","verificationStatus":"SUCCESS"}' ; echo
+      -d '{"mobileAppId":'"$ID"',"verificationStatus":"SUCCESS"}' ; echo
     ```
     - **Expect:** `"Ignored — bank-verification hand-off not enabled (pending Sambat contract, Q4)"`
       and **no** status change in the app. (Confirms the G4 scaffold stays dormant until enabled.)
@@ -241,12 +253,12 @@ Use the **Accepted** loan from step 12 (`LOSNO` = its number).
 | C | No docs/period/bank-consent | G1 | ☐ | |
 | D | Approve → Accept | — | ☐ | |
 | E | Cut-off auto-reject + reminder | G3 | ☐ | optional |
-| F | Bank-verify reject → Re-attempt | G5 | ☐ | |
+| F | Sambat's rejection codes, EN + KM | Dictionary | ☐ | |
 | G | Disburse + repayment display | — | ☐ | |
 | H | Bank-verification endpoint inert | G4 | ☐ | |
 | I | V8 IA / buckets / accept page / viewers / pushes | G13-G19 | ☐ | Phase 2 |
 
 **Environment:** device ____________ · API_BASE_URL ____________ · date ____________ · tester ____________
 
-> If any step fails, capture the app screen + the backend log line and note the `id`/`losApplicationNo`.
+> If any step fails, capture the app screen + the backend log line and note the `id`.
 > Reminder: this runs against **mock LOS** — the real `newAppRequest` submit is still pending Sambat.

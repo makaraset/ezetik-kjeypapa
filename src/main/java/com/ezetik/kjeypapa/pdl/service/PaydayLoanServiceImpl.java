@@ -440,6 +440,9 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 
 			} else {
 				loan.setStatus(PdlStatusEnum.Rejected);
+				// Our own marker, like R-CUTOFF, never sent to Sambat. The app
+				// words the reason from it, in the customer's language.
+				loan.setLosStatusCode("R-CUSTOMER");
 				loan.setLosMessage("Loan Application is rejected by you");
 				losProvider.sendDecision(loan, "N", null);
 

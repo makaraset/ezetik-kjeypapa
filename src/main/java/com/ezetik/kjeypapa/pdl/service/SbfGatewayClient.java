@@ -179,11 +179,13 @@ public class SbfGatewayClient {
 	/**
 	 * {@code POST /customer-accepted} — tell Sambat the customer accepted their
 	 * approved offer, which is what lets the application move to disbursement.
-	 * Keyed by their {@code AppId} (their swagger types it int32), like the
-	 * rest of their application API.
+	 * Carries both keys while Sambat move to ours: {@code mobileAppId} (our
+	 * id, agreed 2026-11-05) and their {@code AppId} (int32 in their swagger).
 	 */
-	public String customerAccepted(long appId, String doneBy, String smsText, String trnCode) throws Exception {
+	public String customerAccepted(long mobileAppId, long appId, String doneBy, String smsText, String trnCode)
+			throws Exception {
 		var node = mapper.createObjectNode();
+		node.put("mobileAppId", mobileAppId);
 		node.put("appId", appId);
 		node.put("doneBy", doneBy == null ? "" : doneBy);
 		node.put("smsText", smsText == null ? "" : smsText);

@@ -4,7 +4,7 @@
 |---|---|
 | **For** | Sambat Finance / Tricube LOS — integration developers |
 | **From** | Kjey PAPA (Ezetik) |
-| **Date** | 2026-10-28 (first issued 2026-09-07) |
+| **Date** | 2026-11-05 (first issued 2026-09-07) |
 | **Subject** | The seven endpoints you push to, their exact bodies, and how we answer |
 
 This is the reverse direction of `LOS_Integration_API_Spec.md`: everything here
@@ -19,10 +19,10 @@ than typing the bodies out:
 | `api/kjeypapa-los-webhooks.openapi.json` | OpenAPI 3.1, these seven endpoints and their schemas only. Imports into Swagger UI, Postman or Insomnia. |
 | `api/kjeypapa-los-webhooks.postman_collection.json` | Postman collection with a working example body for each. `base` is set to our UAT host; set `secret` to the value we send you. |
 
-Every example body in the collection was sent against our UAT and accepted. They
-use `appId: 999999`, which deliberately matches no application, so running the
-collection as-is answers `NOT_FOUND` and cannot alter a real loan — replace it
-with the AppId from your own submit response.
+Every example body in the collection names `mobileAppId: 999999`, which
+deliberately matches no application, so running the collection as-is answers
+`NOT_FOUND` and cannot alter a real loan. Replace it with the `mobileAppId` of a
+real application.
 
 ---
 
@@ -92,25 +92,32 @@ body) or use mutual TLS, tell us. Every payload still carries an unused
 
 ## 4. How we find the loan
 
-**Send `appId`**: the AppId your `/new-loan-application` returned. You confirmed
-on 2026-09-03 that it is the id you identify an application by.
+**Send `mobileAppId`**: our id for the application, which we send you in
+`/new-loan-application`. We agreed on 2026-11-05 that it is the one id both
+sides use, and that you carry it on every call. It is also the only application
+number the customer sees in our app.
 
-Two others are accepted, for older callers: `losApplicationNo` (your AppRefId,
-used only when there is no `appId`) and `loanRefNo` (your loan reference, tried
-last).
+Until your callbacks switch to it, a body without `mobileAppId` may still name
+the application by your LOS AppId in `appId`; we stop reading `appId` once you
+have switched. Your AppRefId and the loan reference are not identifiers and are
+not read.
+
+> **UAT today.** Our UAT reads `mobileAppId` from our next deploy, which we will
+> tell you about before it happens. Until then, send both `mobileAppId` and
+> `appId`: each build reads the one it knows.
 
 If nothing matches we answer `NOT_FOUND` with HTTP 200 rather than an error, so
 your queue does not treat it as a transport failure, and name what we looked for:
 
 ```json
-{ "type": "NOT_FOUND", "message": "Application not found: appId 999999", "data": null }
+{ "type": "NOT_FOUND", "message": "Application not found: mobileAppId 999999", "data": null }
 ```
 
 Investigate rather than retry — it usually means the application was filed but
 our record of the id is wrong, which is worth a look on both sides.
 
-A body with none of the three is malformed, not missing, and gets HTTP 400. Field
-names are case-sensitive, so `AppId` for `appId` lands here too.
+A body with neither `mobileAppId` nor `appId` is malformed, not missing, and
+gets HTTP 400. Field names are case-sensitive, so `MobileAppId` lands here too.
 
 ## 5. Date and number formats — please read
 
@@ -143,9 +150,9 @@ the most.
 
 | Field | Type | Notes |
 |---|---|---|
-| `appId` | int64 | **Preferred identifier** |
-| `losApplicationNo` | string | Alternative identifier |
-| `loanRefNo` | string | Your loan reference |
+| `mobileAppId` | int64 | **The identifier** (§4) |
+| `appId` | int64 | Your LOS AppId, read only until you send `mobileAppId` |
+| `loanRefNo` | string | Your loan reference, for the customer's My Loan screen. Not an identifier |
 | `statusCode`, `message` | string | Shown to the customer |
 | `loanFormRef`, `loanContractFileRef`, `repaymentScheduleRef`, `loanDocRef` | string | Generated document references |
 | `settlementAccountNo`, `currency`, `tenor` | string / string / int | Loan terms |
@@ -166,23 +173,24 @@ it replaces the terms and the schedule. Anything else is acknowledged with an
 ### 6.2 `POST /api/v1/pdl/los/reject`
 
 Same body as `approved`; only the identifier, `statusCode` and `message` are
-read. The message reaches the customer as the reason, exactly as you send it,
-so please send something a person can act on. For `R-LPO` and `R-AO` the
-customer sees our standard wording instead.
+read. For `R-LPO` and `R-AO` the customer sees the wording from your Mobile
+App Dictionary. For any other code they see your `message` exactly as you send
+it, so please write it for a customer.
 
 Applied while the application awaits a decision, or is approved but not yet
 accepted by the customer. Once accepted, a reject is acknowledged and ignored.
 
 ### 6.3 `POST /api/v1/pdl/los/rework`
 
-Same body. **For PDL we treat rework as a rejection** (BRS 2.5.1) — there is no
-Rework state in this product. Tell us if that is wrong.
+Same body. **For PDL a rework is a rejection**: your Mobile App Dictionary sends
+it as a reject with `R-LPO` or `R-AO`, and if one reaches `/rework` we treat it
+the same.
 
 ### 6.4 `POST /api/v1/pdl/los/disbursement`
 
 | Field | Type | Notes |
 |---|---|---|
-| `appId` / `losApplicationNo` / `loanRefNo` | | Identifier |
+| `mobileAppId` | int64 | The identifier (§4) |
 | `eventId` | string | Yours, for de-duplication |
 | `disbursementStatus` | string | `DISBURSED` / `FAILED` / `PENDING` |
 | `disbursementTxnId` | string | |
@@ -196,7 +204,7 @@ Servicing: balances, arrears and what has been paid.
 
 | Field | Type | Notes |
 |---|---|---|
-| `appId` / `losApplicationNo` / `loanRefNo` | | Identifier |
+| `mobileAppId` | int64 | The identifier (§4) |
 | `eventId` | string | |
 | `status` | string | `Active` / `Closed` / `Overdue` |
 | `outstandingAmount`, `overduePayment`, `lastPaidAmount` | number | |
@@ -213,11 +221,11 @@ The result of the bank-app payroll-account authorisation.
 
 | Field | Type | Notes |
 |---|---|---|
-| `appId` / `losApplicationNo` / `loanRefNo` | | Identifier |
+| `mobileAppId` | int64 | The identifier (§4) |
 | `eventId` | string | |
 | `verificationStatus` | string | `SUCCESS` / `FAILED` / `PENDING` |
 | `disbursementTxnId` | string | |
-| `failureReason` | string | A machine code, which we map to customer wording |
+| `failureReason` | string | Optional and not read: there are no failure codes (QB4.3) |
 | `verificationDate` | **instant** | |
 
 `SUCCESS` moves the loan on; `FAILED` keeps it accepted with a re-attempt
@@ -249,10 +257,12 @@ it freely and we will follow.
 1. **Confirmation that you send `X-LOS-Signature`** on every call, or which
    alternative you need instead (HMAC or mTLS, §3).
 2. **Your source IP addresses**, if you want the allowlist on top of the secret.
-3. **Confirmation that rework = reject** for PDL (§6.3).
-4. **The bank-verification body**, once that contract exists (§6.6).
-5. Whether `/payday-disbursement` is a call **we** make after disbursement, or
-   entirely yours.
+3. **The bank-verification body**, once that contract exists (§6.6).
+4. **The date your callbacks start sending `mobileAppId`**, so we can stop
+   reading `appId` (§4).
+
+Answered since the last issue: a payday-loan rework is a reject (your Mobile App
+Dictionary), and `/payday-disbursement` is your own step, not a call we make.
 
 Nothing above is blocked on these: all seven endpoints accept authenticated
 traffic today.
