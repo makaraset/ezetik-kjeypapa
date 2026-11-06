@@ -177,6 +177,9 @@ The image build needs outbound internet for Maven. It is a 2-CPU box, so expect
 the first build to take several minutes; dependencies are cached in their own
 layer, so later builds are quick.
 
+For a redeploy, follow §6d instead: stage, tag a rollback image, save the
+running container's log, then swap. The log goes with the old container.
+
 ---
 
 ## 5. The flags that decide whether this works
@@ -360,6 +363,77 @@ only from their three front-end nodes, at both layers:
 Verified through the public URL: seven requests carrying seven forged
 `X-Forwarded-For` values counted as one client, and the seventh got 429. So the
 per-IP limits on OCR and liveness see each customer's own address.
+
+## 6d. Deployed — 2026-11-06
+
+Backend `907e330` is live on `10.32.8.99`. Docker reports it **healthy**, with
+0 restarts and a 17.1 s boot. It brings `000a236..907e330`:
+- F16: the LOS webhooks require `X-LOS-Signature`;
+- F21: an approve without `currency` keeps the application's own;
+- F23: the 17:00 cut-off leaves accepted loans to Sambat;
+- F24: rejections use Sambat's wording;
+- F26: `mobileAppId` is the one application id;
+- F27: the submit settles the customer's CIF first, and matches it in full.
+
+| | |
+|---|---|
+| Migrations | none: no entity changed since `000a236` |
+| Webhook secret | 64 hex characters, generated on the host straight into `.env` and never printed; `PDL_WEBHOOK_AUTH_ENABLED=true` |
+| `.env` backup | `.env.bak-pre907e330-20261106-110624`; every other line unchanged |
+| Flags | `ddl-auto` `none` · `los.mock.enabled` `false` · `pdl.bank-verification.enabled` `false`, the new default, which the host does not override · liveness all `false` |
+| Rollback image | `kjeypapa-api:rollback-20261106`, the `000a236` build (`ddec26797123`) |
+| Previous source | `src.prev-20261106-1106` and `pom.xml.prev-20261106-1106` in `/opt/kjeypapa` |
+| Build log | `/opt/kjeypapa-staging/deploy-907e330-20261106-1106.log` |
+| Errors since boot | none, and only the five framework WARNs every boot prints |
+
+Checked through the public URL, the day before and after:
+
+| Probe | 2026-11-05, `000a236` | 2026-11-06, `907e330` |
+|---|---|---|
+| `GET /api/v1/pdl/dictionary/version` | 200 | 200 |
+| `POST /api/v1/pdl/los/approved`, no header | 200 `NOT_FOUND`: the handler ran | 401 `UNAUTHORIZED` |
+| `POST /api/v1/pdl/%6cos/approved`, no header | 200 `NOT_FOUND`: the handler ran | 401 |
+| `POST /api/v1/pdl/los/reject`, no header | — | 401 |
+| `POST /api/v1/pdl/los/approved`, a wrong header | — | 401 |
+| `POST /api/v1/pdl/los/approved`, the secret, sent from the host | — | 200 `NOT_FOUND`, "Application not found: mobileAppId 999999" |
+
+Every probe named `mobileAppId` 999999, which matches no application. The last
+row also shows SBF's front end passes `X-LOS-Signature` through.
+
+**What the CIF gate meets.** At deploy time UAT held 26 PDL customers:
+- 5 with a numeric CIF stored, which file as before;
+- 21 with none, which get the full-identity lookup at their next submit;
+- none with anything else stored, so none waits on `registedId`.
+
+So the probe in §7 step 6 decides whether the existing Sambat customers among
+the 21 file or wait. UAT also held 86 applications: 69 Draft, 12 Submitted,
+3 Revoked and 2 Rejected.
+
+**How it was done, to repeat next time:**
+1. Stage the release beside the live one; nothing live changes:
+   `git archive --format=tar <sha> pom.xml src | ssh root@10.32.8.99 'mkdir /opt/kjeypapa-staging/release-<sha> && tar -xf - -C /opt/kjeypapa-staging/release-<sha>'`
+2. Tag the running image `kjeypapa-api:rollback-<date>`, because the build
+   retags `0.0.1`.
+3. Swap `src/` and `pom.xml`, then `docker compose build api` and
+   `docker compose up -d api`. Run this under `setsid nohup` with a log on the
+   host, so a VPN drop cannot stop it halfway. The VPN was down for over an hour
+   before this deploy started.
+
+**Save the container's log before recreating it.** The application logs only
+to stdout, and `up -d` removes the old container along with its log. This deploy
+did not save it, so nothing on our side shows who called the webhooks while they
+were open (F16). Next time, run this first:
+`docker logs kjeypapa-api > /opt/kjeypapa/logs/api-<date>.log 2>&1`.
+
+**Still to do:**
+- Give Sambat the secret, out of band. Until they send it, each of their
+  callbacks gets 401 and changes nothing.
+- The CIF probe in §7 step 6 is less urgent now. On 2026-11-06 the same code,
+  run locally against Sambat UAT, matched one real customer record in full:
+  `MATCHED`, no differences. So the forms `SbfCustomerMatch` reads are right
+  for that record. Other records may still differ.
+- §7 steps 3 to 5 were not run this time: the consent-ledger check, the TFF
+  regression and one filed application.
 
 ## 7. Verify after deploy
 

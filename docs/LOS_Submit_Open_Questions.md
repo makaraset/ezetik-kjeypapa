@@ -676,7 +676,7 @@ is not an application identifier, `/payday-disbursement` is their own step,
 and a customer is shown only the `mobileAppId`. This replaces the 2026-09-04
 decision to show customers the LOS App ID.
 
-Built, not yet deployed (backlog F26):
+Built, and on UAT since 2026-11-06 (backlog F26):
 - `/new-loan-application` carries `mobileAppId` beside `appId`, which stays
   their LOS AppId: 0 creates an application, an existing one updates it.
   `los.app-id` is gone. 0 is now a constant, because any other value would make
@@ -718,7 +718,7 @@ Their answers, relayed by Makara:
 4. **Match on the ID number alone?** No: check the full identity.
 5. **Can a CIF change?** No.
 
-What changed (backlog F27, built, not yet deployed):
+What changed (backlog F27, on UAT since 2026-11-06):
 - **A failed lookup no longer files a customer as new.** It used to be dropped
   silently, and the submit sent 0 for any blank CIF. Now the submit looks the
   CIF up itself while none is stored, and 0 goes only when Sambat answered and

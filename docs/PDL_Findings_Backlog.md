@@ -13,7 +13,7 @@ it was found, so a reader can judge how much it has actually been checked.
 ## Open findings
 
 ### F27 — a failed CIF lookup filed an existing customer as new
-**Severity:** high · **Status:** ~~open~~ **FIXED 2026-11-05, not yet deployed** ·
+**Severity:** high · **Status:** ~~open~~ **FIXED 2026-11-05, on UAT since 2026-11-06** ·
 **Found:** 2026-11-05, reviewing how we get and store the CIF, at Sambat's request
 
 Sambat's answers decide the severity: `custId` 0 for an ID number they already
@@ -59,7 +59,7 @@ Unit-tested; not yet run against Sambat. `docs/probe-sbf-customer-shape.sh`
 shows the forms their record uses.
 
 ### F26 — three ids for one application, and the customer saw two of them
-**Severity:** medium · **Status:** ~~open~~ **FIXED 2026-11-05, not yet deployed** ·
+**Severity:** medium · **Status:** ~~open~~ **FIXED 2026-11-05, on UAT since 2026-11-06** ·
 **Found:** 2026-11-05, reviewing every id that crosses to Sambat
 
 Our id, Sambat's LOS AppId and their AppRefId all crossed the boundary, with
@@ -129,7 +129,7 @@ Not built until Sambat answer:
 - which field and format carry the attachments
 
 ### F24 — rejection wording: wrong for R-AO, English only, blank for an unknown code
-**Severity:** medium · **Status:** ~~open~~ **FIXED 2026-11-05, not yet deployed** ·
+**Severity:** medium · **Status:** ~~open~~ **FIXED 2026-11-05, on UAT since 2026-11-06** ·
 **Found:** 2026-11-05, reviewing Sambat's Mobile App Dictionary (F25)
 
 The dictionary says the LOS sends codes only, and gives the customer wording
@@ -156,7 +156,7 @@ place of it. Build 18 keeps showing the backend's English until the next app
 build. Unit-tested; not yet run on a device.
 
 ### F23 — the 17:00 cut-off expired loans the customer had already accepted
-**Severity:** high · **Status:** ~~open~~ **FIXED 2026-11-04, not yet deployed** ·
+**Severity:** high · **Status:** ~~open~~ **FIXED 2026-11-04, on UAT since 2026-11-06** ·
 **Found:** 2026-11-04, writing SBF's approve-and-reject guide
 
 `PdlAcceptanceScheduler.enforceCutoff` swept `Accepted` loans along with
@@ -201,7 +201,7 @@ Fix: decide by handler, as `LosWebhookAuthInterceptor` now does, or match on the
 decoded path.
 
 ### F21 — an approve without `currency` erased the application's own
-**Severity:** high · **Status:** ~~open~~ **FIXED 2026-10-28, not yet deployed** ·
+**Severity:** high · **Status:** ~~open~~ **FIXED 2026-10-28, on UAT since 2026-11-06** ·
 **Found:** 2026-10-28, answering SBF's "how do we send approve/reject"
 
 `LosWebhookService.handleApproved` copied nine fields from the body
@@ -304,8 +304,9 @@ filter. Three regression tests cover expired, malformed, and absent tokens.
 
 ### F16 — the LOS webhooks are unauthenticated and reachable from the public internet
 **Severity: HIGH — close before the first real application exists on UAT**
-**Status:** open — fix built 2026-10-28, closes when UAT runs it with a secret and
-Sambat send it · **Found:** 2026-09-29, while building the simulator against UAT
+**Status:** open — **enforced on UAT since 2026-11-06** (backend `907e330`, with a
+secret); closes when Sambat send it · **Found:** 2026-09-29, while building the
+simulator against UAT
 
 `kjeypapa-uat.sambatfinance.com.kh` is **not** internal. It resolves publicly to
 `103.118.45.11` and `203.189.133.141`, and answers from the open internet —
@@ -360,6 +361,20 @@ the path is spelled; resolves the address through `ClientAddress`; refuses every
 call (503) when switched on without a secret of at least 32 characters or an
 allowlist; and answers 401 in the webhook envelope instead of `sendError`. The
 compose file now defaults it on.
+
+**Deployed 2026-11-06** (runbook §6d), with a 64-character secret generated on
+the host and never printed. Through the public URL:
+- `approved`, `reject` and the encoded `%6cos/approved` answer 401 without the
+  header, and with a wrong one;
+- with the secret, the call reaches the handler.
+
+The day before, both `approved` paths answered an anonymous call.
+
+**The window was real.** By then UAT held 86 applications, 12 of them
+Submitted, so "not exploitable today" had stopped being true. No log on our side
+covers the window: the application logs only to stdout, and the recreate removed
+the old container's log. SBF's front end is the only other place a record could
+be.
 
 This also retires the premise behind **D8**: Swagger was left enabled on the
 argument that UAT sits on a private network. It does not. `/swagger-ui` and
