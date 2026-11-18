@@ -1,9 +1,9 @@
 package com.ezetik.kjeypapa.pdl.api;
 
 import java.util.List;
-import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -16,10 +16,12 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ezetik.kjeypapa.pdl.model.PdlAccountRequest;
+import com.ezetik.kjeypapa.pdl.payload.PdlAccountDecisionRequest;
 import com.ezetik.kjeypapa.pdl.payload.PdlAccountReviewResponse;
 import com.ezetik.kjeypapa.pdl.service.PdlAccountRequestService;
 import com.ezetik.kjeypapa.security.util.Message;
 
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
@@ -51,17 +53,33 @@ public class PdlAdminController {
 		return service.review(id);
 	}
 
-	/** LPO decision. Body: {"approve": true|false, "reason": "..."} */
+	/** LPO decision. Body: {"approve": true|false, "reason": "...", "employerCode": "..."} */
+	@Operation(summary = "Approve or reject an account request", description = """
+			Decides a PENDING request, once.
+
+			- **Approve** lets the customer sign in, marks their details as verified and sends the approval SMS.
+			- **Reject** keeps the account disabled and sends the rejection SMS.
+
+			The outcome is in the answer's `type`:
+
+			- `SUCCESS`: decided. `data` is `APPROVED` or `REJECTED`.
+			- `NOT_FOUND`: no request has this id.
+			- `INVALID`: the request was already decided (`data` is its status), or `approve` is missing.
+			- `IDENTITY_NOT_VERIFIED`: approval is refused until the customer passes identity verification.
+			- `BAD_REQUEST`: the body could not be read. The message names the field.
+			""")
 	@PostMapping("/{id}/decision")
 	public ResponseEntity<Message<String>> decide(@PathVariable("id") int id,
-			@RequestBody Map<String, Object> body) {
-		boolean approve = Boolean.TRUE.equals(body.get("approve"))
-				|| "true".equalsIgnoreCase(String.valueOf(body.get("approve")));
-		String reason = body.get("reason") == null ? null : String.valueOf(body.get("reason"));
+			@RequestBody PdlAccountDecisionRequest body) {
+		// Never defaulted. A body without "approve" used to count as a
+		// rejection: it disabled the customer and sent them the SMS.
+		if (body.approve() == null)
+			return new ResponseEntity<>(new Message<>("INVALID",
+					"'approve' is required: true to approve the request, false to reject it.", null),
+					HttpStatus.BAD_REQUEST);
 		String decidedBy = SecurityContextHolder.getContext().getAuthentication() != null
 				? SecurityContextHolder.getContext().getAuthentication().getName()
 				: "ADMIN";
-		String employerCode = body.get("employerCode") == null ? null : String.valueOf(body.get("employerCode"));
-		return service.decide(id, approve, reason, decidedBy, employerCode);
+		return service.decide(id, body.approve(), body.reason(), decidedBy, body.employerCode());
 	}
 }

@@ -12,6 +12,39 @@ it was found, so a reader can judge how much it has actually been checked.
 
 ## Open findings
 
+### F28 — an account decision without `approve` was read as a rejection
+**Severity:** medium · **Status:** ~~open~~ **FIXED 2026-11-18, not on UAT yet** ·
+**Found:** 2026-11-18, when a colleague asked what Swagger's `additionalProp1..3` stand for
+
+`POST /api/v1/pdl/admin/account-requests/{id}/decision` took a free-form map,
+so Swagger showed the placeholder `additionalProp1..3` for its body. Nothing in
+that placeholder says `approve`, and a missing `approve` counted as false. Sent
+as it stood, the call rejected a pending request, kept the account disabled and
+sent the customer the rejection SMS. A test run against the old controller
+showed the placeholder reaching `decide(4, false, null, ...)`.
+
+Now (`PdlAccountDecisionRequest`, `PdlAdminExceptionHandler`):
+- The body is named: `approve`, `reason`, `employerCode`. The generated API
+  docs list the three fields, mark `approve` as required and describe each.
+- A body without `approve` decides nothing: HTTP 400, type `INVALID`.
+- A body that cannot be read names the field (HTTP 400). It used to answer
+  HTTP 403 with no content, as in **F12**.
+- What the app sends is read as before, and so is `"true"` written as text.
+
+Not checked: whether the call that prompted the question changed request 4 on
+UAT. The VPN was off. If that request was still pending, it is now rejected
+with no reason, decided by the account that made the call.
+
+Not done:
+- Four more bodies are still free-form maps and show the same placeholder:
+  `/admin/submissions/{loanId}/filed` (`losAppId`, `losApplicationNo`, `note`),
+  `/admin/submissions/{loanId}/not-filed` (`note`),
+  `/account-request/status` (`username`) and `/ocr-nid` (`imageBase64`).
+- `employerCode` is stored as given. The app only offers codes from the
+  EMPLOYER list; a caller typing by hand can send anything. Swagger's sample
+  keeps its usual placeholder values, so its form, sent unchanged, approves the
+  request and stores `string` as the employer code.
+
 ### F27 — a failed CIF lookup filed an existing customer as new
 **Severity:** high · **Status:** ~~open~~ **FIXED 2026-11-05, on UAT since 2026-11-06** ·
 **Found:** 2026-11-05, reviewing how we get and store the CIF, at Sambat's request
