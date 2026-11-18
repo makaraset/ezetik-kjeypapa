@@ -28,6 +28,13 @@ import lombok.extern.slf4j.Slf4j;
  * <li>the match is the full identity, not the ID number alone
  * ({@link SbfCustomerMatch}).</li>
  * </ul>
+ *
+ * <p>Nothing here stores a CIF without that full match. The one other way in
+ * is a person's judgement: when approving an account request, an LPO may
+ * confirm that the CIF Sambat hold for the ID number is this customer although
+ * some details differ ({@code PdlAccountRequestService.decide}). It is the CIF
+ * this lookup returns that is stored, never a number the LPO supplies, and the
+ * request row records who confirmed it and what differed.
  */
 @Slf4j
 @Service

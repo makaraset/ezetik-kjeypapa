@@ -274,6 +274,16 @@ public class PdlAccountRequestService {
 	 */
 	public ResponseEntity<Message<String>> decide(int requestId, boolean approve, String reason, String decidedBy,
 			String employerCode) {
+		return decide(requestId, approve, reason, decidedBy, employerCode, null);
+	}
+
+	/**
+	 * @param confirmCif the CIF the LPO confirms as this customer's, when
+	 *                   Sambat hold the ID number under other details; null
+	 *                   or 0 confirms nothing. See {@link #whyNotConfirmable}.
+	 */
+	public ResponseEntity<Message<String>> decide(int requestId, boolean approve, String reason, String decidedBy,
+			String employerCode, Long confirmCif) {
 		PdlAccountRequest req = requestRepo.findById(requestId).orElse(null);
 		if (req == null)
 			return resp2("NOT_FOUND", "Account request not found: " + requestId, null, HttpStatus.OK);
@@ -284,6 +294,18 @@ public class PdlAccountRequestService {
 		if (approve && verification.blocksApproval(req))
 			return resp2("IDENTITY_NOT_VERIFIED", "This customer has not passed CamDigi identity verification. "
 					+ "They can complete it by signing in to the app.", req.getStatus().name(), HttpStatus.OK);
+
+		// The LPO's word that Sambat's CIF for this ID number is this customer.
+		// Sambat are asked again, and it is settled before anything is written,
+		// so a refusal changes nothing. Only an approval carries it.
+		SbfCifResolver.CifCheck confirmed = null;
+		if (approve && confirmCif != null && confirmCif > 0) {
+			Confirmation c = checkConfirmation(req, confirmCif);
+			if (c.refusal() != null)
+				return resp2("CIF_NOT_CONFIRMED", c.refusal(), req.getStatus().name(), HttpStatus.OK);
+			confirmed = c.toStore();
+		}
+
 		req.setStatus(approve ? PdlAccountStatusEnum.APPROVED : PdlAccountStatusEnum.REJECTED);
 		req.setDecisionReason(reason);
 		req.setDecidedBy(decidedBy);
@@ -291,7 +313,11 @@ public class PdlAccountRequestService {
 		User u = req.getUser();
 		if (u != null)
 			u.setEnabled(approve);
+		if (confirmed != null && u != null)
+			applyConfirmation(req, u, confirmed, decidedBy, req.getDecidedDate());
 		requestRepo.save(req);
+		if (confirmed != null && u != null)
+			userRepository.save(u);
 		// The LPO's approval IS the KYC verification: record who and when on
 		// the rows they reviewed. verified then locks the identity fields.
 		if (approve && u != null) {
@@ -327,6 +353,114 @@ public class PdlAccountRequestService {
 		}
 		return resp2("SUCCESS", "Account decision processed: " + req.getStatus(), req.getStatus().name(),
 				HttpStatus.OK);
+	}
+
+	/**
+	 * An LPO confirms the CIF of a customer who is already approved.
+	 *
+	 * <p>The same judgement as on an approval, for the customers it came too
+	 * late for: approved before the confirmation existed, or while Sambat
+	 * could not be reached. Until it is settled their applications wait with
+	 * {@code SBF_CUSTOMER_MISMATCH}. The rules do not change: Sambat are asked
+	 * now, only the CIF they return is stored, and a stored CIF stays.
+	 */
+	public ResponseEntity<Message<String>> confirmCif(int requestId, long cif, String confirmedBy) {
+		PdlAccountRequest req = requestRepo.findById(requestId).orElse(null);
+		if (req == null)
+			return resp2("NOT_FOUND", "Account request not found: " + requestId, null, HttpStatus.OK);
+		if (req.getStatus() == PdlAccountStatusEnum.PENDING)
+			return resp2("INVALID", "This request is not decided yet. Confirm the CIF when you approve it.",
+					req.getStatus().name(), HttpStatus.OK);
+		if (req.getStatus() != PdlAccountStatusEnum.APPROVED)
+			return resp2("INVALID", "This request was rejected, so there is no customer to confirm a CIF for.",
+					req.getStatus().name(), HttpStatus.OK);
+		Confirmation c = checkConfirmation(req, cif);
+		if (c.refusal() != null)
+			return resp2("CIF_NOT_CONFIRMED", c.refusal(), null, HttpStatus.OK);
+		if (c.toStore() == null)
+			return resp2("SUCCESS", "CIF " + cif + " is already stored for this customer.", String.valueOf(cif),
+					HttpStatus.OK);
+		User u = req.getUser();
+		applyConfirmation(req, u, c.toStore(), confirmedBy, java.time.Instant.now());
+		requestRepo.save(req);
+		userRepository.save(u);
+		return resp2("SUCCESS",
+				c.toStore().outcome() == SbfCifResolver.Outcome.MISMATCH
+						? "CIF " + cif + " confirmed for this customer."
+						: "CIF " + cif + " stored: Sambat's record now matches in full.",
+				String.valueOf(cif), HttpStatus.OK);
+	}
+
+	/**
+	 * What an LPO's confirmation comes to: why it is refused, or the CIF to
+	 * store. Both null when the customer already has that CIF.
+	 */
+	private record Confirmation(String refusal, SbfCifResolver.CifCheck toStore) {
+	}
+
+	/** Asks Sambat now who holds the customer's ID number, and judges the confirmation by it. Writes nothing. */
+	private Confirmation checkConfirmation(PdlAccountRequest req, long cif) {
+		User applicant = req.getUser();
+		List<PdlPersonalInfo> rows = applicant == null ? List.of() : personalRepo.findByUser(applicant.getId());
+		SbfCifResolver.CifCheck found = applicant == null ? null
+				: cifResolver.status(applicant, rows == null || rows.isEmpty() ? null : rows.get(0));
+		String refusal = whyNotConfirmable(found, cif);
+		if (refusal != null)
+			return new Confirmation(refusal, null);
+		// Already stored: nothing to write, and nothing was confirmed.
+		return new Confirmation(null, found.outcome() == SbfCifResolver.Outcome.STORED ? null : found);
+	}
+
+	/**
+	 * Puts the CIF on the user and, when it was confirmed over differences,
+	 * the record of that on the request. Saves neither.
+	 */
+	private void applyConfirmation(PdlAccountRequest req, User u, SbfCifResolver.CifCheck confirmed, String by,
+			java.time.Instant when) {
+		u.setRegistedId(String.valueOf(confirmed.cif()));
+		// A full match needs no one's judgement, so only a confirmation over
+		// differences is recorded as one.
+		if (confirmed.outcome() == SbfCifResolver.Outcome.MISMATCH) {
+			req.setCifConfirmed(confirmed.cif());
+			req.setCifConfirmedDifferences(String.join(", ", confirmed.differences()));
+			req.setCifConfirmedBy(by);
+			req.setCifConfirmedDate(when);
+			log.info("Account request {}: {} confirmed CIF {} for user {} over a different {}", req.getId(), by,
+					confirmed.cif(), u.getId(), confirmed.differences());
+		}
+	}
+
+	/**
+	 * Why the CIF an LPO confirmed cannot be taken, or null when it can.
+	 *
+	 * <p>The confirmation is never taken on its own word. The CIF has to be the
+	 * one Sambat hold, now, for the customer's ID number: one ID number has one
+	 * CIF, so no other CIF can be theirs, and a mistyped or out-of-date number
+	 * is refused instead of attaching someone else's record. A stored CIF is
+	 * final, so a different one is refused too.
+	 */
+	private static String whyNotConfirmable(SbfCifResolver.CifCheck found, long cif) {
+		if (found == null)
+			return "The CIF could not be checked for this request. Nothing was decided.";
+		Long theirs = found.cif();
+		switch (found.outcome()) {
+		case STORED:
+			return theirs != null && theirs == cif ? null
+					: "This customer already has CIF " + theirs + ". A stored CIF cannot be changed.";
+		case MATCHED:
+		case MISMATCH:
+			// A mismatch without a CIF is an account whose registered ID is a
+			// merchant code or a staff username.
+			if (theirs == null)
+				return "This account's registered ID is not a CIF, so a CIF cannot be confirmed for it.";
+			return theirs == cif ? null
+					: "Sambat hold this ID number as CIF " + theirs + ", not " + cif
+							+ ". Open the request again and check.";
+		case NEW:
+			return "Sambat hold no customer with this ID number, so there is no CIF to confirm.";
+		default:
+			return "Sambat could not be reached to check the CIF. Nothing was decided; please try again.";
+		}
 	}
 
 	/** LPO list view: PENDING by default, or any status / all. */

@@ -12,6 +12,59 @@ it was found, so a reader can judge how much it has actually been checked.
 
 ## Open findings
 
+### F30 — the old user-update call can overwrite a CIF with no check
+**Severity:** medium · **Status:** open ·
+**Found:** 2026-11-18, asking whether an LPO can correct a CIF
+
+`PATCH /api/v1/user/update/{id}` (ADMIN) sets any field of a user by name,
+through reflection. That includes `registedId`, where the CIF is kept, so an
+admin can store or replace a CIF with no lookup at Sambat, no comparison and no
+record. Every rule in **F27** and **F29** goes around it. It also takes
+`enabled`, `password` and the rest of the row. The app does not call it.
+
+Read from the code, not run. Not changed: other tooling may rely on it. At the
+least it should refuse `registedId`.
+
+### F29 — nobody could settle a customer Sambat hold under other details
+**Severity:** medium · **Status:** ~~open~~ **BUILT 2026-11-18, not on UAT yet** ·
+**Found:** 2026-11-18, asking what an existing Sambat customer goes through
+
+When Sambat hold the customer's ID number under other details (an older name
+spelling, a mistyped date of birth), **F27** refuses the CIF and every loan
+application waits with `SBF_CUSTOMER_MISMATCH`. The LPO could see the mismatch
+and do nothing about it; the customer was sent to the hotline.
+
+Now the LPO can confirm the CIF when approving the account request
+(`PdlAccountRequestService.decide`, `confirmCif` on the decision call):
+- The console asks "Same person?" on Approve when the review shows a mismatch.
+  It names the CIF and the fields that differ, and says what confirming does.
+- The server asks Sambat again. The CIF is stored only if it is the one they
+  hold now for that ID number. A typed or out-of-date number is refused with
+  `CIF_NOT_CONFIRMED` and nothing is decided.
+- The request row records the CIF, the differences accepted, who and when
+  (`cif_confirmed...`). A full match found at that moment is stored without
+  such a record: it is nobody's judgement.
+- A stored CIF is still never changed, a rejection confirms nothing, and an
+  approval without `confirmCif` does not ask Sambat, as before.
+- **A customer who is already approved** is settled the same way from their
+  review page: `POST /api/v1/pdl/admin/account-requests/{id}/confirm-cif`. It
+  is for those approved before this existed, or while Sambat could not be
+  reached. The same check applies, and the record names who confirmed.
+
+Not run against Sambat: the VPN was off. Unit-tested on both sides, and
+migration 009 was run on a copy of the local database.
+
+Not done:
+- **Approving without confirming is still allowed**, in the console and the
+  API. The customer then cannot file a loan until the CIF is confirmed, or
+  Sambat's record or theirs is corrected.
+- **A wrong confirmation cannot be undone**, like any stored CIF.
+- **When the customer's own details are the wrong ones**, confirming files
+  them under the right CIF as they are. The LPO has no tool to correct them.
+- Sambat have not been asked whether an LPO's confirmation may stand in for
+  the full identity check they asked for (2026-11-05).
+- The Khmer texts are drafts.
+
 ### F28 — an account decision without `approve` was read as a rejection
 **Severity:** medium · **Status:** ~~open~~ **FIXED 2026-11-18, not on UAT yet** ·
 **Found:** 2026-11-18, when a colleague asked what Swagger's `additionalProp1..3` stand for
@@ -745,6 +798,13 @@ account was created with (SBF's "addresses are missing country"); without it
 they keep showing "Country: -" until each customer re-saves. 008 creates the
 CamDigi attempts table. SBF UAT runs with ddl-auto off, so without 008 every
 verification fails on a missing table. Apply both **before** deploying.
+
+### D1g — apply `docs/migrations/009_pdl_cif_confirmation.sql`
+Four nullable columns on `pdl_account_request` for the LPO's CIF confirmation
+(**F29**). SBF UAT runs with ddl-auto off, and the entity maps them, so without
+009 every read of an account request fails: the LPO list, the review, the
+pending screen's status probe and sign-up. Apply it **before** deploying. It
+adds no data and is safe to run twice.
 
 ### D1f — the CamDigi switches
 `pdl.liveness.enabled` stays `false` until SBF has answered the R1 questions

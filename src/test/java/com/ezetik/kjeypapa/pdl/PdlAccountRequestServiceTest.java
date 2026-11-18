@@ -209,4 +209,308 @@ class PdlAccountRequestServiceTest {
 		assertThat(pending.getStatus()).isEqualTo(PdlAccountStatusEnum.APPROVED);
 		assertThat(applicant.isEnabled()).isTrue();
 	}
+
+	// ----- the LPO confirms the CIF Sambat hold under other details -----
+
+	/** What Sambat's lookup finds for the applicant when the LPO decides. */
+	private void sambatHold(SbfCifResolver.Outcome outcome, Long cif, String... differences) {
+		when(cifResolver.status(any(), any()))
+				.thenReturn(new SbfCifResolver.CifCheck(outcome, cif, List.of(differences)));
+	}
+
+	/** A refusal leaves the request, the account and the customer's phone alone. */
+	private void assertNothingDecided() {
+		assertThat(pending.getStatus()).isEqualTo(PdlAccountStatusEnum.PENDING);
+		assertThat(pending.getDecidedBy()).isNull();
+		assertThat(pending.getCifConfirmed()).isNull();
+		assertThat(applicant.isEnabled()).isFalse();
+		verify(requestRepo, never()).save(any());
+		verify(userRepository, never()).save(any());
+		verify(sms, never()).sendSms(anyString(), anyString());
+	}
+
+	@Test
+	@DisplayName("an LPO confirms the CIF Sambat hold under other details, and it is on record")
+	void lpoConfirmsAMismatchedCif() {
+		PdlPersonalInfo details = new PdlPersonalInfo();
+		when(personalRepo.findByUser(42)).thenReturn(List.of(details));
+		sambatHold(SbfCifResolver.Outcome.MISMATCH, 70L, "dateOfBirth", "name");
+
+		var body = service.decide(7, true, null, "lpo1", "E10002", 70L).getBody();
+
+		assertThat(body.getType()).isEqualTo("SUCCESS");
+		assertThat(pending.getStatus()).isEqualTo(PdlAccountStatusEnum.APPROVED);
+		assertThat(applicant.isEnabled()).isTrue();
+		assertThat(applicant.getRegistedId()).isEqualTo("70");
+		assertThat(pending.getCifConfirmed()).isEqualTo(70L);
+		assertThat(pending.getCifConfirmedDifferences()).isEqualTo("dateOfBirth, name");
+		assertThat(pending.getCifConfirmedBy()).isEqualTo("lpo1");
+		assertThat(pending.getCifConfirmedDate()).isNotNull().isEqualTo(pending.getDecidedDate());
+		// Sambat are asked about this applicant's own details, and the CIF is saved.
+		verify(cifResolver).status(applicant, details);
+		verify(userRepository).save(applicant);
+	}
+
+	@Test
+	@DisplayName("a CIF that is not the one Sambat hold for the ID number is refused")
+	void aCifSambatDoNotHoldForThisIdIsRefused() {
+		// A mistyped number, or a review opened before Sambat's record changed.
+		sambatHold(SbfCifResolver.Outcome.MISMATCH, 70L, "name");
+
+		var body = service.decide(7, true, null, "lpo1", "E10002", 71L).getBody();
+
+		assertThat(body.getType()).isEqualTo("CIF_NOT_CONFIRMED");
+		assertThat(body.getMessage()).contains("CIF 70").contains("not 71");
+		assertThat(applicant.getRegistedId()).isNull();
+		assertNothingDecided();
+	}
+
+	@Test
+	@DisplayName("there is no CIF to confirm for someone Sambat do not hold")
+	void aNewCustomerHasNoCifToConfirm() {
+		sambatHold(SbfCifResolver.Outcome.NEW, null);
+
+		var body = service.decide(7, true, null, "lpo1", "E10002", 70L).getBody();
+
+		assertThat(body.getType()).isEqualTo("CIF_NOT_CONFIRMED");
+		assertThat(body.getMessage()).contains("no customer with this ID number");
+		assertThat(applicant.getRegistedId()).isNull();
+		assertNothingDecided();
+	}
+
+	@Test
+	@DisplayName("a confirmation is not taken while Sambat cannot be asked")
+	void aConfirmationWaitsForSambat() {
+		sambatHold(SbfCifResolver.Outcome.UNAVAILABLE, null);
+
+		var body = service.decide(7, true, null, "lpo1", "E10002", 70L).getBody();
+
+		assertThat(body.getType()).isEqualTo("CIF_NOT_CONFIRMED");
+		assertThat(body.getMessage()).contains("could not be reached");
+		assertThat(applicant.getRegistedId()).isNull();
+		assertNothingDecided();
+	}
+
+	@Test
+	@DisplayName("a stored CIF is never changed by a confirmation")
+	void aStoredCifIsNotChanged() {
+		applicant.setRegistedId("70");
+		sambatHold(SbfCifResolver.Outcome.STORED, 70L);
+
+		var body = service.decide(7, true, null, "lpo1", "E10002", 71L).getBody();
+
+		assertThat(body.getType()).isEqualTo("CIF_NOT_CONFIRMED");
+		assertThat(body.getMessage()).contains("already has CIF 70");
+		assertThat(applicant.getRegistedId()).isEqualTo("70");
+		assertNothingDecided();
+	}
+
+	@Test
+	@DisplayName("confirming the CIF already stored approves, and records no confirmation")
+	void confirmingTheStoredCifChangesNothing() {
+		applicant.setRegistedId("70");
+		sambatHold(SbfCifResolver.Outcome.STORED, 70L);
+
+		var body = service.decide(7, true, null, "lpo1", "E10002", 70L).getBody();
+
+		assertThat(body.getType()).isEqualTo("SUCCESS");
+		assertThat(pending.getStatus()).isEqualTo(PdlAccountStatusEnum.APPROVED);
+		assertThat(applicant.getRegistedId()).isEqualTo("70");
+		assertThat(pending.getCifConfirmed()).isNull();
+		verify(userRepository, never()).save(any());
+	}
+
+	@Test
+	@DisplayName("a full match found at approval is stored, and is no one's judgement")
+	void aFullMatchIsStoredWithoutAConfirmation() {
+		// Sambat corrected their record between the review and the decision.
+		sambatHold(SbfCifResolver.Outcome.MATCHED, 70L);
+
+		var body = service.decide(7, true, null, "lpo1", "E10002", 70L).getBody();
+
+		assertThat(body.getType()).isEqualTo("SUCCESS");
+		assertThat(applicant.getRegistedId()).isEqualTo("70");
+		assertThat(pending.getCifConfirmed()).isNull();
+		assertThat(pending.getCifConfirmedBy()).isNull();
+		verify(userRepository).save(applicant);
+	}
+
+	@Test
+	@DisplayName("an account whose registered ID is not a CIF cannot have one confirmed")
+	void aNonCifRegisteredIdIsRefused() {
+		// A merchant code or a staff username sits where the CIF would go.
+		applicant.setRegistedId("MER001");
+		sambatHold(SbfCifResolver.Outcome.MISMATCH, null, "registedId");
+
+		var body = service.decide(7, true, null, "lpo1", "E10002", 70L).getBody();
+
+		assertThat(body.getType()).isEqualTo("CIF_NOT_CONFIRMED");
+		assertThat(body.getMessage()).contains("not a CIF");
+		assertThat(applicant.getRegistedId()).isEqualTo("MER001");
+		assertNothingDecided();
+	}
+
+	@Test
+	@DisplayName("a rejection confirms nothing, and Sambat are not asked")
+	void aRejectionConfirmsNothing() {
+		var body = service.decide(7, false, "not the same person", "lpo1", null, 70L).getBody();
+
+		assertThat(body.getType()).isEqualTo("SUCCESS");
+		assertThat(pending.getStatus()).isEqualTo(PdlAccountStatusEnum.REJECTED);
+		assertThat(applicant.getRegistedId()).isNull();
+		assertThat(pending.getCifConfirmed()).isNull();
+		verify(cifResolver, never()).status(any(), any());
+	}
+
+	@Test
+	@DisplayName("an approval without a confirmation does not ask Sambat, as before")
+	void anApprovalWithoutAConfirmationDoesNotAskSambat() {
+		// Absent, and 0: Swagger's sample value for a number.
+		assertThat(service.decide(7, true, null, "lpo1", "E10002", null).getBody().getType()).isEqualTo("SUCCESS");
+		pending.setStatus(PdlAccountStatusEnum.PENDING);
+		assertThat(service.decide(7, true, null, "lpo1", "E10002", 0L).getBody().getType()).isEqualTo("SUCCESS");
+
+		assertThat(applicant.getRegistedId()).isNull();
+		assertThat(pending.getCifConfirmed()).isNull();
+		verify(cifResolver, never()).status(any(), any());
+	}
+
+	@Test
+	@DisplayName("identity verification is settled before Sambat are asked about a CIF")
+	void theIdentityGateComesBeforeTheCif() {
+		when(verification.blocksApproval(pending)).thenReturn(true);
+
+		var body = service.decide(7, true, null, "lpo1", "E10002", 70L).getBody();
+
+		assertThat(body.getType()).isEqualTo("IDENTITY_NOT_VERIFIED");
+		verify(cifResolver, never()).status(any(), any());
+		assertNothingDecided();
+	}
+
+	// ----- the CIF of a customer who is already approved -----
+
+	/** The request as it stands after an approval that confirmed no CIF. */
+	private void alreadyApproved() {
+		pending.setStatus(PdlAccountStatusEnum.APPROVED);
+		pending.setDecidedBy("lpo1");
+		applicant.setEnabled(true);
+	}
+
+	@Test
+	@DisplayName("an LPO confirms the CIF of a customer approved earlier, and it is on record")
+	void lpoConfirmsForAnApprovedCustomer() {
+		alreadyApproved();
+		sambatHold(SbfCifResolver.Outcome.MISMATCH, 70L, "name");
+
+		var body = service.confirmCif(7, 70L, "lpo2").getBody();
+
+		assertThat(body.getType()).isEqualTo("SUCCESS");
+		assertThat(body.getData()).isEqualTo("70");
+		assertThat(applicant.getRegistedId()).isEqualTo("70");
+		assertThat(pending.getCifConfirmed()).isEqualTo(70L);
+		assertThat(pending.getCifConfirmedDifferences()).isEqualTo("name");
+		assertThat(pending.getCifConfirmedBy()).isEqualTo("lpo2");
+		assertThat(pending.getCifConfirmedDate()).isNotNull();
+		// The decision itself is not rewritten, and the customer is not texted.
+		assertThat(pending.getStatus()).isEqualTo(PdlAccountStatusEnum.APPROVED);
+		assertThat(pending.getDecidedBy()).isEqualTo("lpo1");
+		verify(requestRepo).save(pending);
+		verify(userRepository).save(applicant);
+		verify(sms, never()).sendSms(anyString(), anyString());
+	}
+
+	@Test
+	@DisplayName("a pending request is settled on its approval, not here")
+	void aPendingRequestIsNotConfirmedHere() {
+		var body = service.confirmCif(7, 70L, "lpo2").getBody();
+
+		assertThat(body.getType()).isEqualTo("INVALID");
+		assertThat(body.getMessage()).contains("when you approve it");
+		assertThat(applicant.getRegistedId()).isNull();
+		verify(cifResolver, never()).status(any(), any());
+		verify(userRepository, never()).save(any());
+	}
+
+	@Test
+	@DisplayName("a rejected request has no customer to confirm a CIF for")
+	void aRejectedRequestIsNotConfirmed() {
+		pending.setStatus(PdlAccountStatusEnum.REJECTED);
+
+		var body = service.confirmCif(7, 70L, "lpo2").getBody();
+
+		assertThat(body.getType()).isEqualTo("INVALID");
+		assertThat(applicant.getRegistedId()).isNull();
+		verify(cifResolver, never()).status(any(), any());
+		verify(userRepository, never()).save(any());
+	}
+
+	@Test
+	@DisplayName("a request that does not exist is said not to exist")
+	void anUnknownRequestIsNotFound() {
+		when(requestRepo.findById(99)).thenReturn(Optional.empty());
+
+		assertThat(service.confirmCif(99, 70L, "lpo2").getBody().getType()).isEqualTo("NOT_FOUND");
+		verify(cifResolver, never()).status(any(), any());
+	}
+
+	@Test
+	@DisplayName("for an approved customer too, only the CIF Sambat hold for the ID number is taken")
+	void anApprovedCustomerGetsOnlySambatsCif() {
+		alreadyApproved();
+		sambatHold(SbfCifResolver.Outcome.MISMATCH, 70L, "name");
+
+		var body = service.confirmCif(7, 71L, "lpo2").getBody();
+
+		assertThat(body.getType()).isEqualTo("CIF_NOT_CONFIRMED");
+		assertThat(body.getMessage()).contains("CIF 70").contains("not 71");
+		assertThat(applicant.getRegistedId()).isNull();
+		assertThat(pending.getCifConfirmed()).isNull();
+		verify(requestRepo, never()).save(any());
+		verify(userRepository, never()).save(any());
+	}
+
+	@Test
+	@DisplayName("for an approved customer too, nothing is stored while Sambat cannot be asked")
+	void anApprovedCustomerWaitsForSambat() {
+		alreadyApproved();
+		sambatHold(SbfCifResolver.Outcome.UNAVAILABLE, null);
+
+		var body = service.confirmCif(7, 70L, "lpo2").getBody();
+
+		assertThat(body.getType()).isEqualTo("CIF_NOT_CONFIRMED");
+		assertThat(applicant.getRegistedId()).isNull();
+		verify(requestRepo, never()).save(any());
+		verify(userRepository, never()).save(any());
+	}
+
+	@Test
+	@DisplayName("confirming the CIF an approved customer already has writes nothing")
+	void confirmingAnApprovedCustomersStoredCif() {
+		alreadyApproved();
+		applicant.setRegistedId("70");
+		sambatHold(SbfCifResolver.Outcome.STORED, 70L);
+
+		var body = service.confirmCif(7, 70L, "lpo2").getBody();
+
+		assertThat(body.getType()).isEqualTo("SUCCESS");
+		assertThat(body.getMessage()).contains("already stored");
+		assertThat(pending.getCifConfirmed()).isNull();
+		verify(requestRepo, never()).save(any());
+		verify(userRepository, never()).save(any());
+	}
+
+	@Test
+	@DisplayName("an approved customer's stored CIF is never replaced")
+	void anApprovedCustomersStoredCifIsNotReplaced() {
+		alreadyApproved();
+		applicant.setRegistedId("70");
+		sambatHold(SbfCifResolver.Outcome.STORED, 70L);
+
+		var body = service.confirmCif(7, 71L, "lpo2").getBody();
+
+		assertThat(body.getType()).isEqualTo("CIF_NOT_CONFIRMED");
+		assertThat(body.getMessage()).contains("already has CIF 70");
+		assertThat(applicant.getRegistedId()).isEqualTo("70");
+		verify(userRepository, never()).save(any());
+	}
 }

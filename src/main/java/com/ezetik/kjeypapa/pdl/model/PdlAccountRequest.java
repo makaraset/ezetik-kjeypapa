@@ -51,4 +51,17 @@ public class PdlAccountRequest extends UserDateAudit {
 	/** Who decided (LPO username via the admin API, or SYSTEM/test webhook). */
 	private String decidedBy;
 	private java.time.Instant decidedDate;
+
+	/**
+	 * The CIF an LPO confirmed as this customer's although Sambat's record for
+	 * the ID number differed, with what differed, who confirmed and when. All
+	 * null when the CIF came from a full match, or there is none: these record
+	 * a person's judgement, and a full match needs none.
+	 */
+	private Long cifConfirmed;
+
+	/** Our field names, comma-separated: idNo, dateOfBirth, gender, name. */
+	private String cifConfirmedDifferences;
+	private String cifConfirmedBy;
+	private java.time.Instant cifConfirmedDate;
 }

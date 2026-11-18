@@ -10,7 +10,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * was read as a rejection.
  *
  * <p>No example is set, so Swagger shows its usual sample for these types:
- * {@code {"approve": true, "reason": "string", "employerCode": "string"}}.
+ * {@code {"approve": true, "reason": "string", "employerCode": "string", "confirmCif": 0}}.
+ * A {@code confirmCif} of 0 confirms nothing, so that sample still decides.
  *
  * <p>No {@code decidedBy}: it comes from the security context in the
  * controller, as for {@link PdlDataDecisionPayload}.
@@ -31,5 +32,11 @@ public record PdlAccountDecisionRequest(
 		@Schema(description = "Sambat's code for the customer's employer: the code of a row from "
 				+ "GET /api/v1/pdl/admin/dictionary/list?name=EMPLOYER. Stored on approval and sent to Sambat "
 				+ "with the loan application; ignored on a rejection. Leave it out to approve without an employer.")
-		String employerCode) {
+		String employerCode,
+
+		@Schema(description = "The LPO's confirmation that a CIF is this customer's, for a request whose review "
+				+ "shows sbfCustomer.outcome MISMATCH: send sbfCustomer.cif. It is checked against Sambat again and "
+				+ "stored only if they still hold the customer's ID number under that CIF. A confirmed CIF cannot "
+				+ "be changed. Leave it out, or send 0, to confirm nothing; ignored on a rejection.")
+		Long confirmCif) {
 }

@@ -4,6 +4,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -64,8 +65,10 @@ class PdlAdminControllerTest {
 
 	@BeforeEach
 	void setUp() {
-		when(service.decide(anyInt(), anyBoolean(), any(), any(), any()))
+		when(service.decide(anyInt(), anyBoolean(), any(), any(), any(), any()))
 				.thenReturn(ResponseEntity.ok(new Message<>("SUCCESS", "Account decision processed", "DECIDED")));
+		when(service.confirmCif(anyInt(), anyLong(), any()))
+				.thenReturn(ResponseEntity.ok(new Message<>("SUCCESS", "CIF 70 confirmed for this customer.", "70")));
 		SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken("lpo1", null));
 		mvc = MockMvcBuilders.webAppContextSetup(context).build();
 	}
@@ -85,7 +88,7 @@ class PdlAdminControllerTest {
 		// Exactly the app's body: it always sends "reason", null on an approval.
 		decide("{\"approve\":true,\"reason\":null,\"employerCode\":\"E10002\"}").andExpect(status().isOk());
 
-		verify(service).decide(4, true, null, "lpo1", "E10002");
+		verify(service).decide(4, true, null, "lpo1", "E10002", null);
 	}
 
 	@Test
@@ -94,7 +97,18 @@ class PdlAdminControllerTest {
 		// "Approve without employer" in the console leaves the key out.
 		decide("{\"approve\":true,\"reason\":null}").andExpect(status().isOk());
 
-		verify(service).decide(4, true, null, "lpo1", null);
+		verify(service).decide(4, true, null, "lpo1", null, null);
+	}
+
+	@Test
+	@DisplayName("an approval that confirms a CIF passes it on")
+	void approvalConfirmingACif() throws Exception {
+		// What the console sends when the LPO says the CIF Sambat hold for
+		// this ID number is this customer.
+		decide("{\"approve\":true,\"reason\":null,\"employerCode\":\"E10002\",\"confirmCif\":70}")
+				.andExpect(status().isOk());
+
+		verify(service).decide(4, true, null, "lpo1", "E10002", 70L);
 	}
 
 	@Test
@@ -102,7 +116,7 @@ class PdlAdminControllerTest {
 	void rejectionAsTheAppSendsIt() throws Exception {
 		decide("{\"approve\":false,\"reason\":\"ID photo is unreadable\"}").andExpect(status().isOk());
 
-		verify(service).decide(4, false, "ID photo is unreadable", "lpo1", null);
+		verify(service).decide(4, false, "ID photo is unreadable", "lpo1", null, null);
 	}
 
 	@Test
@@ -112,7 +126,7 @@ class PdlAdminControllerTest {
 		// caller who quotes the value is not turned away by the named body.
 		decide("{\"approve\":\"true\"}").andExpect(status().isOk());
 
-		verify(service).decide(4, true, null, "lpo1", null);
+		verify(service).decide(4, true, null, "lpo1", null, null);
 	}
 
 	@Test
@@ -120,9 +134,11 @@ class PdlAdminControllerTest {
 	void swaggerSampleIsReadAsWritten() throws Exception {
 		// The sample keeps Swagger's usual values, so this is what its form
 		// sends unchanged: an approval, with "string" as reason and employer.
-		decide("{\"approve\":true,\"reason\":\"string\",\"employerCode\":\"string\"}").andExpect(status().isOk());
+		// Its confirmCif of 0 is passed on as it is, and confirms nothing.
+		decide("{\"approve\":true,\"reason\":\"string\",\"employerCode\":\"string\",\"confirmCif\":0}")
+				.andExpect(status().isOk());
 
-		verify(service).decide(4, true, "string", "lpo1", "string");
+		verify(service).decide(4, true, "string", "lpo1", "string", 0L);
 	}
 
 	@Test
@@ -165,6 +181,42 @@ class PdlAdminControllerTest {
 		decide("{\"approve\":true,}").andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.type").value("BAD_REQUEST"))
 				.andExpect(jsonPath("$.message", containsString("could not be read as JSON")));
+
+		verifyNoInteractions(service);
+	}
+
+	// ----- the CIF of a customer who is already approved -----
+
+	private ResultActions confirmCif(String json) throws Exception {
+		return mvc.perform(post("/api/v1/pdl/admin/account-requests/4/confirm-cif")
+				.contentType(MediaType.APPLICATION_JSON).content(json));
+	}
+
+	@Test
+	@DisplayName("a confirmation for an approved customer passes the CIF on, in the LPO's name")
+	void confirmingForAnApprovedCustomer() throws Exception {
+		confirmCif("{\"cif\":70}").andExpect(status().isOk()).andExpect(jsonPath("$.data").value("70"));
+
+		verify(service).confirmCif(4, 70L, "lpo1");
+	}
+
+	@Test
+	@DisplayName("a confirmation that names no CIF stores nothing")
+	void aConfirmationWithoutACifStoresNothing() throws Exception {
+		// Absent, null, and 0: Swagger's sample value for a number.
+		for (String body : new String[] { "{}", "{\"cif\":null}", "{\"cif\":0}" })
+			confirmCif(body).andExpect(status().isBadRequest()).andExpect(jsonPath("$.type").value("INVALID"))
+					.andExpect(jsonPath("$.message", containsString("'cif' is required")));
+
+		verifyNoInteractions(service);
+	}
+
+	@Test
+	@DisplayName("a CIF that is not a number is named, not answered 403")
+	void anUnreadableCifIsNamed() throws Exception {
+		confirmCif("{\"cif\":\"seventy\"}").andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.type").value("BAD_REQUEST"))
+				.andExpect(jsonPath("$.message", containsString("'cif'")));
 
 		verifyNoInteractions(service);
 	}

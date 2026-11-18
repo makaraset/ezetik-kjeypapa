@@ -77,6 +77,11 @@ again when the profile loads and at submit.
 reached, or holds the ID number under other details, the application waits
 rather than filing a duplicate customer (2026-11-05).
 
+When SBF hold the ID number under other details, the LPO can settle it while
+approving the account request (Stage 2): they confirm that the CIF this lookup
+returns is the applicant. The lookup is made again at that moment, and only the
+CIF it returns is stored, with who confirmed it and what differed (2026-11-18).
+
 ### 1c. Capture and submit the account request — screens 7–10
 
 **Ours.** `POST /api/v1/pdl/account-request`, unauthenticated, one bundle:
@@ -92,7 +97,13 @@ An LPO reviews the request in our admin console and approves or rejects it,
 choosing the employer code at the same time. Approval enables login and stamps
 the KYC rows as verified.
 
-No integration point. Named here because it is the step people most often assume
+The review shows who the applicant is at SBF (1b). If SBF hold the ID number
+under other details, Approve first asks the LPO whether it is the same person;
+a yes travels as `confirmCif` on the decision call and makes one more lookup at
+SBF. A customer who is already approved is settled from the same page, with
+`POST /api/v1/pdl/admin/account-requests/{id}/confirm-cif`.
+
+No other integration point. Named here because it is the step people most often assume
 belongs to Sambat.
 
 ---
