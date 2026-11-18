@@ -12,6 +12,45 @@ it was found, so a reader can judge how much it has actually been checked.
 
 ## Open findings
 
+### F31 — a failed acceptance relay still saved the loan as Accepted
+**Severity:** high · **Status:** ~~open~~ **FIXED 2026-11-18, not on UAT yet** ·
+**Found:** 2026-11-16, reviewing Sambat's new `/customer-accepted`
+
+`accept()` set the loan to Accepted and then told Sambat. It is transactional
+and reports a failure by returning, so when the relay failed the customer was
+told "Something went wrong. Please try again." and the loan was saved Accepted
+all the same. A second try was refused ("Only an Approved application can be
+accepted"), Sambat never heard, and an Accepted loan never expires (**F23**).
+
+Three more things made a failure likely once Sambat switch to their new body:
+- the relay refused to send without their LOS id, and their reply now names it
+  `losAppId`, which we read as no id;
+- it sent neither `customerDecision` nor `termChange`, both required there;
+- it took HTTP 200 for a yes without reading the reply.
+
+Now:
+- Sambat are told first. The loan is changed only after they have taken the
+  acceptance, so a failed or refused relay leaves it Approved.
+- The customer is told which it was: try again (`LOS_ACCEPT_FAILED`), or call
+  the hotline (`LOS_ACCEPT_REFUSED`).
+- The relay carries today's fields and the new ones together, goes without
+  their LOS id when we hold none, and reads their reply. See
+  *LOS_Submit_Open_Questions*, "Sambat's new `/customer-accepted`".
+
+With the old order restored, the two new tests fail: the loan is left Accepted
+after a failed relay. That it was then written to the database is read from
+the transaction's rules, not run.
+
+Not done:
+- **If Sambat take the acceptance and our save then fails**, they hold an
+  acceptance we do not. The customer's second try sends it again. What their
+  server does with a repeat is unknown.
+- **No signed documents** are sent, so their new version may refuse every
+  acceptance until signing is built. That is now a refusal the customer sees,
+  not a loan stuck as Accepted.
+- **A decline is still not sent** (**F25**).
+- Not run against Sambat: the VPN was off.
+
 ### F30 — the old user-update call can overwrite a CIF with no check
 **Severity:** medium · **Status:** open ·
 **Found:** 2026-11-18, asking whether an LPO can correct a CIF
@@ -208,8 +247,16 @@ A-AO from the Approving Officer. Our `/approved` treats every call as the final
 offer and ignores the code. If A-LPO reaches it, the customer can accept before
 the officer decides, and a later R-AO is ignored once accepted.
 
+**2026-11-18:** Sambat's file of 2026-11-16 answers the first point. Y and N
+go in a new field, `customerDecision`, with `termChange` and three signed
+documents; `trnCode` and `smsText` are gone and E has no field. The relay now
+sends Y that way beside the old fields (**F31**). N is still not sent: they
+have not said the new version is live, and the old one would read it as an
+acceptance.
+
 Not built until Sambat answer:
-- whether Y/N/E go in `trnCode` on `/customer-accepted`
+- ~~whether Y/N/E go in `trnCode` on `/customer-accepted`~~ answered, see above
+- when their new `/customer-accepted` is live, so that N can be sent
 - whether A-LPO is ever sent to us
 - whether the money moves in the Campu Bank app or by the LOS after Y
 - which field and format carry the attachments

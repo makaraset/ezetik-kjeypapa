@@ -746,3 +746,72 @@ and the names. We read ISO dates, date-times, `dd/MM/yyyy`, epoch milliseconds
 and `[y, m, d]`; M/F, Male/Female and ប្រុស/ស្រី. Run
 `docs/probe-sbf-customer-shape.sh <your ID number>` on the VPN: it prints each
 field's form, never its value.
+
+---
+
+## Sambat's new `/customer-accepted` (their file of 2026-11-16)
+
+Sambat answered part of the 6 November notice with a file,
+`customer-accepted.txt`. It changes three things:
+
+| Call | Before | Their new version |
+|---|---|---|
+| `/new-loan-application` request | `mobileAppId` and `appId` | `mobileAppId` only; it replaces `appId` |
+| `/new-loan-application` reply | their id as `AppId` | their id as `losAppId` |
+| `/customer-accepted` | `mobileAppId`, `appId`, `doneBy`, `smsText`, `trnCode` | `mobileAppId`, `doneBy`, `customerDecision`, `termChange`, `customerComment`, three signed documents |
+
+- `customerDecision` (required): Y the customer accepts, N the customer rejects.
+- `termChange` (required): Y the application was approved with a term change,
+  N it is the final approval.
+- `customerComment`: optional.
+- The documents are `doc_SignedEloanContract`, `doc_SignedERepaymentSchedule`
+  and `doc_SignedELoanApplicationRequest`, each with a `..._FileName`. They are
+  required when the decision is Y and `termChange` is N.
+- `appId`, `smsText` and `trnCode` are gone.
+- The file writes the reply's `MissingData` as `MissingDate`.
+- It ends with a list of names (ABAbank to U-PayChannelKH) that neither call
+  refers to. Nothing was changed for it.
+
+They did not say whether this is live on UAT, or when.
+
+What changed on our side (2026-11-18, not on UAT yet), so that one build works
+against the server they run today and the one to come:
+- **The reply's id is read under every spelling:** `AppId`, `LosAppId` and
+  `losAppId`. Names are matched by exact case, so `losAppId` used to read as no
+  id. `MissingDate` is read as `MissingData`.
+- **An acceptance carries both versions' fields.** Today's `appId`, `smsText`
+  and `trnCode` stay, and `customerDecision` Y, `termChange` N and an empty
+  `customerComment` go beside them, under `mobileAppId`. `termChange` is always
+  N: their dictionary gives a payday loan no term change.
+- **No signed document is sent.** We have none: the app's "signed contract" is
+  the placeholder `APP-SIGNED-{id}`. A blank under those names would claim a
+  signature.
+- **Their LOS id is no longer needed to relay.** Without it the acceptance goes
+  by `mobileAppId` alone and their reply decides. `appId` is left out then,
+  never sent as 0.
+- **Their reply is read.** HTTP 200 used to count as a yes whatever the body
+  said. A failure status, or a success flag that is false, is now a refusal
+  (`LOS_ACCEPT_REFUSED`, with the hotline). Any other reply is taken as before,
+  because nobody has recorded one. Each reply is logged.
+- **A failed or refused relay leaves the loan Approved** (backlog F31).
+- **A decline is still not sent.** The server they run today does not read
+  `customerDecision` and would take the call for an acceptance.
+- `/new-loan-application` already carries `mobileAppId` beside `appId`, so
+  nothing changed there.
+
+Still unknown:
+1. Whether the new version is live on UAT, or when. Until signing is built,
+   whether UAT can take Y without the documents.
+2. Who produces the three documents the customer signs, and how we fetch them.
+3. What counts as signed: a drawn signature, a name with time and OTP, or a
+   certificate.
+4. The file format and size limit.
+5. Whether `termChange` is always N for a payday loan. If not, how their
+   approve call tells us.
+6. What `/customer-accepted` answers on success and on refusal.
+7. What a second `/new-loan-application` with the same `mobileAppId` does:
+   update, refuse or duplicate. Our retry protection sent the stored `appId`.
+8. For an offer that expires at 17:00: N with a comment, or nothing.
+9. The exact spellings: `doc_...` or `Doc_...`, `losAppId` or `LosAppId`,
+   `MissingDate` or `MissingData`.
+10. What the list at the end of the file is for.

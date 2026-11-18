@@ -547,6 +547,56 @@ class PaydayLoanServiceImplTest {
 	}
 
 	@Test
+	void accept_aFailedRelayLeavesTheLoanApproved() {
+		// accept() is transactional and reports a failure by returning, so
+		// whatever it had set on the loan before a failed relay was saved with
+		// it: Accepted on our side, unknown to Sambat, never disbursed, never
+		// expired, and refused when the customer tried again.
+		PaydayLoan loan = loanOwnedBy(CURRENT_ID, PdlStatusEnum.Approved);
+		loan.setLosAppId(8287L);
+		var decision = new com.ezetik.kjeypapa.pdl.payload.PdlAcceptDecision();
+		decision.setDecision("Y");
+		decision.setSignedContractRef("contract.pdf");
+		org.mockito.Mockito.doThrow(new LosSubmitException("LOS_ACCEPT_REFUSED",
+				"Sambat could not take your acceptance. Please call us on 023 9977 22."))
+				.when(losProvider).sendDecision(any(), eq("Y"), any());
+
+		var body = service.accept(1, decision).getBody();
+
+		// The customer is told what to do, in our words, not "something went wrong".
+		assertThat(body.getType()).isEqualTo("LOS_ACCEPT_REFUSED");
+		assertThat(body.getMessage()).contains("Please call us on 023 9977 22");
+		assertThat(loan.getStatus()).isEqualTo(PdlStatusEnum.Approved);
+		assertThat(loan.isAccepted()).isFalse();
+		assertThat(loan.getAcceptedDate()).isNull();
+		assertThat(loan.getSignedContractRef()).isNull();
+		verify(repo, never()).save(any());
+	}
+
+	@Test
+	void accept_tellsSambatBeforeItChangesTheLoan() {
+		// The order is the protection: at the moment Sambat are told, the loan
+		// must not yet carry anything a failed relay would leave behind.
+		PaydayLoan loan = loanOwnedBy(CURRENT_ID, PdlStatusEnum.Approved);
+		loan.setLosAppId(8287L);
+		var decision = new com.ezetik.kjeypapa.pdl.payload.PdlAcceptDecision();
+		decision.setDecision("Y");
+		decision.setSignedContractRef("contract.pdf");
+		var seenAtRelay = new java.util.ArrayList<String>();
+		org.mockito.Mockito.doAnswer(call -> {
+			PaydayLoan atRelay = call.getArgument(0);
+			seenAtRelay.add(atRelay.getStatus() + " accepted=" + atRelay.isAccepted());
+			return null;
+		}).when(losProvider).sendDecision(any(), eq("Y"), any());
+
+		service.accept(1, decision);
+
+		assertThat(seenAtRelay).containsExactly("Approved accepted=false");
+		assertThat(loan.getStatus()).isEqualTo(PdlStatusEnum.Accepted);
+		assertThat(loan.isAccepted()).isTrue();
+	}
+
+	@Test
 	void submit_stampsTheFullConsentRecordSambatAsksFor() {
 		// The record must stand alone as evidence: version NAMES the wording,
 		// the hash PROVES it (a label can be reused, a stored text edited).

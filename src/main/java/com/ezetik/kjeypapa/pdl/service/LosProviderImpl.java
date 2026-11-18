@@ -70,6 +70,14 @@ public class LosProviderImpl implements LosProvider {
 	@Value("${los.accept.trn-code:}")
 	private String acceptTrnCode;
 
+	/**
+	 * {@code termChange} on {@code /customer-accepted}: N, the approval was
+	 * final. Sambat's dictionary gives a payday loan no term change, and our
+	 * {@code /approved} handles every approval as the final offer, so there is
+	 * never a changed term for the customer to be answering.
+	 */
+	private static final String FINAL_APPROVAL = "N";
+
 	@Override
 	public String submitApplication(PaydayLoan loan, byte[] consentPdf) {
 		if (mockEnabled) {
@@ -140,32 +148,49 @@ public class LosProviderImpl implements LosProvider {
 			return;
 		}
 
-		// Sambat exposes NO decline endpoint — their API has /customer-accepted
-		// and nothing for "the customer said no" or an expired offer. Those
-		// close on our side only; raised with them. Logged so the gap is
-		// visible in the record rather than silently dropped.
+		// Sambat's new /customer-accepted takes a "no" as customerDecision N
+		// (their file of 2026-11-16), but they have not said it is live. The
+		// server they run today does not read customerDecision, and would take
+		// any call here for an acceptance. So a decline or an expired offer
+		// still closes on our side only, until they confirm. Logged so the gap
+		// is visible in the record rather than silently dropped.
 		if (!"Y".equalsIgnoreCase(decision)) {
-			log.info("Loan {} declined/expired — Sambat has no decline endpoint, nothing relayed",
-					loan.getId());
+			log.info("Loan {} declined or expired: not relayed until Sambat confirm their new "
+					+ "/customer-accepted is live", loan.getId());
 			return;
 		}
 
-		// Their /customer-accepted is keyed by AppId, so a loan filed before we
-		// stored one cannot be relayed. Fail loudly: silently skipping would
-		// leave an accepted loan that Sambat never disburses.
+		// Today's server finds the application by their LOS id, the one to
+		// come by ours alone. Without their id the acceptance still goes, by
+		// ours: their reply decides, and refusing here would leave a loan no
+		// one could ever accept.
 		if (loan.getLosAppId() == null)
-			throw new LosSubmitException("LOS_NO_APP_ID",
-					"This application has no Sambat application id, so the acceptance cannot be sent.");
+			log.warn("Loan {} has no Sambat application id: relaying the acceptance by mobileAppId alone",
+					loan.getId());
 
+		String reply;
 		try {
-			sbf.customerAccepted(loan.getId(), loan.getLosAppId(), submitConfig.getDoneBy(), acceptSmsText,
-					acceptTrnCode);
+			reply = sbf.customerAccepted(loan.getId(), loan.getLosAppId(), submitConfig.getDoneBy(), "Y",
+					FINAL_APPROVAL, "", acceptSmsText, acceptTrnCode);
 		} catch (LosSubmitException e) {
 			throw e;
 		} catch (Exception e) {
 			log.warn("Acceptance relay failed for loan {}: {}", loan.getId(), e.toString());
 			throw new LosSubmitException("LOS_ACCEPT_FAILED",
 					"Could not confirm your acceptance with Sambat. Please try again.");
+		}
+
+		// HTTP 200 is not a yes: their other call rejects under 200 too. The
+		// reply is logged because nobody has recorded one yet.
+		log.info("Sambat's reply to the acceptance of loan {}: {}", loan.getId(),
+				reply == null ? "" : reply.substring(0, Math.min(512, reply.length())));
+		String refusal = SbfAcceptReply.refusal(reply, om);
+		if (refusal != null) {
+			log.warn("Sambat refused the acceptance of loan {}: {}", loan.getId(), refusal);
+			// Trying again cannot help: something about the application has
+			// to change first, and that takes a person.
+			throw new LosSubmitException("LOS_ACCEPT_REFUSED",
+					"Sambat could not take your acceptance. Please call us on " + hotline + ".");
 		}
 	}
 

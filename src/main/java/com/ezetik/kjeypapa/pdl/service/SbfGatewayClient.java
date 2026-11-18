@@ -184,17 +184,38 @@ public class SbfGatewayClient {
 	}
 
 	/**
-	 * {@code POST /customer-accepted} — tell Sambat the customer accepted their
-	 * approved offer, which is what lets the application move to disbursement.
-	 * Carries both keys while Sambat move to ours: {@code mobileAppId} (our
-	 * id, agreed 2026-11-05) and their {@code AppId} (int32 in their swagger).
+	 * {@code POST /customer-accepted} — tell Sambat what the customer decided
+	 * about their approved offer. An acceptance is what lets the application
+	 * move to disbursement.
+	 *
+	 * <p>Sambat are replacing this body (their file of 2026-11-16) and have
+	 * not said when, so one request carries both versions:
+	 * <ul>
+	 * <li>the one they run today: {@code appId} (their LOS id, int32 in their
+	 * swagger), {@code smsText} and {@code trnCode};</li>
+	 * <li>the one to come: {@code mobileAppId} (our id) as the only key, with
+	 * {@code customerDecision}, {@code termChange} and {@code customerComment}.</li>
+	 * </ul>
+	 * Each server is expected to ignore the fields it does not know, as theirs
+	 * did with {@code mobileAppId} on {@code /new-loan-application}.
+	 *
+	 * <p>{@code appId} is left out when we hold none: 0 is what a new
+	 * application carries and must never name an existing one. The three
+	 * signed documents the new body asks for are not sent, because we do not
+	 * have them, and a blank under those names would claim a signature.
+	 *
+	 * @return their reply body, which may say no under HTTP 200
 	 */
-	public String customerAccepted(long mobileAppId, long appId, String doneBy, String smsText, String trnCode)
-			throws Exception {
+	public String customerAccepted(long mobileAppId, Long appId, String doneBy, String customerDecision,
+			String termChange, String customerComment, String smsText, String trnCode) throws Exception {
 		var node = mapper.createObjectNode();
 		node.put("mobileAppId", mobileAppId);
-		node.put("appId", appId);
+		if (appId != null)
+			node.put("appId", appId);
 		node.put("doneBy", doneBy == null ? "" : doneBy);
+		node.put("customerDecision", customerDecision == null ? "" : customerDecision);
+		node.put("termChange", termChange == null ? "" : termChange);
+		node.put("customerComment", customerComment == null ? "" : customerComment);
 		node.put("smsText", smsText == null ? "" : smsText);
 		node.put("trnCode", trnCode == null ? "" : trnCode);
 		HttpRequest req = HttpRequest.newBuilder().uri(new URI(losUrlApi + "/customer-accepted"))

@@ -122,4 +122,28 @@ class LosContractTest {
 				LosPostResponse.class);
 		assertEquals(8301L, renamed.getResult().get(0).getLosAppId());
 	}
+
+	@Test
+	@DisplayName("and under the spelling their file gives it, losAppId")
+	void losAppIdAsTheirFileSpellsIt() throws Exception {
+		// Their file of 2026-11-16 writes it with a small l. Names are matched
+		// by exact case, so "LosAppId" alone would have read this as no id.
+		LosPostResponse renamed = om.readValue(
+				"{\"IsSuccess\":\"Success\",\"Result\":[{\"AppRefId\":257990,\"losAppId\":8301}]}",
+				LosPostResponse.class);
+		assertEquals(8301L, renamed.getResult().get(0).getLosAppId());
+		assertEquals(257990, renamed.getResult().get(0).getAppRefId());
+	}
+
+	@Test
+	@DisplayName("missing fields are still named if they arrive as MissingDate")
+	void missingDataUnderTheirFilesSpelling() throws Exception {
+		// The same file writes "MissingDate". Read as nothing, a rejection
+		// for missing fields would reach the customer with no field named.
+		LosPostResponse bad = om.readValue(
+				"{\"ErrorMessage\":null,\"IsSuccess\":\"False\",\"MissingDate\":\"CustP_CAddCBCommune | \",\"Result\":[]}",
+				LosPostResponse.class);
+		assertFalse(bad.succeeded());
+		assertEquals(List.of("CustP_CAddCBCommune"), bad.missingFields());
+	}
 }

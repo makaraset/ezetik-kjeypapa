@@ -429,12 +429,18 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 				if (decision.getSignedContractRef() == null)
 					return resp("INVALID", "Signed contract is required to accept", null, HttpStatus.EXPECTATION_FAILED);
 
+				// Sambat first, and the loan only afterwards. This method is
+				// transactional and reports a failure by returning, so anything
+				// set on the loan before a failed relay would still be saved:
+				// Accepted on our side, unknown to Sambat, never disbursed and,
+				// being Accepted, never expired. The customer could not retry.
+				losProvider.sendDecision(loan, "Y", decision.getSignedContractRef());
+
 				loan.setAccepted(true);
 				loan.setAcceptedBy(getCurrentUser().getUsername());
 				loan.setAcceptedDate(Instant.now());
 				loan.setSignedContractRef(decision.getSignedContractRef());
 				loan.setStatus(PdlStatusEnum.Accepted);
-				losProvider.sendDecision(loan, "Y", decision.getSignedContractRef());
 
 				return resp("SUCCESS", "Loan accepted", repo.save(loan), HttpStatus.OK);
 
@@ -448,6 +454,14 @@ public class PaydayLoanServiceImpl implements PaydayLoanService {
 
 				return resp("SUCCESS", "Loan rejected by customer", repo.save(loan), HttpStatus.OK);
 			}
+
+		} catch (LosSubmitException e) {
+			// The acceptance did not reach Sambat, or they said no. Nothing was
+			// set on the loan before the relay, so it is still Approved. The
+			// message is ours, written for the customer: whether to try again
+			// or to call.
+			log.warn("Acceptance of loan {} not relayed: {} ({})", id, e.getLosCode(), e.getMessage());
+			return resp(e.getLosCode(), e.getMessage(), null, HttpStatus.EXPECTATION_FAILED);
 
 		} catch (Exception e) {
 			log.warn("PDL operation failed: {}", e.toString(), e);

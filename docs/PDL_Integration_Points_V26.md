@@ -201,15 +201,24 @@ This must be on before first deployment.
 
 **→ Sambat** `POST /customer-accepted`
 
-The customer reads the offer, ticks the T&C gate and confirms; we relay the
-decision with the `mobileAppId` and their AppId.
+The customer reads the offer, ticks the T&C gate and confirms. We tell you
+first: the loan becomes Accepted only once you have taken the acceptance. If
+the call fails or you say no, it stays Approved and the customer is told to
+try again or to call.
 
-⚠ Two fields on this call, `smsText` and `trnCode`, are typed as strings in your
-swagger and documented nowhere. We send them empty. `smsText` may reach a real
-customer, so we will not invent wording — **awaiting your answer.**
+You are replacing this call's body (your file of 2026-11-16) and have not said
+when. Until you do, one request carries both versions under `mobileAppId`:
+- today's `appId`, with `smsText` and `trnCode` sent empty as before;
+- the new `customerDecision` (Y), `termChange` (N) and `customerComment`.
 
-A cut-off sweep at 17:00 Asia/Phnom_Penh auto-rejects offers left unconfirmed
-and relays an "N" decision.
+⚠ The three signed documents the new body asks for are not sent. We do not
+have them yet: who produces them, what counts as signed and the file format
+are **awaiting your answer.**
+
+A cut-off sweep at 17:00 Asia/Phnom_Penh auto-rejects offers left unconfirmed.
+Neither that nor a customer's "no" is relayed yet: the server you run today
+would read any call here as an acceptance. A decline will go as
+`customerDecision` N once you confirm the new version is live.
 
 ---
 

@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -39,7 +40,14 @@ public class LosPostResponse {
 	@JsonProperty("IsSuccess")
 	private String isSuccess;
 
+	/**
+	 * Their file of 2026-11-16 writes this "MissingDate". It reads like a
+	 * typing slip for MissingData, but costs nothing to accept: missed, a
+	 * rejection for missing fields would reach the customer with no field
+	 * named.
+	 */
 	@JsonProperty("MissingData")
+	@JsonAlias("MissingDate")
 	private String missingData;
 
 	@JsonProperty("Result")
