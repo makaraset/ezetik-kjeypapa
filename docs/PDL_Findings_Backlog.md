@@ -13,7 +13,7 @@ it was found, so a reader can judge how much it has actually been checked.
 ## Open findings
 
 ### F31 — a failed acceptance relay still saved the loan as Accepted
-**Severity:** high · **Status:** ~~open~~ **FIXED 2026-11-18, not on UAT yet** ·
+**Severity:** high · **Status:** ~~open~~ **FIXED 2026-11-18, on UAT since 2026-11-19** ·
 **Found:** 2026-11-16, reviewing Sambat's new `/customer-accepted`
 
 `accept()` set the loan to Accepted and then told Sambat. It is transactional
@@ -65,7 +65,7 @@ Read from the code, not run. Not changed: other tooling may rely on it. At the
 least it should refuse `registedId`.
 
 ### F29 — nobody could settle a customer Sambat hold under other details
-**Severity:** medium · **Status:** ~~open~~ **BUILT 2026-11-18, not on UAT yet** ·
+**Severity:** medium · **Status:** ~~open~~ **BUILT 2026-11-18, on UAT since 2026-11-19** ·
 **Found:** 2026-11-18, asking what an existing Sambat customer goes through
 
 When Sambat hold the customer's ID number under other details (an older name
@@ -105,7 +105,7 @@ Not done:
 - The Khmer texts are drafts.
 
 ### F28 — an account decision without `approve` was read as a rejection
-**Severity:** medium · **Status:** ~~open~~ **FIXED 2026-11-18, not on UAT yet** ·
+**Severity:** medium · **Status:** ~~open~~ **FIXED 2026-11-18, on UAT since 2026-11-19** ·
 **Found:** 2026-11-18, when a colleague asked what Swagger's `additionalProp1..3` stand for
 
 `POST /api/v1/pdl/admin/account-requests/{id}/decision` took a free-form map,

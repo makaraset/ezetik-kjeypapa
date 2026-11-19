@@ -177,8 +177,8 @@ The image build needs outbound internet for Maven. It is a 2-CPU box, so expect
 the first build to take several minutes; dependencies are cached in their own
 layer, so later builds are quick.
 
-For a redeploy, follow §6d instead: stage, tag a rollback image, save the
-running container's log, then swap. The log goes with the old container.
+For a redeploy, follow §6d and §6e instead: stage, tag a rollback image, save
+the running container's log, then swap. The log goes with the old container.
 
 ---
 
@@ -434,6 +434,79 @@ were open (F16). Next time, run this first:
   for that record. Other records may still differ.
 - §7 steps 3 to 5 were not run this time: the consent-ledger check, the TFF
   regression and one filed application.
+
+## 6e. Deployed — 2026-11-19
+
+Backend `5ee43c1` is live on `10.32.8.99`. Docker reports it **healthy**, with
+0 restarts and a 16.5 s boot. It brings `907e330..5ee43c1`:
+- F28: an account decision names its fields in Swagger, and `approve` is
+  required;
+- F29: an LPO can confirm a CIF that Sambat hold under other details, when
+  approving or afterwards (`POST …/account-requests/{id}/confirm-cif`);
+- F31: Sambat are told of an acceptance before the loan changes, so a failed
+  relay leaves it Approved. The relay sends their old and new
+  `/customer-accepted` fields together.
+
+| | |
+|---|---|
+| Backup taken first | `/root/backups/kjey_papa_db-pre009-20261119-015501.dump`: the `pdl_account_request` table, 30 rows, `pg_restore --list` verified |
+| `009` | added four nullable columns to `pdl_account_request`. The 30 rows gave one checksum over their 11 old columns before it, after it and after the deploy |
+| `.env` | unchanged since 2026-11-06 |
+| Flags | unchanged: `ddl-auto` `none` · `los.mock.enabled` `false` · webhook auth `true` · liveness all `false` |
+| Rollback image | `kjeypapa-api:rollback-20261119`, the `907e330` build (`35a53a03c9ba`) |
+| Previous source | `src.prev-20261119-0156` and `pom.xml.prev-20261119-0156` in `/opt/kjeypapa` |
+| Old container's log | `/opt/kjeypapa/logs/api-20261119-0156.log`: 94,732 lines since 2026-11-06, readable by root only |
+| Build log | `/opt/kjeypapa-staging/deploy-5ee43c1-20261119-0156.log` |
+| Downtime | about 20 s; the old container served until the image was built |
+| Errors since boot | none, and only the five framework WARNs every boot prints |
+
+Checked the same day, straight to the host and through the public URL, with
+the same results on both:
+
+| Probe | Before, `907e330` | After, `5ee43c1` |
+|---|---|---|
+| `GET /api/v1/pdl/dictionary/version` | 200 | 200 |
+| `POST /api/v1/pdl/account-request/status`, a made-up username | 200 `NOT_FOUND` | 200 `NOT_FOUND` |
+| `POST …/admin/account-requests/999999/decision`, no token | 403 | 403 |
+| `POST …/admin/account-requests/999999/confirm-cif`, no token | 403 | 403 |
+| `POST /api/v1/pdl/los/approved`, no header | 401 | 401 |
+| `POST /api/v1/pdl/los/approved`, the secret, sent from the host | — | 200 `NOT_FOUND`, "Application not found: mobileAppId 999999" |
+| `/v3/api-docs`: the body of `…/{id}/decision` | a free-form object | `PdlAccountDecisionRequest`: `approve` (required), `reason`, `employerCode`, `confirmCif` |
+| `/v3/api-docs`: paths | 134 | 135, with `…/{id}/confirm-cif` |
+
+**The status probe proves 009 and the entity agree.** It selects every mapped
+column of `pdl_account_request`, so it fails on a missing column even when no
+row matches. It needs no sign-in and names no real customer.
+
+**What the release meets.** At deploy time UAT held:
+- 30 account requests: 28 approved, 1 pending and 1 rejected;
+- 30 PDL customers: 5 with a numeric CIF stored and 25 with none;
+- 108 applications: 84 Draft, 14 Submitted, 5 Rejected and 5 Revoked. None
+  was Approved or Accepted, so the new acceptance relay had not yet run
+  against Sambat.
+
+**How it was done.** As in 6d, with two additions:
+- The `pre009` backup and the migration ran before the swap, while `907e330`
+  was still serving. The old build ignores the new columns.
+- The swap ran from `/opt/kjeypapa-staging/swap-5ee43c1.sh <sha> <timestamp>`.
+  It tags the rollback image, saves the container's log, swaps the source,
+  builds, and recreates the container only if the build passed. If the build
+  fails, it puts the old source back. It takes any staged release.
+
+The build pulled a newer `eclipse-temurin:21-jre` base image, so the runtime
+may be a later Java 21 patch than the `907e330` image had.
+
+**Not checked:**
+- No signed-in call was made. The LPO list, a review, a decision and a CIF
+  confirmation have not been run on UAT.
+- §7 steps 3 to 5 were not run: the consent-ledger check, the TFF regression
+  and one filed application.
+
+**Still to do:**
+- A new app build. The console's "Same person?" dialog and "Confirm CIF"
+  button are in app commit `28855b0`, which TestFlight build 18 does not have.
+- Tell whoever codes against the admin API that a decision without `approve`
+  now gets HTTP 400 `INVALID`. Before, it was read as a rejection.
 
 ## 7. Verify after deploy
 

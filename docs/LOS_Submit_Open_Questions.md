@@ -774,7 +774,7 @@ Sambat answered part of the 6 November notice with a file,
 
 They did not say whether this is live on UAT, or when.
 
-What changed on our side (2026-11-18, not on UAT yet), so that one build works
+What changed on our side (2026-11-18, on UAT since 2026-11-19), so that one build works
 against the server they run today and the one to come:
 - **The reply's id is read under every spelling:** `AppId`, `LosAppId` and
   `losAppId`. Names are matched by exact case, so `losAppId` used to read as no
