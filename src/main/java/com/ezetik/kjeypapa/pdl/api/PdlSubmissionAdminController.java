@@ -1,7 +1,6 @@
 package com.ezetik.kjeypapa.pdl.api;
 
 import java.util.List;
-import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -13,10 +12,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ezetik.kjeypapa.pdl.payload.PdlSubmissionFiledRequest;
+import com.ezetik.kjeypapa.pdl.payload.PdlSubmissionNotFiledRequest;
 import com.ezetik.kjeypapa.pdl.service.PdlSubmissionReconcileService;
 import com.ezetik.kjeypapa.pdl.service.PdlSubmissionReconcileService.Unresolved;
 import com.ezetik.kjeypapa.security.util.Message;
 
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
@@ -51,23 +53,41 @@ public class PdlSubmissionAdminController {
 	 * application id, and reconstructs the consent record that was lost when the
 	 * failed call rolled back.
 	 */
+	@Operation(summary = "Record an unanswered submission as filed", description = """
+			For a loan listed by `GET /unresolved`, when Sambat's console shows the application. The loan
+			becomes Submitted and takes Sambat's LOS AppId.
+
+			The outcome is in the answer's `type`:
+
+			- `SUCCESS`: recorded as filed.
+			- `NOT_FOUND`: no loan with this id is awaiting an answer.
+			- `INVALID`: `losAppId` is missing or is not greater than 0. Nothing was changed.
+			- `BAD_REQUEST`: the body could not be read. The message names the field.
+			""")
 	@PostMapping("/{loanId}/filed")
 	public ResponseEntity<Message<String>> filed(@PathVariable("loanId") int loanId,
-			@RequestBody Map<String, Object> body) {
-		Object id = body.get("losAppId");
-		Long losAppId = id == null ? null : Long.valueOf(String.valueOf(id).trim());
-		return service.markFiled(loanId, losAppId, str(body.get("losApplicationNo")),
-				str(body.get("note")));
+			@RequestBody PdlSubmissionFiledRequest body) {
+		return service.markFiled(loanId, body.losAppId(), str(body.losApplicationNo()), str(body.note()));
 	}
 
 	/** Sambat's console shows nothing. Clears the block so the customer can submit. */
+	@Operation(summary = "Record an unanswered submission as not filed", description = """
+			For a loan listed by `GET /unresolved`, when Sambat's console does not show the application. The
+			customer can then submit it again. The body may be left out.
+
+			The outcome is in the answer's `type`:
+
+			- `SUCCESS`: the loan can be submitted again.
+			- `NOT_FOUND`: no loan with this id is awaiting an answer.
+			- `BAD_REQUEST`: the body could not be read.
+			""")
 	@PostMapping("/{loanId}/not-filed")
 	public ResponseEntity<Message<String>> notFiled(@PathVariable("loanId") int loanId,
-			@RequestBody(required = false) Map<String, Object> body) {
-		return service.markNotFiled(loanId, body == null ? "" : str(body.get("note")));
+			@RequestBody(required = false) PdlSubmissionNotFiledRequest body) {
+		return service.markNotFiled(loanId, body == null ? "" : str(body.note()));
 	}
 
-	private static String str(Object v) {
-		return v == null ? "" : String.valueOf(v);
+	private static String str(String v) {
+		return v == null ? "" : v;
 	}
 }

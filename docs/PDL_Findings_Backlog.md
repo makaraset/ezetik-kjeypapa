@@ -12,6 +12,21 @@ it was found, so a reader can judge how much it has actually been checked.
 
 ## Open findings
 
+### F32 — the role-update call cannot change a role
+**Severity:** low · **Status:** open ·
+**Found:** 2026-11-19, naming the call's body for Swagger
+
+`PATCH /api/v1/security/role/{id}` (ADMIN) looks each field name up on the user
+record, not on the role (`RolesApiResource.update`). So every field sent is
+refused with HTTP 500, `FAIL` and "Unable to update role.", and nothing
+changes. Only an empty body is accepted, and it changes nothing. The app does
+not call it.
+
+Run on a local copy, and held by `UpdateFieldsDocTest`. Swagger says so in the
+call's description. Not fixed: a working role editor could rename or switch
+off `ADMIN`, so it needs a rule on which roles may change. Fix it with that
+rule, or remove the call.
+
 ### F31 — a failed acceptance relay still saved the loan as Accepted
 **Severity:** high · **Status:** ~~open~~ **FIXED 2026-11-18, on UAT since 2026-11-19** ·
 **Found:** 2026-11-16, reviewing Sambat's new `/customer-accepted`
@@ -63,6 +78,9 @@ record. Every rule in **F27** and **F29** goes around it. It also takes
 
 Read from the code, not run. Not changed: other tooling may rely on it. At the
 least it should refuse `registedId`.
+
+Since 2026-11-19 Swagger names five plain fields for the call and shows `{}`
+as its sample (**F28**). What the call accepts is unchanged.
 
 ### F29 — nobody could settle a customer Sambat hold under other details
 **Severity:** medium · **Status:** ~~open~~ **BUILT 2026-11-18, on UAT since 2026-11-19** ·
@@ -123,19 +141,35 @@ Now (`PdlAccountDecisionRequest`, `PdlAdminExceptionHandler`):
   HTTP 403 with no content, as in **F12**.
 - What the app sends is read as before, and so is `"true"` written as text.
 
-Not checked: whether the call that prompted the question changed request 4 on
-UAT. The VPN was off. If that request was still pending, it is now rejected
-with no reason, decided by the account that made the call.
+Checked on 2026-11-19: request 4 on UAT is REJECTED, decided by `approver1` on
+2026-11-18 at 16:26 with an empty reason. That fits the placeholder body. The
+API cannot reopen it, and the same phone number cannot sign up again.
+
+Since 2026-11-19, at Makara's choice that day:
+- The decision's sample in Swagger is blank:
+  `{"approve": true, "reason": "", "employerCode": "", "confirmCif": 0}`. Sent
+  as it stands it approves and stores nothing else. Swagger's usual sample
+  would have stored `string` as the reason and as the employer code.
+- No request body shows `additionalProp1..3` any more. Four are named, each
+  with a blank sample, and read what the app sends as before:
+  `/admin/submissions/{loanId}/filed` (`PdlSubmissionFiledRequest`),
+  `/admin/submissions/{loanId}/not-filed` (`PdlSubmissionNotFiledRequest`),
+  `/account-request/status` (`PdlAccountStatusRequest`) and `/ocr-nid`
+  (`NidOcrRequest`).
+- `filed` refuses a `losAppId` of 0 or less: `INVALID`. 0 is what the blank
+  sample sends, and it would have been recorded as Sambat's id. An id that is
+  not a number gets HTTP 400 with the reason; it used to get HTTP 403 with no
+  content.
+- The two older update calls, `PATCH /api/v1/user/update/{id}` and
+  `PATCH /api/v1/security/role/{id}`, write any field by reflection, so their
+  handlers are unchanged. Swagger alone names a few plain fields for them
+  (`UserUpdateFields`, `RoleUpdateFields`) and shows `{}` as the sample: with
+  values in it, the sample sent as it stands would overwrite a real user. See
+  **F30** and **F32**.
 
 Not done:
-- Four more bodies are still free-form maps and show the same placeholder:
-  `/admin/submissions/{loanId}/filed` (`losAppId`, `losApplicationNo`, `note`),
-  `/admin/submissions/{loanId}/not-filed` (`note`),
-  `/account-request/status` (`username`) and `/ocr-nid` (`imageBase64`).
 - `employerCode` is stored as given. The app only offers codes from the
-  EMPLOYER list; a caller typing by hand can send anything. Swagger's sample
-  keeps its usual placeholder values, so its form, sent unchanged, approves the
-  request and stores `string` as the employer code.
+  EMPLOYER list; a caller typing by hand can send anything.
 
 ### F27 — a failed CIF lookup filed an existing customer as new
 **Severity:** high · **Status:** ~~open~~ **FIXED 2026-11-05, on UAT since 2026-11-06** ·

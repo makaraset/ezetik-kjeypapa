@@ -19,10 +19,11 @@ import lombok.extern.slf4j.Slf4j;
  * with no content. Someone trying the decision endpoint from Swagger would be
  * told "forbidden" about a stray comma, or about {@code "approve": "yes"}.
  *
- * <p>Scoped to the one controller so nothing else changes shape.
+ * <p>Scoped to the two admin controllers that take a named body, so nothing
+ * else changes shape.
  */
 @Slf4j
-@RestControllerAdvice(assignableTypes = { PdlAdminController.class })
+@RestControllerAdvice(assignableTypes = { PdlAdminController.class, PdlSubmissionAdminController.class })
 public class PdlAdminExceptionHandler {
 
 	@ExceptionHandler(HttpMessageNotReadableException.class)

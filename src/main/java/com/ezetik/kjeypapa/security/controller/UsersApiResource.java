@@ -31,10 +31,14 @@ import com.ezetik.kjeypapa.image.service.ImageService;
 import com.ezetik.kjeypapa.security.model.Role;
 import com.ezetik.kjeypapa.security.model.User;
 import com.ezetik.kjeypapa.security.model.UserModel;
+import com.ezetik.kjeypapa.security.model.UserUpdateFields;
 import com.ezetik.kjeypapa.security.repository.UserRepository;
 import com.ezetik.kjeypapa.security.service.UserService;
 import com.ezetik.kjeypapa.security.util.Message;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.transaction.Transactional;
 
@@ -136,6 +140,20 @@ public class UsersApiResource {
 		return resp;
 	}
 
+	// The two annotations below change what Swagger shows and nothing else:
+	// the handler still takes the map and writes whatever it is sent.
+	@Operation(summary = "Change a user's details", description = """
+			Changes only the fields sent, and stores each as it is sent, with no checks. Send `{}` to change
+			nothing.
+
+			This is an older, general-purpose call: it also writes other fields of the user record if they are
+			sent. For a customer's CIF, use `POST /api/v1/pdl/admin/account-requests/{id}/confirm-cif`.
+
+			Answers `SUCCESS` with the user, HTTP 404 when no user has this id, and HTTP 500 with `FAIL` when a
+			field cannot be stored.
+			""")
+	@io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(mediaType = "application/json",
+			schema = @Schema(implementation = UserUpdateFields.class)))
 	@PatchMapping("/update/{id}")
 	@PreAuthorize("hasRole('ADMIN')")
 //	@PreAuthorize("hasPermission('','UPDATE_USER') or #username == authentication.principal")

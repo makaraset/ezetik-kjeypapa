@@ -124,10 +124,12 @@ public class PdlSubmissionReconcileService {
 			return resp("NOT_FOUND", "No loan " + loanId + " is awaiting reconciliation", null);
 		// Callbacks find the loan by our own id, but their acceptance call still
 		// takes their LOS AppId: without it the customer could never accept.
-		if (losAppId == null)
+		// Not 0 either: it is what a blank form sends, and an id of 0 would be
+		// relayed to Sambat as if it were theirs.
+		if (losAppId == null || losAppId <= 0)
 			return resp("INVALID",
-					"Give Sambat's LOS AppId from their console: the customer's acceptance is "
-							+ "relayed to them by it.",
+					"Give Sambat's LOS AppId from their console, a number greater than 0: the "
+							+ "customer's acceptance is relayed to them by it.",
 					null);
 
 		loan.setLosAppId(losAppId);

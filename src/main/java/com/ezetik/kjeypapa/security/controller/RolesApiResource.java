@@ -21,10 +21,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ezetik.kjeypapa.security.model.Role;
+import com.ezetik.kjeypapa.security.model.RoleUpdateFields;
 import com.ezetik.kjeypapa.security.model.User;
 import com.ezetik.kjeypapa.security.service.RoleService;
 import com.ezetik.kjeypapa.security.util.Message;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
@@ -136,6 +140,13 @@ public class RolesApiResource {
 		return resp;
 	}
 
+	// The two annotations below change what Swagger shows and nothing else.
+	@Operation(summary = "Change a role", description = """
+			Not working at present: any field sent is refused with HTTP 500 and `FAIL`, and nothing changes
+			(backlog F32). An empty body `{}` changes nothing and answers `SUCCESS`.
+			""")
+	@io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(mediaType = "application/json",
+			schema = @Schema(implementation = RoleUpdateFields.class)))
 	@PatchMapping("/{id}")
 //	@PreAuthorize("hasPermission('','UPDATE_ROLE')")
 	public ResponseEntity<?> update(@PathVariable("id") long id, @RequestBody Map<Object, Object> fields) {

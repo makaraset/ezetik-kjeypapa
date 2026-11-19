@@ -44,4 +44,44 @@ class PdlSubmissionReconcileServiceTest {
 		assertThat(loan.getLosApplicationNo()).isNull();
 		verify(repo, never()).save(any());
 	}
+
+	@Test
+	void markFiled_refusesZero_whichIsWhatABlankFormSends() {
+		// Swagger's sample for this call carries losAppId 0. Recorded, the loan
+		// would be Submitted under an id that is not Sambat's, and the
+		// acceptance relay would send them appId 0.
+		PaydayLoan loan = awaiting(21);
+
+		var r = service.markFiled(21, 0L, "", "");
+
+		assertThat(r.getBody().getType()).isEqualTo("INVALID");
+		assertThat(r.getBody().getMessage()).contains("LOS AppId").contains("greater than 0");
+		assertThat(loan.getStatus()).isEqualTo(PdlStatusEnum.Draft);
+		assertThat(loan.getLosAppId()).isNull();
+		assertThat(loan.getLosStatusCode()).isEqualTo(LosSubmitException.OUTCOME_UNKNOWN);
+		verify(repo, never()).save(any());
+	}
+
+	@Test
+	void markFiled_refusesANegativeId() {
+		PaydayLoan loan = awaiting(21);
+
+		var r = service.markFiled(21, -5L, "257861", "");
+
+		assertThat(r.getBody().getType()).isEqualTo("INVALID");
+		assertThat(loan.getStatus()).isEqualTo(PdlStatusEnum.Draft);
+		assertThat(loan.getLosAppId()).isNull();
+		assertThat(loan.getLosApplicationNo()).isNull();
+		verify(repo, never()).save(any());
+	}
+
+	/** A loan whose submission was sent and never answered. */
+	private PaydayLoan awaiting(int id) {
+		PaydayLoan loan = new PaydayLoan();
+		loan.setId(id);
+		loan.setStatus(PdlStatusEnum.Draft);
+		loan.setLosStatusCode(LosSubmitException.OUTCOME_UNKNOWN);
+		when(repo.findById(id)).thenReturn(Optional.of(loan));
+		return loan;
+	}
 }

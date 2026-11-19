@@ -16,10 +16,12 @@ import com.ezetik.kjeypapa.pdl.payload.LivenessResultResponse;
 import com.ezetik.kjeypapa.pdl.payload.LivenessSubmitRequest;
 import com.ezetik.kjeypapa.pdl.payload.PdlAccountRequestCreated;
 import com.ezetik.kjeypapa.pdl.payload.PdlAccountRequestPayload;
+import com.ezetik.kjeypapa.pdl.payload.PdlAccountStatusRequest;
 import com.ezetik.kjeypapa.pdl.service.PdlAccountRequestService;
 import com.ezetik.kjeypapa.pdl.service.PdlIdentityVerificationService;
 import com.ezetik.kjeypapa.security.util.Message;
 
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -50,9 +52,17 @@ public class PdlAccountRequestController {
 
 	/** Status probe for the pending screen (PENDING/APPROVED/REJECTED only). */
 	/** POST so the phone number never appears in a URL, proxy log or query string. */
+	@Operation(summary = "The status of an account request", description = """
+			For the app's pending screen, before the customer can sign in. Reads only; it needs no sign-in.
+
+			The outcome is in the answer's `type`:
+
+			- `SUCCESS`: `data` is `PENDING`, `APPROVED` or `REJECTED`.
+			- `NOT_FOUND`: no account request was made with this login id.
+			""")
 	@PostMapping("/status")
-	public ResponseEntity<Message<String>> status(@RequestBody java.util.Map<String, String> body) {
-		return service.status(body == null ? null : body.get("username"));
+	public ResponseEntity<Message<String>> status(@RequestBody PdlAccountStatusRequest body) {
+		return service.status(body == null ? null : body.username());
 	}
 
 	/**

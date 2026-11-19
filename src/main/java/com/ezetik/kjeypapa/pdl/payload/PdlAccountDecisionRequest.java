@@ -9,14 +9,16 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * showed {@code additionalProp1..3}, and that placeholder, sent as it stood,
  * was read as a rejection.
  *
- * <p>No example is set, so Swagger shows its usual sample for these types:
- * {@code {"approve": true, "reason": "string", "employerCode": "string", "confirmCif": 0}}.
- * A {@code confirmCif} of 0 confirms nothing, so that sample still decides.
+ * <p>The example is blank on purpose (Makara, 2026-11-19). Sent as it stands
+ * it approves and stores nothing else: no reason, no employer, and a
+ * {@code confirmCif} of 0 confirms nothing. Swagger's usual sample would store
+ * the word "string" as the reason and as the employer code.
  *
  * <p>No {@code decidedBy}: it comes from the security context in the
  * controller, as for {@link PdlDataDecisionPayload}.
  */
-@Schema(description = "An LPO's decision on one account request.")
+@Schema(description = "An LPO's decision on one account request.",
+		example = "{\"approve\": true, \"reason\": \"\", \"employerCode\": \"\", \"confirmCif\": 0}")
 public record PdlAccountDecisionRequest(
 
 		// Boolean, not boolean: a missing value has to stay null so it can be
