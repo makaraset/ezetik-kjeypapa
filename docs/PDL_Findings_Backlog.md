@@ -145,7 +145,8 @@ Checked on 2026-11-19: request 4 on UAT is REJECTED, decided by `approver1` on
 2026-11-18 at 16:26 with an empty reason. That fits the placeholder body. The
 API cannot reopen it, and the same phone number cannot sign up again.
 
-Since 2026-11-19, at Makara's choice that day:
+Since 2026-11-19, at Makara's choice that day (backend `48762c3`, on UAT the
+same day):
 - The decision's sample in Swagger is blank:
   `{"approve": true, "reason": "", "employerCode": "", "confirmCif": 0}`. Sent
   as it stands it approves and stores nothing else. Swagger's usual sample

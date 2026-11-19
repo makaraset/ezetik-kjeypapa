@@ -177,7 +177,7 @@ The image build needs outbound internet for Maven. It is a 2-CPU box, so expect
 the first build to take several minutes; dependencies are cached in their own
 layer, so later builds are quick.
 
-For a redeploy, follow §6d and §6e instead: stage, tag a rollback image, save
+For a redeploy, follow §6d to §6f instead: stage, tag a rollback image, save
 the running container's log, then swap. The log goes with the old container.
 
 ---
@@ -491,7 +491,8 @@ row matches. It needs no sign-in and names no real customer.
 - The swap ran from `/opt/kjeypapa-staging/swap-5ee43c1.sh <sha> <timestamp>`.
   It tags the rollback image, saves the container's log, swaps the source,
   builds, and recreates the container only if the build passed. If the build
-  fails, it puts the old source back. It takes any staged release.
+  fails, it puts the old source back. It takes any staged release. It was
+  renamed `swap-release.sh` the same day; see 6f.
 
 The build pulled a newer `eclipse-temurin:21-jre` base image, so the runtime
 may be a later Java 21 patch than the `907e330` image had.
@@ -507,6 +508,65 @@ may be a later Java 21 patch than the `907e330` image had.
   button are in app commit `28855b0`, which TestFlight build 18 does not have.
 - Tell whoever codes against the admin API that a decision without `approve`
   now gets HTTP 400 `INVALID`. Before, it was read as a rejection.
+
+## 6f. Deployed — 2026-11-19, a second time
+
+Backend `48762c3` is live on `10.32.8.99`. Docker reports it **healthy**, with
+0 restarts and a 17.2 s boot. It brings `5ee43c1..48762c3`, the second part of
+F28, which changes what Swagger shows:
+- no request body shows `additionalProp1..3` any more; six still did;
+- the samples are blank, so one sent as it stands stores nothing;
+- `…/submissions/{loanId}/filed` refuses a `losAppId` of 0 or less.
+
+| | |
+|---|---|
+| Migrations | none: no entity changed |
+| `.env` | unchanged since 2026-11-06 |
+| Flags | unchanged |
+| Rollback image | `kjeypapa-api:rollback-20261119-0249`, the `5ee43c1` build (`c64aca9fd750`). `rollback-20261119` is still the `907e330` build |
+| Previous source | `src.prev-20261119-0249` and `pom.xml.prev-20261119-0249` in `/opt/kjeypapa` |
+| Old container's log | `/opt/kjeypapa/logs/api-20261119-0249.log`: 58 lines, the 52 minutes `5ee43c1` ran |
+| Build log | `/opt/kjeypapa-staging/deploy-48762c3-20261119-0249.log` |
+| Downtime | about 20 s |
+| Errors since boot | none, and only the five framework WARNs every boot prints |
+
+Checked straight to the host and through the public URL, with the same
+results on both:
+
+| Probe | Result |
+|---|---|
+| `/v3/api-docs`: request bodies that are free-form maps | 0. There were 6 on `5ee43c1` |
+| `GET /api/v1/pdl/dictionary/version` | 200 |
+| `POST /api/v1/pdl/account-request/status`, a made-up username, then the blank sample | 200 `NOT_FOUND` |
+| `POST /api/v1/pdl/ocr-nid`, the blank sample | 417 `INVALID`, "Missing idImage" |
+| The admin decision, confirm-cif, `…/submissions/999999/filed`, `PATCH /api/v1/user/update/999999` and `PATCH /api/v1/security/role/999999`, no token | 403 |
+| `POST /api/v1/pdl/los/approved`, no header | 401 |
+| `POST /api/v1/pdl/los/approved`, the secret, sent from the host | 200 `NOT_FOUND`, "Application not found: mobileAppId 999999" |
+
+The samples Swagger shows on UAT:
+
+| Call | Sample |
+|---|---|
+| `POST …/account-requests/{id}/decision` | `{"approve": true, "reason": "", "employerCode": "", "confirmCif": 0}` |
+| `POST …/account-requests/{id}/confirm-cif` | `{"cif": 0}` |
+| `POST …/submissions/{loanId}/filed` | `{"losAppId": 0, "losApplicationNo": "", "note": ""}` |
+| `POST …/submissions/{loanId}/not-filed` | `{"note": ""}` |
+| `POST /api/v1/pdl/account-request/status` | `{"username": ""}` |
+| `POST /api/v1/pdl/ocr-nid` | `{"imageBase64": ""}` |
+| `PATCH /api/v1/user/update/{id}` | `{}` |
+| `PATCH /api/v1/security/role/{id}` | `{}` |
+
+UAT's eight schemas equal those of a local build of the same commit, and that
+build's samples were read in Swagger UI itself. On that local copy, signed in,
+the two reconciliation calls and the two older update calls were also run for
+real; F28 and F32 have the results.
+
+**How it was done.** As in 6e, with no migration. The swap script is now
+`/opt/kjeypapa-staging/swap-release.sh <sha> <timestamp>`, and
+`swap-5ee43c1.sh` is gone. A second deploy on one day gets its own rollback
+tag, with the time in it, so it cannot overwrite the first one's image.
+
+**Not checked:** no signed-in call was made on UAT.
 
 ## 7. Verify after deploy
 
